@@ -12,8 +12,8 @@ class TaskResultDb {
   final String? selectedTarget;
   final String? correctAnswer;
   final String? correctTarget;
-  final int scoreObtained;
-  final int maxScore;
+  final double scoreObtained;
+  final double maxScore;
   final int attempts;
   final bool hintUsed;
   final String? feedback;
@@ -54,8 +54,8 @@ class TaskResultDb {
       selectedTarget: json['selected_target'] as String?,
       correctAnswer: json['correct_answer'] as String?,
       correctTarget: json['correct_target'] as String?,
-      scoreObtained: json['score_obtained'] as int? ?? 0,
-      maxScore: json['max_score'] as int? ?? 0,
+      scoreObtained: (json['score_obtained'] as num?)?.toDouble() ?? 0,
+      maxScore: (json['max_score'] as num?)?.toDouble() ?? 0,
       attempts: json['attempts'] as int? ?? 1,
       hintUsed: json['hint_used'] as bool? ?? false,
       feedback: json['feedback'] as String?,

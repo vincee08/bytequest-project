@@ -1,7 +1,10 @@
 {
   "name": "bytequest-shared-tools",
   "private": true,
-  "packageManager": "pnpm@11.17.0",
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "description": "Runtime dependencies for ByteQuest repository-level maintenance and lifecycle scripts.",
   "devDependencies": {
     "@supabase/ssr": "0.12.4",

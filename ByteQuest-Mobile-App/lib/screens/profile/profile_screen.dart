@@ -243,6 +243,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: AppTheme.errorRed),
             onPressed: () async {
+              final authService = parentContext.read<AuthService>();
+              final missionService = parentContext.read<MissionService>();
               Navigator.pop(dialogContext);
               showDialog<void>(
                 context: parentContext,
@@ -251,8 +253,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const Center(child: CircularProgressIndicator()),
               );
               try {
-                await parentContext.read<AuthService>().signOut();
-                await parentContext.read<MissionService>().resetProgress();
+                await authService.signOut();
+                await missionService.resetProgress();
                 if (!parentContext.mounted) return;
                 Navigator.pop(parentContext);
                 Navigator.pushNamedAndRemoveUntil(

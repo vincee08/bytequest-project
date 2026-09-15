@@ -55,7 +55,7 @@ class MissionService extends ChangeNotifier {
       for (var progress in resolvedProgressList) {
         final missionId = progress['mission_id'] as String;
         final status = progress['status'] as String;
-        final bestScore = progress['best_score'] as int? ?? 0;
+        final bestScore = (progress['best_score'] as num?)?.round() ?? 0;
 
         if (status == 'completed') {
           _completedMissions.add(missionId);

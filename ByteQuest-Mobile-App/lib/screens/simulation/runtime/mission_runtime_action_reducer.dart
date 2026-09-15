@@ -77,8 +77,9 @@ final class MissionRuntimeActionReducer {
   ) {
     final recordedType = action.value['runtime_action_type'];
     if (recordedType is String && recordedType.isNotEmpty) return recordedType;
-    if (_runtimeActionTypes.contains(action.actionType))
+    if (_runtimeActionTypes.contains(action.actionType)) {
       return action.actionType;
+    }
     return switch (phase.resolvedInteraction) {
       InteractionFamily.inspect => 'object_inspected',
       InteractionFamily.select => 'selection_confirmed',

@@ -20,20 +20,24 @@ export function CreateAccountForm() {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setSubmitting(true);
-    const response = await fetch("/api/admin/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fullName, email, password, role }),
-    });
-    const payload = (await response.json()) as { error?: string };
-    if (!response.ok) {
-      toast.error(payload.error || "Account creation failed.");
+    try {
+      const response = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fullName, email, password, role }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error || "Account creation failed.");
+      }
+      toast.success(`${role === "instructor" ? "Instructor" : "Learner"} account created in Supabase Auth.`);
+      router.push("/users");
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Account creation failed.");
+    } finally {
       setSubmitting(false);
-      return;
     }
-    toast.success(`${role === "instructor" ? "Instructor" : "Learner"} account created in Supabase Auth.`);
-    router.push("/users");
-    router.refresh();
   };
 
   return (

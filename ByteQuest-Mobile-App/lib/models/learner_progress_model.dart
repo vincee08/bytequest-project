@@ -5,9 +5,9 @@ class LearnerProgress {
   final String cocId;
   final String missionId;
   final String status; // locked, not_started, in_progress, completed, failed
-  final int completionPercentage;
-  final int bestScore;
-  final int latestScore;
+  final double completionPercentage;
+  final double bestScore;
+  final double latestScore;
   final int attemptsCount;
   final int totalTimeSpentSeconds;
   final DateTime? lastActivityAt;
@@ -43,9 +43,10 @@ class LearnerProgress {
       cocId: json['coc_id'] as String,
       missionId: json['mission_id'] as String,
       status: json['status'] as String? ?? 'locked',
-      completionPercentage: json['completion_percentage'] as int? ?? 0,
-      bestScore: json['best_score'] as int? ?? 0,
-      latestScore: json['latest_score'] as int? ?? 0,
+      completionPercentage:
+          (json['completion_percentage'] as num?)?.toDouble() ?? 0,
+      bestScore: (json['best_score'] as num?)?.toDouble() ?? 0,
+      latestScore: (json['latest_score'] as num?)?.toDouble() ?? 0,
       attemptsCount: json['attempts_count'] as int? ?? 0,
       totalTimeSpentSeconds: json['total_time_spent_seconds'] as int? ?? 0,
       lastActivityAt: json['last_activity_at'] != null
@@ -92,9 +93,9 @@ class LearnerProgress {
     String? cocId,
     String? missionId,
     String? status,
-    int? completionPercentage,
-    int? bestScore,
-    int? latestScore,
+    double? completionPercentage,
+    double? bestScore,
+    double? latestScore,
     int? attemptsCount,
     int? totalTimeSpentSeconds,
     DateTime? lastActivityAt,

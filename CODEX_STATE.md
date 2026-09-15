@@ -6,10 +6,10 @@
 
 | Field | Value |
 |---|---|
-| Date | 2026-09-08 |
-| Active branch | `integrate-dro` (to be fast-forwarded into local `main` after the final gate) |
-| Integrated implementation head | This file's integration commit, based on local `main` `9e42e0bd82fa14cafd91222aa44f18602cd7bb13` |
-| Remote | Starting `origin/main` `a162ecf767e9ce32a0749bfe6aa772d2d5f80acd`; starting `origin/Dro-branch` `10adcbda9eacdcd36174df3ecaa26a21832109a3`; nothing pushed |
+| Date | 2026-09-15 |
+| Active branch | `new` (local audit/fix branch; nothing pushed) |
+| Integrated implementation head | Working session based directly on `origin/main` `5b4aa3d7dcffccfee7dc0336fad90df19ca36891` |
+| Remote | `origin/main` remains `5b4aa3d7dcffccfee7dc0336fad90df19ca36891`; no remote branch was changed |
 | Primary build target | Android APK (Flutter) |
 | Feature worktree | `.worktrees/bytequest-simulation-platform` preserved on `feature/bytequest-simulation-platform` |
 
@@ -406,3 +406,19 @@ Do not weaken authentication, RLS, backend evaluation, or instructor-release con
 - Web gate: frozen install, TypeScript, ESLint, analytics (4/4), metric-strip (3/3), OpenRouter contract (6/6), and Next.js production build (23 pages) PASS.
 - Repository cleanup: removed obsolete planning/report artifacts and dangerous stale account-maintenance scripts containing personal/live fixture references; sanitized remaining harness defaults and corrected current mobile paths. No committed secret-like credential, client service-role exposure, conflict marker, production empty callback, or release-path simulation debug probe remains.
 - Manual QA still required: physical Android device, TalkBack, physical large-text/landscape/reduced-motion behavior, low-end performance, real production-credential smoke testing, and production release signing. These are environment/manual gates, not known P0/P1 defects.
+
+## New-branch audit, security, and runtime hardening (2026-09-15)
+
+- Git isolation: created and used local branch `new`, based directly on `origin/main` `5b4aa3d7dcffccfee7dc0336fad90df19ca36891`. `origin/main` was not checked out, committed to, pushed, or otherwise changed. The pre-existing untracked `ByteQuest Web Dashboard/package-lock.json` was preserved and excluded from this work.
+- Architecture audit: confirmed Flutter/Dart learner app, Next.js/TypeScript Instructor/Admin dashboard, Supabase Auth/PostgreSQL/Storage/Realtime backend, ordered SQL migrations, root lifecycle scripts, and the existing typed 2D simulation framework. No assessment authority or instructor-release boundary was moved into either client.
+- Web security: upgraded Next.js and `eslint-config-next` from 15.3.8 to 15.5.24, refreshed patched compatible transitive dependencies, and reduced the production dependency audit from 58 findings (2 critical, 29 high, 23 moderate, 4 low) to zero at every severity. pnpm is pinned to 9.15.9 because the installed Node 22.12.0 does not satisfy pnpm 11.17.0's engine requirement.
+- CSV and API hardening: both analytics and released-result exporters now use one formula-safe CSV serializer; failed released-result database queries return a controlled 500 rather than silently exporting incomplete data. Middleware now lets `/api` routes retain their own JSON authentication/error behavior instead of redirecting API clients to HTML login pages.
+- Dashboard reliability: account creation/removal, role/status changes, and resource upload/archive operations now recover from transport and invalid-response failures with deterministic busy-state cleanup. Resource archive submissions are latched to prevent duplicate requests.
+- Flutter data correctness: PostgreSQL `numeric` progress and task-result fields now parse through `num` and preserve decimal precision. Mission UI projections round only at the existing integer display boundary. Regression tests cover decimal payloads.
+- Flutter lifecycle/security: logout flows capture services before asynchronous gaps, guard context use, reset local progress consistently, and no longer expose raw exception text. The remaining flow-control analyzer lint was corrected.
+- Automated mobile gate: `flutter pub get` PASS; `flutter analyze --no-fatal-infos` PASS with zero errors, zero warnings, and 202 informational modernization notices; full `flutter test` PASS (242/242); `flutter build web` PASS with WASM dry-run success. A served headless Chrome launch reached the real onboarding UI. Dedicated viewport coverage passes without overflow at 320x568 and 412x915.
+- Android gate: `flutter devices` found Windows, Chrome, and Edge but no Android target. `flutter build apk --debug` is BLOCKED with `No Android SDK found`; Android emulator/physical-device launch, permissions, and APK validation were not claimed.
+- Automated web gate: frozen install PASS; TypeScript PASS; ESLint PASS with no warnings/errors; analytics/CSV/metric/middleware tests PASS (10/10); OpenRouter contract tests PASS (6/6); Next.js 15.5.24 production build PASS with all 23 static pages generated. Runtime smoke PASS: `/login` returned 200, unauthenticated `/` returned a 307 login redirect, and the report API returned a direct 403 with no HTML redirect.
+- Backend/security gate: root frozen dependency install PASS and production audit reports zero vulnerabilities. Static scans found zero JWT-like committed secrets, populated service-role assignments, client-exposed service-role references, or unconditional `USING/WITH CHECK (true)` policies. Supabase CLI 2.117.0 runs, but `supabase test db` is BLOCKED by `ECONNREFUSED 127.0.0.1:57322`; Docker/local PostgreSQL is unavailable.
+- Integration limits: ignored placeholder `.env`/`.env.local` files were used only for compilation and unauthenticated startup checks. Real login, database/storage operations, learner-to-Instructor realtime submission/release, production Supabase connectivity, and release signing remain unverified because authorized credentials, Docker, Android SDK/device, and signing material are unavailable.
+- Exact next action: install/configure Android Studio SDK plus an emulator, start a disposable Supabase stack with Docker, replace ignored placeholders with authorized test credentials, then run the authenticated lifecycle/realtime scripts, Android device matrix, and signed release gate before deployment approval.

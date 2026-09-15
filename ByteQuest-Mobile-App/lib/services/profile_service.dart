@@ -58,8 +58,9 @@ class ProfileService {
       if (avatarUrl != null) 'avatar_url': avatarUrl,
     });
     final updated = await getProfileByUserId(userId);
-    if (updated == null)
+    if (updated == null) {
       throw StateError('Profile update could not be verified.');
+    }
     return updated;
   }
 

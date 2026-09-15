@@ -42,6 +42,14 @@ function redirectWithCookies(
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
+  const pathname = request.nextUrl.pathname;
+
+  // API routes own their authentication and return machine-readable errors.
+  // Redirecting them here turns 401/403 responses into HTML login pages.
+  if (pathname === "/api" || pathname.startsWith("/api/")) {
+    return response;
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key =
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ??
@@ -64,7 +72,6 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  const pathname = request.nextUrl.pathname;
   const {
     data: { user },
   } = await supabase.auth.getUser();

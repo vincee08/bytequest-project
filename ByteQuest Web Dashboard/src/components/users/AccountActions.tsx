@@ -40,36 +40,42 @@ export function AccountActions({
   const updateRole = async () => {
     if (role === currentRole || !validateReason()) return;
     setSubmitting("role");
-    const { error } = await createClient().rpc("admin_change_user_role", {
-      p_user_id: userId,
-      p_new_role: role,
-      p_reason: reason.trim(),
-    });
-    if (error) toast.error(error.message);
-    else {
+    try {
+      const { error } = await createClient().rpc("admin_change_user_role", {
+        p_user_id: userId,
+        p_new_role: role,
+        p_reason: reason.trim(),
+      });
+      if (error) throw new Error(error.message);
       toast.success("Role changed and audited.");
       setReason("");
       router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Role change failed.");
+    } finally {
+      setSubmitting(null);
     }
-    setSubmitting(null);
   };
 
   const updateStatus = async () => {
     if (status === currentStatus) return;
     if (status !== "active" && !validateReason()) return;
     setSubmitting("status");
-    const { error } = await createClient().rpc("admin_set_account_status", {
-      p_user_id: userId,
-      p_status: status,
-      p_reason: reason.trim() || undefined,
-    });
-    if (error) toast.error(error.message);
-    else {
+    try {
+      const { error } = await createClient().rpc("admin_set_account_status", {
+        p_user_id: userId,
+        p_status: status,
+        p_reason: reason.trim() || undefined,
+      });
+      if (error) throw new Error(error.message);
       toast.success(status === "active" ? "Account restored and audited." : "Account status changed and audited.");
       setReason("");
       router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Account status change failed.");
+    } finally {
+      setSubmitting(null);
     }
-    setSubmitting(null);
   };
 
   const permanentlyRemove = async () => {
@@ -84,20 +90,24 @@ export function AccountActions({
     if (!window.confirm("Permanently remove this empty Auth account? Retained academic history will block the request.")) return;
 
     setSubmitting("remove");
-    const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ confirmationEmail: confirmationEmail.trim(), reason: reason.trim() }),
-    });
-    const payload = (await response.json().catch(() => ({}))) as { error?: string };
-    if (!response.ok) {
-      toast.error(payload.error ?? "Permanent removal was blocked.");
+    try {
+      const response = await fetch(`/api/admin/users/${encodeURIComponent(userId)}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirmationEmail: confirmationEmail.trim(), reason: reason.trim() }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Permanent removal was blocked.");
+      }
+      toast.success("Empty Auth account permanently removed and audited.");
+      router.push("/users");
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Permanent removal failed.");
+    } finally {
       setSubmitting(null);
-      return;
     }
-    toast.success("Empty Auth account permanently removed and audited.");
-    router.push("/users");
-    router.refresh();
   };
 
   return (

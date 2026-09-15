@@ -42,6 +42,7 @@ export function LearningResourceManager({
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [archivingId, setArchivingId] = useState<string | null>(null);
   const [deleteReason, setDeleteReason] = useState("");
 
   const upload = async (event: React.FormEvent) => {
@@ -52,25 +53,28 @@ export function LearningResourceManager({
     }
 
     setUploading(true);
-    const body = new FormData();
-    body.set("file", file);
-    body.set("title", title.trim());
-    body.set("description", description.trim());
-    const response = await fetch(`/api/classes/${classId}/resources`, { method: "POST", body });
-    const payload = (await response.json()) as { error?: string };
-    if (!response.ok) {
-      toast.error(payload.error || "Resource upload failed.");
-      setUploading(false);
-      return;
-    }
+    try {
+      const body = new FormData();
+      body.set("file", file);
+      body.set("title", title.trim());
+      body.set("description", description.trim());
+      const response = await fetch(`/api/classes/${classId}/resources`, { method: "POST", body });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error || "Resource upload failed.");
+      }
 
-    setTitle("");
-    setDescription("");
-    setFile(null);
-    if (fileInput.current) fileInput.current.value = "";
-    toast.success("Learning resource uploaded and class access applied.");
-    router.refresh();
-    setUploading(false);
+      setTitle("");
+      setDescription("");
+      setFile(null);
+      if (fileInput.current) fileInput.current.value = "";
+      toast.success("Learning resource uploaded and class access applied.");
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Resource upload failed.");
+    } finally {
+      setUploading(false);
+    }
   };
 
   const archive = async (resourceId: string) => {
@@ -78,20 +82,26 @@ export function LearningResourceManager({
       toast.error("Provide a clear archive reason.");
       return;
     }
-    const response = await fetch(`/api/classes/${classId}/resources/${resourceId}`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ reason: deleteReason.trim() }),
-    });
-    const payload = (await response.json()) as { error?: string };
-    if (!response.ok) {
-      toast.error(payload.error || "Resource archive failed.");
-      return;
+    setArchivingId(resourceId);
+    try {
+      const response = await fetch(`/api/classes/${classId}/resources/${resourceId}`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: deleteReason.trim() }),
+      });
+      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      if (!response.ok) {
+        throw new Error(payload.error || "Resource archive failed.");
+      }
+      toast.success("Resource archived. Its audit history was retained.");
+      setDeletingId(null);
+      setDeleteReason("");
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Resource archive failed.");
+    } finally {
+      setArchivingId(null);
     }
-    toast.success("Resource archived. Its audit history was retained.");
-    setDeletingId(null);
-    setDeleteReason("");
-    router.refresh();
   };
 
   return (
@@ -152,7 +162,7 @@ export function LearningResourceManager({
                 {deletingId === resource.id ? (
                   <div className="mt-4 flex flex-col gap-3 rounded-lg bg-muted/50 p-3 sm:flex-row sm:items-end">
                     <div className="flex-1 space-y-2"><Label htmlFor={`resource-delete-${resource.id}`}>Required archive reason</Label><Input id={`resource-delete-${resource.id}`} value={deleteReason} onChange={(event) => setDeleteReason(event.target.value)} minLength={5} maxLength={1000} /></div>
-                    <div className="flex gap-2"><Button type="button" variant="ghost" size="sm" onClick={() => { setDeletingId(null); setDeleteReason(""); }}>Cancel</Button><Button type="button" variant="destructive" size="sm" onClick={() => archive(resource.id)}>Confirm archive</Button></div>
+                    <div className="flex gap-2"><Button type="button" variant="ghost" size="sm" disabled={archivingId === resource.id} onClick={() => { setDeletingId(null); setDeleteReason(""); }}>Cancel</Button><Button type="button" variant="destructive" size="sm" disabled={archivingId === resource.id} onClick={() => archive(resource.id)}>{archivingId === resource.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Confirm archive</Button></div>
                   </div>
                 ) : null}
               </div>

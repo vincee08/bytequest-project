@@ -1,4 +1,5 @@
 import type { InstructorAnalytics, ReportType } from "@/lib/analytics/types";
+import { escapeCsvCell } from "@/lib/csv";
 
 export type ReportColumn = { key: string; label: string; align?: "left" | "right" };
 export type ReportRow = Record<string, string | number | null>;
@@ -145,15 +146,10 @@ export function prepareReport(type: ReportType, data: InstructorAnalytics): Prep
   };
 }
 
-function escapeCsv(value: string | number | null): string {
-  const text = value === null ? "" : String(value);
-  return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
-}
-
 export function reportToCsv(report: PreparedReport): string {
   const lines = [
-    report.columns.map((column) => escapeCsv(column.label)).join(","),
-    ...report.rows.map((row) => report.columns.map((column) => escapeCsv(row[column.key] ?? null)).join(",")),
+    report.columns.map((column) => escapeCsvCell(column.label)).join(","),
+    ...report.rows.map((row) => report.columns.map((column) => escapeCsvCell(row[column.key] ?? null)).join(",")),
   ];
   return `\uFEFF${lines.join("\r\n")}`;
 }

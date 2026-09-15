@@ -361,6 +361,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
+              final authService =
+                  Provider.of<AuthService>(parentContext, listen: false);
+              final missionService =
+                  Provider.of<MissionService>(parentContext, listen: false);
+
               // Close dialog
               Navigator.pop(dialogContext);
 
@@ -375,13 +380,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
               try {
                 // Sign out from Supabase
-                final authService =
-                    Provider.of<AuthService>(parentContext, listen: false);
                 await authService.signOut();
 
                 // Reset local mission progress cache
-                final missionService =
-                    Provider.of<MissionService>(parentContext, listen: false);
                 await missionService.resetProgress();
 
                 // Close loading indicator
@@ -395,7 +396,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     (route) => false,
                   );
                 }
-              } catch (e) {
+              } catch (_) {
                 // Close loading indicator
                 if (parentContext.mounted) {
                   Navigator.pop(parentContext);
@@ -403,7 +404,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   // Show error message
                   ScaffoldMessenger.of(parentContext).showSnackBar(
                     SnackBar(
-                      content: Text('Logout failed: ${e.toString()}'),
+                      content: const Text(
+                        'Log out failed. Check your connection and try again.',
+                      ),
                       backgroundColor: AppTheme.errorRed,
                     ),
                   );

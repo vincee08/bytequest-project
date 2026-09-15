@@ -225,7 +225,7 @@ class MissionDatabaseService {
         final isUnlocked = progress != null && progress['status'] != 'locked';
         final isCompleted =
             progress != null && progress['status'] == 'completed';
-        final bestScore = progress?['best_score'] as int?;
+        final bestScore = (progress?['best_score'] as num?)?.round();
 
         return mission.copyWith(
           isUnlocked: isUnlocked,
