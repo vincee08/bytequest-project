@@ -12,6 +12,7 @@
     "start": "next start",
     "lint": "next lint",
     "test:analytics": "node --import tsx --test tests/analytics-reporting.test.ts",
+    "test:auth-provider": "node --import tsx --test tests/auth-provider-prerender.test.tsx",
     "test:csv": "node --import tsx --test tests/csv.test.ts",
     "test:middleware": "node --import tsx --test tests/middleware.test.ts",
     "test:metric-strip": "node --import tsx --test tests/metric-strip.test.tsx",

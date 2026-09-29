@@ -2,6 +2,14 @@
 
 > Read this file with `AGENTS.md`, `README.md`, and `bytequest.md` before changing the repository.
 
+## Current continuation - 2026-09-29
+
+- Branch `new` tracks `bytequest-project/new`; the previous published head was `51eb0a1162011593de162d4ae78dec74961c0a97`. The original `origin` and `main` remain untouched.
+- Fixed the Vercel `/_not-found` prerender failure caused by `AuthProvider` constructing the browser Supabase client during server rendering. Supabase initialization now occurs inside browser effects/profile actions; public fallback pages can prerender without configuration, while middleware and server auth boundaries continue to fail closed.
+- Login client construction now occurs inside the existing error boundary so a missing deployment configuration produces a handled form error instead of an unhandled event failure.
+- Added `tests/auth-provider-prerender.test.tsx`, which removes all supported public Supabase variables and verifies server rendering of `AuthProvider`. Web tests pass **25/25**; TypeScript and Next lint pass; production builds pass both without `.env.local` (23/23 static pages, including `/_not-found`) and with the local environment restored.
+- A functional Vercel deployment still requires `NEXT_PUBLIC_SUPABASE_URL` plus `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` or `NEXT_PUBLIC_SUPABASE_ANON_KEY` in Vercel before rebuilding. Server-side administrative operations also require the server-only `SUPABASE_SERVICE_ROLE_KEY`; never expose it with a `NEXT_PUBLIC_` prefix.
+
 ## Current continuation — 2026-09-28
 
 This section supersedes the 2026-09-27 continuation below. The current branch remains `new`, based on `3d095aa2abf35acb305a067c571024b9945b64fe`. The worktree contains mixed pre-existing/user work; do not reset it, stage everything, push, or alter hosted Supabase.

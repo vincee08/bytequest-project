@@ -1,6 +1,6 @@
 "use client";
 
-import {
+import React, {
   createContext,
   useCallback,
   useContext,
@@ -28,50 +28,66 @@ function isApplicationRole(role: string): role is UserRole {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AppProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const supabase = useMemo(() => createClient(), []);
 
   const refreshProfile = useCallback(async () => {
-    const {
-      data: { user: authUser },
-    } = await supabase.auth.getUser();
+    try {
+      const supabase = createClient();
+      const {
+        data: { user: authUser },
+      } = await supabase.auth.getUser();
 
-    if (!authUser) {
+      if (!authUser) {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      const { data } = await supabase
+        .from("profiles")
+        .select(
+          "id,user_id,full_name,email,avatar_url,role,status,created_at,updated_at,deactivated_at,deactivation_reason",
+        )
+        .eq("user_id", authUser.id)
+        .maybeSingle();
+
+      if (!data || !isApplicationRole(data.role)) {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+
+      setUser({
+        id: data.id,
+        userId: data.user_id,
+        fullName: data.full_name,
+        email: data.email,
+        avatarUrl: data.avatar_url,
+        role: data.role,
+        status: data.status,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at,
+        deactivatedAt: data.deactivated_at,
+        deactivationReason: data.deactivation_reason,
+      });
+    } catch {
+      // Public pages, including Next.js' generated not-found page, must remain
+      // renderable when deployment configuration is absent. Protected routes
+      // still fail closed in middleware and the server-side auth boundary.
       setUser(null);
-      setLoading(false);
-      return;
     }
-
-    const { data } = await supabase
-      .from("profiles")
-      .select(
-        "id,user_id,full_name,email,avatar_url,role,status,created_at,updated_at,deactivated_at,deactivation_reason",
-      )
-      .eq("user_id", authUser.id)
-      .maybeSingle();
-
-    if (!data || !isApplicationRole(data.role)) {
-      setUser(null);
-      setLoading(false);
-      return;
-    }
-
-    setUser({
-      id: data.id,
-      userId: data.user_id,
-      fullName: data.full_name,
-      email: data.email,
-      avatarUrl: data.avatar_url,
-      role: data.role,
-      status: data.status,
-      createdAt: data.created_at,
-      updatedAt: data.updated_at,
-      deactivatedAt: data.deactivated_at,
-      deactivationReason: data.deactivation_reason,
-    });
     setLoading(false);
-  }, [supabase]);
+  }, []);
 
   useEffect(() => {
+    let supabase;
+    try {
+      supabase = createClient();
+    } catch {
+      setUser(null);
+      setLoading(false);
+      return;
+    }
+
     void supabase.auth.getSession().then(({ data }) => {
       if (data.session) supabase.realtime.setAuth(data.session.access_token);
       return refreshProfile();
@@ -91,10 +107,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-  }, [refreshProfile, supabase]);
+  }, [refreshProfile]);
 
   useEffect(() => {
     if (!user?.userId) return;
+    const supabase = createClient();
     const channel = supabase
       .channel(`account-state:${user.userId}`)
       .on(
@@ -112,7 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [refreshProfile, supabase, user?.userId]);
+  }, [refreshProfile, user?.userId]);
 
   const value = useMemo<AuthContextType>(
     () => ({

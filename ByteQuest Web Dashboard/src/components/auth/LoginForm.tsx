@@ -46,9 +46,9 @@ export function LoginForm() {
     }
 
     setLoading(true);
-    const supabase = createClient();
 
     try {
+      const supabase = createClient();
       const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
       if (error || !data.user) throw error ?? new Error("Sign-in failed.");
 
