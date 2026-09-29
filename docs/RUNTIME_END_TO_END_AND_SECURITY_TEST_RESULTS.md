@@ -1,4 +1,4 @@
-﻿# Runtime End-to-End and Security Test Results
+# Runtime End-to-End and Security Test Results
 
 **Date:** 2026-08-10  
 **Environment:** Authorized live Supabase project plus local Next.js production server; disposable identities only  
@@ -120,7 +120,7 @@ The all-mission Mobile workspace is covered by contract/widget tests at compact 
 - Added `scripts/authenticated-openrouter-quiz-e2e.mjs`. It is a real-provider acceptance harness for COC2 Mission 2 grounding, draft-only generation, Instructor edit/reject/remove/approve, approved-items-only publication, audit provenance, and automatic archival. After the server environment was saved and reloaded, run `openrouter-live-20260811041145-3d5f7bb0` passed all 9 lifecycle groups using `openrouter/free`.
 - Browser selection was retried using the installed Browser integration; no browser instance was available, so no visual interaction was fabricated or substituted.
 - Authenticated SSR/server-route groups: 7/7 PASS after restarting a stale development server cache.
-- Generated `.next/static` scan: zero `OPENROUTER_API_KEY` or `OPENROUTER_MODEL` names and zero exact key-value occurrences in client assets; source reference exists only in `ByteQuest Web Dashboard/src/lib/ai/config.ts`.
+- Generated `.next/static` scan: zero `OPENROUTER_API_KEY` or `OPENROUTER_MODEL` names and zero exact key-value occurrences in client assets; source reference exists only in `ByteQuest-Web-Dashboard/src/lib/ai/config.ts`.
 - Live provider call: PASS (`openrouter-live-20260811041145-3d5f7bb0`). The key remained server-only and was not printed, logged, documented, returned by an API, or placed in a client bundle.
 - The first live run exposed an HTTP 422 grounding defect: the trusted route reloaded approved global rubric content with the Instructor RLS client. The test quiz was archived. The route now verifies Instructor ownership first and uses the existing server-only service client solely for the approved grounding lookup; no RLS policy was weakened. The rerun passed.
 - Post-fix authenticated server routes: PASS (`bq-route-e2e-20260811041245-37dbba57`) for all 6 applicable key-enabled groups, including cleanup.

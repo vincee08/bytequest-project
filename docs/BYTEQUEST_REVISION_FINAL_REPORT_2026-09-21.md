@@ -14,7 +14,7 @@ This is not a production-deployment approval. Physical Android/TalkBack testing,
 ## Architecture confirmed
 
 - `ByteQuest-Mobile-App/`: Flutter/Dart learner application and typed 2D simulation runtime.
-- `ByteQuest Web Dashboard/`: Next.js/React/TypeScript Instructor and Administrator dashboard.
+- `ByteQuest-Web-Dashboard/`: Next.js/React/TypeScript Instructor and Administrator dashboard.
 - `supabase/`: PostgreSQL schema, RLS, Auth/Storage/Realtime configuration, RPCs, and ordered migrations.
 - `scripts/`: authenticated lifecycle, authorization, Realtime, and maintenance verification.
 - `docs/reference/tesda_sources/`: retained official CSS NC II Training Regulations, circular, and COC self-assessment references.
@@ -126,7 +126,7 @@ These do not represent missing BQ checklist code, but they must remain explicit:
 - Live OpenRouter generation quality/rate-limit behavior was not exercised; provider contract/error tests passed.
 - Release signing was not configured; only the debug APK gate is in scope.
 - Flutter 3.47.5 warns that the project's Kotlin 2.2.20 support will be removed in a future Flutter release and recommends Kotlin 2.3.20 or newer. The current debug build passes; this is a forward-compatibility maintenance item, not a current build failure.
-- `ByteQuest Web Dashboard/package-lock.json` remains an unrelated user-owned untracked file and was not modified or adopted.
+- `ByteQuest-Web-Dashboard/package-lock.json` remains an unrelated user-owned untracked file and was not modified or adopted.
 
 ## Reproduction commands
 
@@ -139,7 +139,7 @@ C:\Users\HP\Documents\Tools\flutter\bin\flutter.bat test
 C:\Users\HP\Documents\Tools\flutter\bin\flutter.bat build apk --debug
 
 # Dashboard
-cd "C:\Users\HP\Documents\Projects\ByteQuest\ByteQuest Web Dashboard"
+cd "C:\Users\HP\Documents\Projects\ByteQuest\ByteQuest-Web-Dashboard"
 .\node_modules\.bin\tsc.cmd --noEmit
 .\node_modules\.bin\next.cmd build
 

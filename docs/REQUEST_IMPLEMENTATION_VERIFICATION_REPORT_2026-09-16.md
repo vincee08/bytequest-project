@@ -45,15 +45,15 @@ Official source identity and provenance are documented in `docs/TESDA_SOURCE_VAL
   - denies learners and anonymous callers;
   - records immutable-by-client actor, role, timestamp, old/new status and reason history;
   - exposes no authenticated delete path.
-- Instructor page: `ByteQuest Web Dashboard/src/app/concerns/page.tsx`.
-- Admin page: `ByteQuest Web Dashboard/src/app/admin/concerns/page.tsx`.
-- Shared responsive workspace: `ByteQuest Web Dashboard/src/components/concerns/SupportConcernWorkspace.tsx`.
+- Instructor page: `ByteQuest-Web-Dashboard/src/app/concerns/page.tsx`.
+- Admin page: `ByteQuest-Web-Dashboard/src/app/admin/concerns/page.tsx`.
+- Shared responsive workspace: `ByteQuest-Web-Dashboard/src/components/concerns/SupportConcernWorkspace.tsx`.
 - Navigation and generated database type updated.
 - Rollback-only pgTAP and authenticated PostgREST/SSR journey added.
 
 ### Authentication boundary fix
 
-- Moved `ByteQuest Web Dashboard/middleware.ts` to `ByteQuest Web Dashboard/src/middleware.ts`, beside `src/app` as required by the project's Next.js source layout.
+- Moved `ByteQuest-Web-Dashboard/middleware.ts` to `ByteQuest-Web-Dashboard/src/middleware.ts`, beside `src/app` as required by the project's Next.js source layout.
 - Added `/resources`, `/quizzes`, and `/concerns` to Instructor-only prefixes.
 - Unauthenticated protected pages now return actual HTTP 307 redirects instead of an HTTP 200 streamed server redirect. Server component role guards remain in place.
 - API routes remain outside page redirects and continue returning JSON/method responses.
@@ -155,7 +155,7 @@ npx --yes supabase@2.117.0 test db --local
 Web dashboard:
 
 ```powershell
-cd "C:\Users\HP\Documents\Projects\ByteQuest\ByteQuest Web Dashboard"
+cd "C:\Users\HP\Documents\Projects\ByteQuest\ByteQuest-Web-Dashboard"
 npx --yes pnpm@9.15.9 install --frozen-lockfile
 npx --yes pnpm@9.15.9 dev --hostname 127.0.0.1 --port 3000
 ```

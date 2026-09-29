@@ -4,7 +4,7 @@ Companion to [the audit](BYTEQUEST_PRINCIPAL_QA_IMPLEMENTATION_AUDIT_2026-09-22.
 
 Source: `docs/reference/ByteQuest_Interactive_2D_Mobile_App_Todo_List.pdf`, 11 pages. **290 atomic requirements**: each checkbox, each of ten score targets, each of five final mission targets, each command, and the Phase 19/20 concluding acceptance statements counted once. Repeated applicability to 20 missions is evaluated in the mission matrix, not multiplied into the requirement count. The Phase 1 hint statement says “may”; absence of a hint engine is not treated as a mandatory PDF defect.
 
-M = `ByteQuest-Mobile-App`; W = `ByteQuest Web Dashboard`. Paths are relative to repository root. Evidence keys resolve to actual files/tests below. IMPLEMENTED means the stated capability is verified by inspection plus the relevant automated behavior tests; it does **not** certify all Android or hosted workflows. PARTIALLY IMPLEMENTED has a traced working subset. Definite wiring defects are distinct from incomplete technical simulation. Manual gates remain BLOCKED. Findings F01–F11 and verification gates V01–V03 are detailed in the audit.
+M = `ByteQuest-Mobile-App`; W = `ByteQuest-Web-Dashboard`. Paths are relative to repository root. Evidence keys resolve to actual files/tests below. IMPLEMENTED means the stated capability is verified by inspection plus the relevant automated behavior tests; it does **not** certify all Android or hosted workflows. PARTIALLY IMPLEMENTED has a traced working subset. Definite wiring defects are distinct from incomplete technical simulation. Manual gates remain BLOCKED. Findings F01–F11 and verification gates V01–V03 are detailed in the audit.
 
 | Status | Count |
 |---|---:|

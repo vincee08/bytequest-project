@@ -1,4 +1,4 @@
-﻿# ByteQuest Dashboard UI/UX Improvements Summary
+# ByteQuest Dashboard UI/UX Improvements Summary
 
 ## Overview
 This document summarizes all the UI/UX improvements made to transform the ByteQuest web dashboard from a generic AI-looking interface into a clean, professional, modern, and production-ready SaaS platform.
@@ -9,7 +9,7 @@ This document summarizes all the UI/UX improvements made to transform the ByteQu
 
 ### 1. **Global Design System Enhancements**
 
-#### **Enhanced CSS Design Tokens** (`ByteQuest Web Dashboard/src/app/globals.css`)
+#### **Enhanced CSS Design Tokens** (`ByteQuest-Web-Dashboard/src/app/globals.css`)
 - Added custom shadow utilities:
   - `shadow-xs` - Subtle shadow for small elements
   - `shadow-card` - Standard card shadow
@@ -84,13 +84,13 @@ All KPI cards: bg-accent (Soft Sky Blue) with text-primary icons
 
 ### 3. **Component-Level Improvements**
 
-#### **Card Component** (`ByteQuest Web Dashboard/src/components/ui/card.tsx`)
+#### **Card Component** (`ByteQuest-Web-Dashboard/src/components/ui/card.tsx`)
 **Changes:**
 - Border radius: `rounded-lg` â†’ `rounded-xl`
 - Shadow: `shadow-sm` â†’ `shadow-card`
 - Result: More elevated, professional appearance
 
-#### **Button Component** (`ByteQuest Web Dashboard/src/components/ui/button.tsx`)
+#### **Button Component** (`ByteQuest-Web-Dashboard/src/components/ui/button.tsx`)
 **Changes:**
 - Border radius: `rounded-md` â†’ `rounded-lg`
 - Transition: `transition-colors` â†’ `transition-smooth`
@@ -98,7 +98,7 @@ All KPI cards: bg-accent (Soft Sky Blue) with text-primary icons
 - Removed unnecessary shadows from variants
 - Enhanced hover states with better contrast
 
-#### **Badge Component** (`ByteQuest Web Dashboard/src/components/ui/badge.tsx`)
+#### **Badge Component** (`ByteQuest-Web-Dashboard/src/components/ui/badge.tsx`)
 **Changes:**
 - Border radius: `rounded-md` â†’ `rounded-full`
 - Transition: `transition-colors` â†’ `transition-smooth`
@@ -107,7 +107,7 @@ All KPI cards: bg-accent (Soft Sky Blue) with text-primary icons
 
 ---
 
-### 4. **Dashboard Page Improvements** (`ByteQuest Web Dashboard/src/app/dashboard/page.tsx`)
+### 4. **Dashboard Page Improvements** (`ByteQuest-Web-Dashboard/src/app/dashboard/page.tsx`)
 
 #### **KPI Cards**
 **Before:**
@@ -161,7 +161,7 @@ All KPI cards: bg-accent (Soft Sky Blue) with text-primary icons
 
 ---
 
-### 5. **Sidebar Improvements** (`ByteQuest Web Dashboard/src/components/layout/sidebar.tsx`)
+### 5. **Sidebar Improvements** (`ByteQuest-Web-Dashboard/src/components/layout/sidebar.tsx`)
 
 #### **Logo & Branding**
 **Before:**
@@ -189,7 +189,7 @@ All KPI cards: bg-accent (Soft Sky Blue) with text-primary icons
 
 ---
 
-### 6. **Topbar Improvements** (`ByteQuest Web Dashboard/src/components/layout/topbar.tsx`)
+### 6. **Topbar Improvements** (`ByteQuest-Web-Dashboard/src/components/layout/topbar.tsx`)
 
 #### **Search Bar**
 **Changes:**
@@ -214,7 +214,7 @@ All KPI cards: bg-accent (Soft Sky Blue) with text-primary icons
 
 ### 7. **Table Pages Improvements**
 
-#### **Modules Page** (`ByteQuest Web Dashboard/src/app/modules/page.tsx`)
+#### **Modules Page** (`ByteQuest-Web-Dashboard/src/app/modules/page.tsx`)
 **Changes:**
 - Card: Unified shadow and border styling
 - Table header: `bg-muted/30 border-y` for better definition
@@ -223,7 +223,7 @@ All KPI cards: bg-accent (Soft Sky Blue) with text-primary icons
 - Status badges: Added visible borders
 - Empty state: Better padding `py-16`
 
-#### **Users Page** (`ByteQuest Web Dashboard/src/app/users/page.tsx`)
+#### **Users Page** (`ByteQuest-Web-Dashboard/src/app/users/page.tsx`)
 **Changes:**
 - Unified card styling
 - Better avatar styling with borders
@@ -244,7 +244,7 @@ All KPI cards: bg-accent (Soft Sky Blue) with text-primary icons
 
 **Solution:**
 
-##### **AuthLayout Component** (`ByteQuest Web Dashboard/src/components/auth/AuthLayout.tsx`)
+##### **AuthLayout Component** (`ByteQuest-Web-Dashboard/src/components/auth/AuthLayout.tsx`)
 **Before:**
 ```tsx
 <div className="min-h-screen flex bg-gradient-to-br...">
@@ -265,13 +265,13 @@ All KPI cards: bg-accent (Soft Sky Blue) with text-primary icons
 - Added `overflow-y-auto` on form container for mobile
 - Added `my-auto` for vertical centering
 
-##### **AuthCard Component** (`ByteQuest Web Dashboard/src/components/auth/AuthCard.tsx`)
+##### **AuthCard Component** (`ByteQuest-Web-Dashboard/src/components/auth/AuthCard.tsx`)
 **Changes:**
 - Border radius: `rounded-3xl` â†’ `rounded-2xl`
 - Padding: `p-8 md:p-10` â†’ `p-6 sm:p-8`
 - Shadow: `shadow-2xl` â†’ `shadow-elevated`
 
-##### **AuthBrand Component** (`ByteQuest Web Dashboard/src/components/auth/AuthBrand.tsx`)
+##### **AuthBrand Component** (`ByteQuest-Web-Dashboard/src/components/auth/AuthBrand.tsx`)
 **Changes:**
 - Logo size: `w-14 h-14` â†’ `w-12 h-12`
 - **Replaced generic Hexagon icon with actual ByteQuest logo**
@@ -279,7 +279,7 @@ All KPI cards: bg-accent (Soft Sky Blue) with text-primary icons
 - Logo margin: `mb-6` â†’ `mb-5`
 - Responsive title: `text-3xl` â†’ `text-2xl sm:text-3xl`
 
-##### **AuthIllustration Component** (`ByteQuest Web Dashboard/src/components/auth/AuthIllustration.tsx`)
+##### **AuthIllustration Component** (`ByteQuest-Web-Dashboard/src/components/auth/AuthIllustration.tsx`)
 **Changes:**
 - Padding: `p-12` â†’ `px-8 py-6`
 - Image container: `max-w-xl` â†’ `max-w-lg`
@@ -288,7 +288,7 @@ All KPI cards: bg-accent (Soft Sky Blue) with text-primary icons
 - Welcome section: Reduced all sizes and spacing
 - Decorative elements: Made smaller and more subtle
 
-##### **LoginForm Component** (`ByteQuest Web Dashboard/src/components/auth/LoginForm.tsx`)
+##### **LoginForm Component** (`ByteQuest-Web-Dashboard/src/components/auth/LoginForm.tsx`)
 **Changes:**
 - Form spacing: `space-y-6` â†’ `space-y-5`
 - Input height: `h-11` â†’ `h-10`
@@ -297,7 +297,7 @@ All KPI cards: bg-accent (Soft Sky Blue) with text-primary icons
 - Divider: More compact with `py-4`
 - Shorter helper text for temp auth
 
-##### **SignUpForm Component** (`ByteQuest Web Dashboard/src/components/auth/SignUpForm.tsx`)
+##### **SignUpForm Component** (`ByteQuest-Web-Dashboard/src/components/auth/SignUpForm.tsx`)
 **Changes:**
 - Form spacing: `space-y-5` â†’ `space-y-4`
 - Input height: `h-11` â†’ `h-10`
@@ -381,27 +381,27 @@ All KPI cards: bg-accent (Soft Sky Blue) with text-primary icons
 ## ðŸ“ FILES UPDATED
 
 ### **Core Design System:**
-1. âœ… `ByteQuest Web Dashboard/src/app/globals.css` - Enhanced design tokens
-2. âœ… `ByteQuest Web Dashboard/src/components/ui/card.tsx` - Better shadows and radius
-3. âœ… `ByteQuest Web Dashboard/src/components/ui/button.tsx` - Smooth transitions and feedback
-4. âœ… `ByteQuest Web Dashboard/src/components/ui/badge.tsx` - Rounded-full and consistent styling
+1. âœ… `ByteQuest-Web-Dashboard/src/app/globals.css` - Enhanced design tokens
+2. âœ… `ByteQuest-Web-Dashboard/src/components/ui/card.tsx` - Better shadows and radius
+3. âœ… `ByteQuest-Web-Dashboard/src/components/ui/button.tsx` - Smooth transitions and feedback
+4. âœ… `ByteQuest-Web-Dashboard/src/components/ui/badge.tsx` - Rounded-full and consistent styling
 
 ### **Layout Components:**
-5. âœ… `ByteQuest Web Dashboard/src/components/layout/sidebar.tsx` - Logo, removed DYAD, improved nav
-6. âœ… `ByteQuest Web Dashboard/src/components/layout/topbar.tsx` - Better search bar and user menu
+5. âœ… `ByteQuest-Web-Dashboard/src/components/layout/sidebar.tsx` - Logo, removed DYAD, improved nav
+6. âœ… `ByteQuest-Web-Dashboard/src/components/layout/topbar.tsx` - Better search bar and user menu
 
 ### **Dashboard Pages:**
-7. âœ… `ByteQuest Web Dashboard/src/app/dashboard/page.tsx` - Removed rainbow colors, unified design
-8. âœ… `ByteQuest Web Dashboard/src/app/modules/page.tsx` - Better table and card styling
-9. âœ… `ByteQuest Web Dashboard/src/app/users/page.tsx` - Enhanced table and badges
+7. âœ… `ByteQuest-Web-Dashboard/src/app/dashboard/page.tsx` - Removed rainbow colors, unified design
+8. âœ… `ByteQuest-Web-Dashboard/src/app/modules/page.tsx` - Better table and card styling
+9. âœ… `ByteQuest-Web-Dashboard/src/app/users/page.tsx` - Enhanced table and badges
 
 ### **Authentication:**
-10. âœ… `ByteQuest Web Dashboard/src/components/auth/AuthLayout.tsx` - Full-screen fix with h-screen
-11. âœ… `ByteQuest Web Dashboard/src/components/auth/AuthCard.tsx` - Compact padding
-12. âœ… `ByteQuest Web Dashboard/src/components/auth/AuthBrand.tsx` - ByteQuest logo integration
-13. âœ… `ByteQuest Web Dashboard/src/components/auth/AuthIllustration.tsx` - Compact design with logo
-14. âœ… `ByteQuest Web Dashboard/src/components/auth/LoginForm.tsx` - Compact spacing
-15. âœ… `ByteQuest Web Dashboard/src/components/auth/SignUpForm.tsx` - Compact spacing
+10. âœ… `ByteQuest-Web-Dashboard/src/components/auth/AuthLayout.tsx` - Full-screen fix with h-screen
+11. âœ… `ByteQuest-Web-Dashboard/src/components/auth/AuthCard.tsx` - Compact padding
+12. âœ… `ByteQuest-Web-Dashboard/src/components/auth/AuthBrand.tsx` - ByteQuest logo integration
+13. âœ… `ByteQuest-Web-Dashboard/src/components/auth/AuthIllustration.tsx` - Compact design with logo
+14. âœ… `ByteQuest-Web-Dashboard/src/components/auth/LoginForm.tsx` - Compact spacing
+15. âœ… `ByteQuest-Web-Dashboard/src/components/auth/SignUpForm.tsx` - Compact spacing
 
 ---
 

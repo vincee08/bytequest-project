@@ -476,7 +476,7 @@
 ## 2026-08-22 12:14:46 +08:00 — Task 12 pnpm command unavailable
 
 - Operation: Run the repository's authenticated all-missions lifecycle command.
-- Command: `pnpm test:all-missions` from `ByteQuest Web Dashboard`.
+- Command: `pnpm test:all-missions` from `ByteQuest-Web-Dashboard`.
 - Affected location: Local Node package-manager command resolution; application code line not applicable.
 - Observed result: PowerShell reported that `pnpm` was not recognized.
 - Root cause: pnpm 11.17.0 is declared by the project but its executable shim is not on the active PATH.
@@ -499,7 +499,7 @@
 
 - Operation: Execute the authenticated submit/evaluate/release lifecycle for all missions.
 - Command: `node --env-file=.env.local ../scripts/authenticated-all-missions-lifecycle-e2e.mjs`.
-- Affected location: `ByteQuest Web Dashboard/.env.local`; lifecycle script code was not entered.
+- Affected location: `ByteQuest-Web-Dashboard/.env.local`; lifecycle script code was not entered.
 - Observed result: Node exited immediately with `.env.local: not found`.
 - Root cause: The dashboard's gitignored Supabase/service-role/test-account configuration and `BYTEQUEST_E2E_PASSWORD` are intentionally absent in this workspace.
 - Primary solution: Supply an authorized local `.env.local` and disposable E2E password, then run `pnpm test:all-missions` without committing or printing secrets.
@@ -510,7 +510,7 @@
 
 - Operation: Execute the authenticated learner-submit/instructor-view and instructor-release/learner-result realtime check.
 - Command: `node --env-file=.env.local ../scripts/authenticated-realtime-sync-e2e.mjs`.
-- Affected location: `ByteQuest Web Dashboard/.env.local`; realtime script code was not entered.
+- Affected location: `ByteQuest-Web-Dashboard/.env.local`; realtime script code was not entered.
 - Observed result: Node exited immediately with `.env.local: not found`.
 - Root cause: The required gitignored Supabase and disposable account credentials are not present in this workspace.
 - Primary solution: Supply the authorized local environment and E2E password, then run `pnpm test:realtime` without exposing values.

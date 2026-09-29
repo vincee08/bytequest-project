@@ -129,9 +129,9 @@ Commit: `3d095aa Harden dashboard and mobile data handling`
 
 Files:
 
-- `ByteQuest Web Dashboard/package.json`
-- `ByteQuest Web Dashboard/pnpm-lock.yaml`
-- `ByteQuest Web Dashboard/next.config.ts`
+- `ByteQuest-Web-Dashboard/package.json`
+- `ByteQuest-Web-Dashboard/pnpm-lock.yaml`
+- `ByteQuest-Web-Dashboard/next.config.ts`
 - `package.json`
 - `ByteQuest-Mobile-App/pubspec.lock`
 
@@ -145,12 +145,12 @@ Files:
 
 Files:
 
-- `ByteQuest Web Dashboard/middleware.ts`
-- `ByteQuest Web Dashboard/src/lib/csv.ts`
-- `ByteQuest Web Dashboard/src/lib/analytics/reports.ts`
-- `ByteQuest Web Dashboard/src/app/api/reports/released-results/route.ts`
-- `ByteQuest Web Dashboard/tests/csv.test.ts`
-- `ByteQuest Web Dashboard/tests/middleware.test.ts`
+- `ByteQuest-Web-Dashboard/middleware.ts`
+- `ByteQuest-Web-Dashboard/src/lib/csv.ts`
+- `ByteQuest-Web-Dashboard/src/lib/analytics/reports.ts`
+- `ByteQuest-Web-Dashboard/src/app/api/reports/released-results/route.ts`
+- `ByteQuest-Web-Dashboard/tests/csv.test.ts`
+- `ByteQuest-Web-Dashboard/tests/middleware.test.ts`
 
 ### 5.3 Dashboard operation reliability
 
@@ -161,9 +161,9 @@ Files:
 
 Files:
 
-- `ByteQuest Web Dashboard/src/components/users/CreateAccountForm.tsx`
-- `ByteQuest Web Dashboard/src/components/users/AccountActions.tsx`
-- `ByteQuest Web Dashboard/src/components/classes/LearningResourceManager.tsx`
+- `ByteQuest-Web-Dashboard/src/components/users/CreateAccountForm.tsx`
+- `ByteQuest-Web-Dashboard/src/components/users/AccountActions.tsx`
+- `ByteQuest-Web-Dashboard/src/components/classes/LearningResourceManager.tsx`
 
 ### 5.4 Flutter data correctness
 
@@ -222,10 +222,10 @@ Behavior:
 
 Files:
 
-- `ByteQuest Web Dashboard/src/lib/attempts/criterion-adjustment.ts`
-- `ByteQuest Web Dashboard/src/components/attempts/AttemptReviewActions.tsx`
-- `ByteQuest Web Dashboard/src/app/attempts/[id]/page.tsx`
-- `ByteQuest Web Dashboard/tests/criterion-adjustment.test.ts`
+- `ByteQuest-Web-Dashboard/src/lib/attempts/criterion-adjustment.ts`
+- `ByteQuest-Web-Dashboard/src/components/attempts/AttemptReviewActions.tsx`
+- `ByteQuest-Web-Dashboard/src/app/attempts/[id]/page.tsx`
+- `ByteQuest-Web-Dashboard/tests/criterion-adjustment.test.ts`
 
 Limitations:
 
@@ -271,9 +271,9 @@ Behavior:
 
 Files:
 
-- `ByteQuest Web Dashboard/src/lib/ai/alternative-quiz-draft.ts`
-- `ByteQuest Web Dashboard/src/components/quizzes/QuizAuthoringWorkspace.tsx`
-- `ByteQuest Web Dashboard/tests/alternative-quiz-draft.test.ts`
+- `ByteQuest-Web-Dashboard/src/lib/ai/alternative-quiz-draft.ts`
+- `ByteQuest-Web-Dashboard/src/components/quizzes/QuizAuthoringWorkspace.tsx`
+- `ByteQuest-Web-Dashboard/tests/alternative-quiz-draft.test.ts`
 
 Limitation: current connected-project counts show no quiz records. The focused request builder and existing provider contracts pass, but no live authenticated AI generation was run.
 
@@ -300,7 +300,7 @@ Limitation: current connected-project counts show no quiz records. The focused r
 
 | Area | Files |
 |---|---|
-| Web configuration/dependencies | `ByteQuest Web Dashboard/package.json`, `pnpm-lock.yaml`, `next.config.ts`, root `package.json` |
+| Web configuration/dependencies | `ByteQuest-Web-Dashboard/package.json`, `pnpm-lock.yaml`, `next.config.ts`, root `package.json` |
 | Web API/security | `middleware.ts`, released-results route, `src/lib/csv.ts`, analytics reports |
 | Web reliability | Account actions, account creation, learning-resource manager |
 | Web tests | CSV and middleware tests |
@@ -313,13 +313,13 @@ Limitation: current connected-project counts show no quiz records. The focused r
 
 | File | Purpose |
 |---|---|
-| `ByteQuest Web Dashboard/src/lib/attempts/criterion-adjustment.ts` | Pure rubric-based correction calculator |
-| `ByteQuest Web Dashboard/src/components/attempts/AttemptReviewActions.tsx` | Instructor criterion correction and reviewed submission UI |
-| `ByteQuest Web Dashboard/src/app/attempts/[id]/page.tsx` | Loads rubric rule metadata and displays revision totals |
-| `ByteQuest Web Dashboard/tests/criterion-adjustment.test.ts` | Correction, preservation, and invalid-rule tests |
-| `ByteQuest Web Dashboard/src/lib/ai/alternative-quiz-draft.ts` | Bounded one-item alternative request builder |
-| `ByteQuest Web Dashboard/src/components/quizzes/QuizAuthoringWorkspace.tsx` | Per-item Generate alternative action |
-| `ByteQuest Web Dashboard/tests/alternative-quiz-draft.test.ts` | Alternative scope/type/length tests |
+| `ByteQuest-Web-Dashboard/src/lib/attempts/criterion-adjustment.ts` | Pure rubric-based correction calculator |
+| `ByteQuest-Web-Dashboard/src/components/attempts/AttemptReviewActions.tsx` | Instructor criterion correction and reviewed submission UI |
+| `ByteQuest-Web-Dashboard/src/app/attempts/[id]/page.tsx` | Loads rubric rule metadata and displays revision totals |
+| `ByteQuest-Web-Dashboard/tests/criterion-adjustment.test.ts` | Correction, preservation, and invalid-rule tests |
+| `ByteQuest-Web-Dashboard/src/lib/ai/alternative-quiz-draft.ts` | Bounded one-item alternative request builder |
+| `ByteQuest-Web-Dashboard/src/components/quizzes/QuizAuthoringWorkspace.tsx` | Per-item Generate alternative action |
+| `ByteQuest-Web-Dashboard/tests/alternative-quiz-draft.test.ts` | Alternative scope/type/length tests |
 | `supabase/migrations/20260915090000_validate_instructor_score_revisions.sql` | Append-time aggregate and criterion consistency guard |
 | `supabase/tests/foundation_lifecycle_rollback.sql` | Invalid total/percentage/criterion-sum rejection cases |
 | `scripts/authenticated-coc2-lifecycle-e2e.mjs` | Consistent disposable Instructor correction fixture |
@@ -327,7 +327,7 @@ Limitation: current connected-project counts show no quiz records. The focused r
 | `docs/REQUEST_IMPLEMENTATION_VERIFICATION_REPORT_2026-09-15.md` | This verification handoff |
 | `CODEX_STATE.md` | Current implementation and blocker handoff |
 
-The untracked `ByteQuest Web Dashboard/package-lock.json` predates this report, is not part of the pnpm workflow, and remains excluded from the implementation.
+The untracked `ByteQuest-Web-Dashboard/package-lock.json` predates this report, is not part of the pnpm workflow, and remains excluded from the implementation.
 
 ## 9. Automated and runtime verification results
 
@@ -375,7 +375,7 @@ Use disposable test identities and test data. Do not run destructive lifecycle s
 Dashboard:
 
 ```powershell
-cd "C:\Users\HP\Documents\Projects\ByteQuest\ByteQuest Web Dashboard"
+cd "C:\Users\HP\Documents\Projects\ByteQuest\ByteQuest-Web-Dashboard"
 npx --yes pnpm@9.15.9 install --frozen-lockfile
 npx --yes pnpm@9.15.9 dev --hostname 127.0.0.1 --port 3000
 ```
@@ -501,7 +501,7 @@ npx --yes supabase@2.117.0 test db
 Then configure disposable local test identities and run:
 
 ```powershell
-cd "C:\Users\HP\Documents\Projects\ByteQuest\ByteQuest Web Dashboard"
+cd "C:\Users\HP\Documents\Projects\ByteQuest\ByteQuest-Web-Dashboard"
 npx --yes pnpm@9.15.9 test:coc2
 npx --yes pnpm@9.15.9 test:realtime
 npx --yes pnpm@9.15.9 test:quiz-authoring

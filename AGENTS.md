@@ -31,7 +31,7 @@ GitHub repo: `mikeangelocasono/ByteQuest-Capstone-Project`
 
 ```
 ByteQuest-Mobile-App/     Flutter/Dart learner app (primary build target)
-ByteQuest Web Dashboard/  Next.js/TypeScript instructor + admin dashboard
+ByteQuest-Web-Dashboard/  Next.js/TypeScript instructor + admin dashboard
 supabase/                 PostgreSQL migrations, RLS, Auth, Realtime config
 docs/                     Architecture and audit documents
 scripts/                  Shared maintenance and verification scripts
@@ -199,7 +199,7 @@ flutter test
 flutter build apk --debug
 
 # Web dashboard
-cd "ByteQuest Web Dashboard"
+cd ByteQuest-Web-Dashboard
 pnpm exec tsc --noEmit
 pnpm lint
 pnpm build

@@ -1,4 +1,4 @@
-﻿# Admin Dashboard Reference Alignment
+# Admin Dashboard Reference Alignment
 
 Date: 2026-08-12
 
@@ -8,7 +8,7 @@ The supplied Admin dashboard screenshots were used as visual and information-arc
 
 | Reference area | ByteQuest implementation | Truth source |
 |---|---|---|
-| Grouped Admin sidebar | Dashboard, User management, System, Insights, Security & Audit, Account | `ByteQuest Web Dashboard/src/components/layout/sidebar.tsx` |
+| Grouped Admin sidebar | Dashboard, User management, System, Insights, Security & Audit, Account | `ByteQuest-Web-Dashboard/src/components/layout/sidebar.tsx` |
 | KPI row | Responsive four-card `MetricStrip` with role-specific metrics and links | `profiles`, `classes`, Admin analytics RPC, `system_settings` |
 | Platform activity trend | Seven-day line chart for assessments, released results, and resources | `get_admin_system_analytics` |
 | Account status summary | Donut and readable legend grouped by role/status | `get_admin_system_analytics` |

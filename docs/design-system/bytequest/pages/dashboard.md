@@ -1,6 +1,6 @@
-﻿# ByteQuest Dashboard Override
+# ByteQuest Dashboard Override
 
-This project is an authenticated TESDA-aligned EdTech operations product, not a landing page or Smart Home dashboard. The established ByteQuest visual world in `ByteQuest Web Dashboard/src/app/globals.css` takes precedence over the generated generic page pattern.
+This project is an authenticated TESDA-aligned EdTech operations product, not a landing page or Smart Home dashboard. The established ByteQuest visual world in `ByteQuest-Web-Dashboard/src/app/globals.css` takes precedence over the generated generic page pattern.
 
 ## Preserve
 

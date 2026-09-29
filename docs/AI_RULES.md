@@ -1,4 +1,4 @@
-﻿# AI Development Rules
+# AI Development Rules
 
 This document outlines the technology stack and specific library usage guidelines for this Next.js application. Adhering to these rules will help maintain consistency, improve collaboration, and ensure the AI assistant can effectively understand and modify the codebase.
 
@@ -22,13 +22,13 @@ The application is built using the following core technologies:
 To ensure consistency and leverage the chosen stack effectively, please follow these rules:
 
 1.  **UI Components**:
-    *   **Primary Choice**: Always prioritize using components from the `ByteQuest Web Dashboard/src/components/ui/` directory (Shadcn/UI components).
-    *   **Custom Components**: If a required component is not available in Shadcn/UI, create a new component in `ByteQuest Web Dashboard/src/components/` following Shadcn/UI's composition patterns (i.e., building on Radix UI primitives and styled with Tailwind CSS).
+    *   **Primary Choice**: Always prioritize using components from the `ByteQuest-Web-Dashboard/src/components/ui/` directory (Shadcn/UI components).
+    *   **Custom Components**: If a required component is not available in Shadcn/UI, create a new component in `ByteQuest-Web-Dashboard/src/components/` following Shadcn/UI's composition patterns (i.e., building on Radix UI primitives and styled with Tailwind CSS).
     *   **Avoid**: Introducing new, third-party UI component libraries without discussion.
 
 2.  **Styling**:
     *   **Primary Choice**: Exclusively use Tailwind CSS utility classes for all styling.
-    *   **Global Styles**: Reserve `ByteQuest Web Dashboard/src/app/globals.css` for base Tailwind directives, global CSS variable definitions, and minimal base styling. Avoid adding component-specific styles here.
+    *   **Global Styles**: Reserve `ByteQuest-Web-Dashboard/src/app/globals.css` for base Tailwind directives, global CSS variable definitions, and minimal base styling. Avoid adding component-specific styles here.
     *   **CSS-in-JS**: Do not use CSS-in-JS libraries (e.g., Styled Components, Emotion).
 
 3.  **Icons**:
@@ -44,27 +44,27 @@ To ensure consistency and leverage the chosen stack effectively, please follow t
     *   **Complex Global State**: If application state becomes significantly complex, discuss the potential introduction of a dedicated state management library (e.g., Zustand, Jotai) before implementing.
 
 6.  **Routing**:
-    *   Utilize the Next.js App Router (file-system based routing in the `ByteQuest Web Dashboard/src/app/` directory).
+    *   Utilize the Next.js App Router (file-system based routing in the `ByteQuest-Web-Dashboard/src/app/` directory).
 
 7.  **API Calls & Data Fetching**:
     *   **Client-Side**: Use the native `fetch` API or a simple wrapper around it.
-    *   **Server-Side (Next.js)**: Leverage Next.js Route Handlers (in `ByteQuest Web Dashboard/src/app/api/`) or Server Actions for server-side logic and data fetching.
+    *   **Server-Side (Next.js)**: Leverage Next.js Route Handlers (in `ByteQuest-Web-Dashboard/src/app/api/`) or Server Actions for server-side logic and data fetching.
 
 8.  **Animations**:
     *   Use `tailwindcss-animate` plugin and the animation utilities provided by Radix UI components.
 
 9.  **Notifications/Toasts**:
-    *   Use the `Sonner` component (from `ByteQuest Web Dashboard/src/components/ui/sonner.tsx`) for all toast notifications.
+    *   Use the `Sonner` component (from `ByteQuest-Web-Dashboard/src/components/ui/sonner.tsx`) for all toast notifications.
 
 10. **Charts & Data Visualization**:
-    *   Use `recharts` and its associated components (e.g., `ByteQuest Web Dashboard/src/components/ui/chart.tsx`) for displaying charts.
+    *   Use `recharts` and its associated components (e.g., `ByteQuest-Web-Dashboard/src/components/ui/chart.tsx`) for displaying charts.
 
 11. **Utility Functions**:
-    *   General-purpose helper functions should be placed in `ByteQuest Web Dashboard/src/lib/utils.ts`.
+    *   General-purpose helper functions should be placed in `ByteQuest-Web-Dashboard/src/lib/utils.ts`.
     *   Ensure functions are well-typed and serve a clear, reusable purpose.
 
 12. **Custom Hooks**:
-    *   Custom React hooks should be placed in the `ByteQuest Web Dashboard/src/hooks/` directory (e.g., `ByteQuest Web Dashboard/src/hooks/use-mobile.tsx`).
+    *   Custom React hooks should be placed in the `ByteQuest-Web-Dashboard/src/hooks/` directory (e.g., `ByteQuest-Web-Dashboard/src/hooks/use-mobile.tsx`).
 
 13. **TypeScript**:
     *   Write all new code in TypeScript.

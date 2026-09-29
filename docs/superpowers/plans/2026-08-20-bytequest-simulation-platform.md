@@ -799,7 +799,7 @@ Confirm the mobile `.env` contains non-empty Supabase URL/anonymous key names an
 
 - [ ] **Step 2: Run existing authenticated lifecycle checks**
 
-Run the two existing authenticated lifecycle commands from `ByteQuest Web Dashboard/`:
+Run the two existing authenticated lifecycle commands from `ByteQuest-Web-Dashboard/`:
 
 ```powershell
 pnpm test:all-missions

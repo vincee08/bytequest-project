@@ -48,7 +48,7 @@ ByteQuest/
     android/                   Gradle, manifest and Android launcher configuration
     pubspec.yaml               provider, supabase_flutter, shared_preferences, dotenv
     integration_test/          ABSENT
-  ByteQuest Web Dashboard/
+  ByteQuest-Web-Dashboard/
     src/app/                   instructor/admin routes, reports and server endpoints
     src/components/attempts/   evidence review, finalize and release controls
     src/components/realtime/  route invalidation

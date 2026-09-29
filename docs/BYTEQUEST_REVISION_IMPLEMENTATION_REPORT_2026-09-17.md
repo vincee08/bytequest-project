@@ -37,7 +37,7 @@ This change does **not** alter mission definitions, state persistence, evidence 
 | Area | Implemented capability | Primary evidence |
 |---|---|---|
 | TESDA alignment and scoring boundary | 20 missions trace to four CSS NC II units and 98 criteria; official evidence requirements are separate from operational/raw score summaries and gamification. | `docs/MISSION_TESDA_ALIGNMENT_AUDIT.md`, `docs/TESDA_SOURCE_VALIDATION_STATUS.md`, `docs/RUBRIC_RULE_PROVENANCE_REPORT.md` |
-| Instructor/Admin separation | Role-specific dashboards, server-side guards, RLS/RPC authorization, scoped Instructor workflows, and Admin governance workflows. | `ByteQuest Web Dashboard/src/middleware.ts`, `src/lib/auth/server.ts`, `supabase/migrations/20260807101000_admin_governance_rpcs.sql` |
+| Instructor/Admin separation | Role-specific dashboards, server-side guards, RLS/RPC authorization, scoped Instructor workflows, and Admin governance workflows. | `ByteQuest-Web-Dashboard/src/middleware.ts`, `src/lib/auth/server.ts`, `supabase/migrations/20260807101000_admin_governance_rpcs.sql` |
 | COC bypass | Instructor class-owner bypass with required reason, actor/time audit, learner denial, revocation, and an unlock-only effect that grants neither competency nor score. | `supabase/migrations/20260807095000_authoritative_workflow_rpcs.sql`, `GrantBypassForm.tsx`, `supabase/tests/foundation_lifecycle_rollback.sql` |
 | Instructor score correction/audit | Class-scoped criterion correction, required reason, immutable score revisions, reviewer/time history, and server-side consistency validation. | `AttemptReviewActions.tsx`, `src/lib/attempts/criterion-adjustment.ts`, `20260915090000_validate_instructor_score_revisions.sql` |
 | Account lifecycle | Instructor scoped deactivate/reactivate only; Admin protected retention-aware remove/deactivate workflow; no Instructor permanent-delete route. | `20260810101000_instructor_learner_account_deactivation.sql`, `20260810103000_admin_account_removal_readiness.sql`, Admin user API routes |
@@ -106,7 +106,7 @@ Those results validate the pre-existing and earlier worktree functionality, but 
    ```
 
 2. Start Docker Desktop’s Linux engine and restore the Supabase CLI to `PATH`, then run the local schema/lifecycle verification already used by this repository. Do not run a linked/hosted migration command until backup and explicit approval are available.
-3. Restore pnpm to `PATH`, then run the dashboard type, lint, focused tests, and production build from `ByteQuest Web Dashboard`.
+3. Restore pnpm to `PATH`, then run the dashboard type, lint, focused tests, and production build from `ByteQuest-Web-Dashboard`.
 4. Install/configure an Android SDK and device/emulator for APK, touch-target, TalkBack, large-text, landscape, and manual visual regression verification.
 5. After all gates pass, review the exact diff, update `CODEX_STATE.md`, commit selected files on `new`, and seek explicit approval before any hosted Supabase migration or merge to `main`.
 

@@ -1,4 +1,4 @@
-﻿# ByteQuest Web Dashboard - Updates Summary
+# ByteQuest Web Dashboard - Updates Summary
 
 ## Overview
 Successfully reviewed, debugged, and updated the ByteQuest Instructor/Admin Web Dashboard with modern design improvements, global font changes, and a cohesive color theme.
@@ -11,7 +11,7 @@ Successfully reviewed, debugged, and updated the ByteQuest Instructor/Admin Web 
 - **Changed from**: Geist fonts
 - **Changed to**: Plus Jakarta Sans (Google Font)
 - **Implementation**:
-  - Updated `ByteQuest Web Dashboard/src/app/layout.tsx` to import and configure Plus Jakarta Sans with weights: 400, 500, 600, 700, 800
+  - Updated `ByteQuest-Web-Dashboard/src/app/layout.tsx` to import and configure Plus Jakarta Sans with weights: 400, 500, 600, 700, 800
   - Added CSS variable `--font-plus-jakarta-sans` for consistent usage
   - Updated `tailwind.config.ts` to include font-family configuration
   - Applied font globally in `globals.css` with proper fallbacks
@@ -40,11 +40,11 @@ Successfully reviewed, debugged, and updated the ByteQuest Instructor/Admin Web 
 ## ðŸ“ Files Updated
 
 ### Core Configuration Files
-1. **`ByteQuest Web Dashboard/src/app/layout.tsx`**
+1. **`ByteQuest-Web-Dashboard/src/app/layout.tsx`**
    - Replaced Geist fonts with Plus Jakarta Sans
    - Updated className to use new font variable
 
-2. **`ByteQuest Web Dashboard/src/app/globals.css`**
+2. **`ByteQuest-Web-Dashboard/src/app/globals.css`**
    - Completely rewrote CSS custom properties
    - Added ByteQuest blue color palette
    - Applied Plus Jakarta Sans globally
@@ -55,7 +55,7 @@ Successfully reviewed, debugged, and updated the ByteQuest Instructor/Admin Web 
    - Maintained all existing Tailwind configurations
 
 ### Layout Components
-4. **`ByteQuest Web Dashboard/src/components/layout/sidebar.tsx`**
+4. **`ByteQuest-Web-Dashboard/src/components/layout/sidebar.tsx`**
    - Updated all hardcoded colors to use semantic tokens
    - Changed from `bg-blue-50 text-blue-600` to `bg-accent text-accent-foreground`
    - Improved active state styling with shadow
@@ -63,31 +63,31 @@ Successfully reviewed, debugged, and updated the ByteQuest Instructor/Admin Web 
    - Updated spacing and padding for modern look
    - Changed border radius from `rounded-md` to `rounded-lg`
 
-5. **`ByteQuest Web Dashboard/src/components/layout/topbar.tsx`**
+5. **`ByteQuest-Web-Dashboard/src/components/layout/topbar.tsx`**
    - Updated search bar styling with new colors
    - Changed notification bell hover state
    - Updated avatar styling with proper borders
    - Improved dropdown menu styling
    - Enhanced font weights for better hierarchy
 
-6. **`ByteQuest Web Dashboard/src/components/layout/dashboard-layout.tsx`**
+6. **`ByteQuest-Web-Dashboard/src/components/layout/dashboard-layout.tsx`**
    - Changed background from `bg-gray-50` to `bg-background`
    - Added proper spacing with `mt-6` for content
 
-7. **`ByteQuest Web Dashboard/src/components/layout/breadcrumbs.tsx`**
+7. **`ByteQuest-Web-Dashboard/src/components/layout/breadcrumbs.tsx`**
    - Updated text colors to use semantic tokens
    - Changed hover states to use `text-primary`
    - Improved font weights for better readability
 
 ### Page Components
-8. **`ByteQuest Web Dashboard/src/app/login/page.tsx`**
+8. **`ByteQuest-Web-Dashboard/src/app/login/page.tsx`**
    - Updated background color to use `bg-background`
    - Changed primary button colors to use theme
    - Updated card shadow styling
    - Improved input field heights (h-11)
    - Enhanced typography with better font weights
 
-9. **`ByteQuest Web Dashboard/src/app/dashboard/page.tsx`**
+9. **`ByteQuest-Web-Dashboard/src/app/dashboard/page.tsx`**
    - Updated all KPI cards with theme colors
    - Changed quick action cards to use semantic colors
    - Updated chart gradient to use theme colors
@@ -97,35 +97,35 @@ Successfully reviewed, debugged, and updated the ByteQuest Instructor/Admin Web 
    - Improved hover states and transitions
 
 ### Authentication Components
-10. **`ByteQuest Web Dashboard/src/components/auth/protected-route.tsx`**
+10. **`ByteQuest-Web-Dashboard/src/components/auth/protected-route.tsx`**
     - Updated loading screen background
     - Changed spinner color to use `text-primary`
     - Updated text colors to semantic tokens
 
 ### UI Components
-11. **`ByteQuest Web Dashboard/src/components/ui/button.tsx`**
+11. **`ByteQuest-Web-Dashboard/src/components/ui/button.tsx`**
     - Changed font from `font-medium` to `font-semibold`
     - Updated focus ring from `ring-1` to `ring-2`
     - Added `ring-offset-2` for better focus visibility
     - Increased default height from `h-9` to `h-10`
     - Increased large button height to `h-11`
 
-12. **`ByteQuest Web Dashboard/src/components/ui/input.tsx`**
+12. **`ByteQuest-Web-Dashboard/src/components/ui/input.tsx`**
     - Updated height from `h-9` to `h-10`
     - Changed focus ring from `ring-1` to `ring-2`
     - Improved shadow styling
     - Changed background to use `bg-background`
 
-13. **`ByteQuest Web Dashboard/src/components/ui/label.tsx`**
+13. **`ByteQuest-Web-Dashboard/src/components/ui/label.tsx`**
     - Updated font weight from `font-medium` to `font-semibold`
 
-14. **`ByteQuest Web Dashboard/src/components/ui/card.tsx`**
+14. **`ByteQuest-Web-Dashboard/src/components/ui/card.tsx`**
     - Changed border radius from `rounded-xl` to `rounded-lg`
     - Updated shadow from `shadow` to `shadow-sm`
     - Changed CardTitle from `font-semibold` to `font-bold`
     - Added `font-medium` to CardDescription
 
-15. **`ByteQuest Web Dashboard/src/components/ui/skeleton.tsx`**
+15. **`ByteQuest-Web-Dashboard/src/components/ui/skeleton.tsx`**
     - Changed background from `bg-primary/10` to `bg-muted`
 
 ---

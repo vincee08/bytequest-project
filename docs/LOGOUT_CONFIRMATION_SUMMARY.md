@@ -1,4 +1,4 @@
-﻿# ByteQuest Logout Confirmation Implementation Summary
+# ByteQuest Logout Confirmation Implementation Summary
 
 ## Overview
 Successfully implemented a logout confirmation dialog that prevents accidental logouts by requiring user confirmation before proceeding with the logout action.
@@ -15,7 +15,7 @@ The logout behavior has been updated to show a professional confirmation dialog 
 
 ## ðŸ“ FILES UPDATED
 
-### 1. **AlertDialog Component** (`ByteQuest Web Dashboard/src/components/ui/alert-dialog.tsx`)
+### 1. **AlertDialog Component** (`ByteQuest-Web-Dashboard/src/components/ui/alert-dialog.tsx`)
 **Changes Made:**
 - Updated `AlertDialogContent` border radius: `sm:rounded-lg` â†’ `rounded-xl`
 - Updated `AlertDialogContent` shadow: `shadow-lg` â†’ `shadow-elevated`
@@ -30,7 +30,7 @@ The logout behavior has been updated to show a professional confirmation dialog 
 
 ---
 
-### 2. **Sidebar Component** (`ByteQuest Web Dashboard/src/components/layout/sidebar.tsx`)
+### 2. **Sidebar Component** (`ByteQuest-Web-Dashboard/src/components/layout/sidebar.tsx`)
 
 #### **Imports Added:**
 ```typescript
@@ -100,7 +100,7 @@ import {
 
 ---
 
-### 3. **Topbar Component** (`ByteQuest Web Dashboard/src/components/layout/topbar.tsx`)
+### 3. **Topbar Component** (`ByteQuest-Web-Dashboard/src/components/layout/topbar.tsx`)
 
 #### **Imports Added:**
 ```typescript
@@ -501,9 +501,9 @@ The implementation follows industry best practices for confirmation dialogs and 
 ---
 
 **Total Files Updated:** 3
-- `ByteQuest Web Dashboard/src/components/ui/alert-dialog.tsx` - Enhanced styling
-- `ByteQuest Web Dashboard/src/components/layout/sidebar.tsx` - Added logout confirmation
-- `ByteQuest Web Dashboard/src/components/layout/topbar.tsx` - Added logout confirmation
+- `ByteQuest-Web-Dashboard/src/components/ui/alert-dialog.tsx` - Enhanced styling
+- `ByteQuest-Web-Dashboard/src/components/layout/sidebar.tsx` - Added logout confirmation
+- `ByteQuest-Web-Dashboard/src/components/layout/topbar.tsx` - Added logout confirmation
 
 **Lines of Code Changed:** ~150 lines across 3 files
 **New Dependencies:** None (AlertDialog already installed)

@@ -1,4 +1,4 @@
-﻿# Checkpoint A â€” Architecture and Database Inventory
+# Checkpoint A â€” Architecture and Database Inventory
 
 Date: 2026-08-07  
 Scope: read-only architecture, source, repository, and live Supabase inspection  
@@ -42,10 +42,10 @@ No live table or column is approved for deletion at this checkpoint. Existing re
 ### Web
 
 - 107 source files; no middleware and no API route/server-action authorization boundary.
-- `ByteQuest Web Dashboard/src/hooks/use-auth.tsx` uses a mock `instructor_admin` and a `bytequest_temp_auth` localStorage flag.
-- `ByteQuest Web Dashboard/src/components/auth/LoginForm.tsx` accepts any syntactically plausible email and non-empty password.
-- `ByteQuest Web Dashboard/src/components/auth/SignUpForm.tsx` creates Firebase Auth accounts and assigns `instructor_admin` from the browser.
-- `ByteQuest Web Dashboard/src/services/firebase.service.ts` exposes generic collection CRUD through the browser SDK.
+- `ByteQuest-Web-Dashboard/src/hooks/use-auth.tsx` uses a mock `instructor_admin` and a `bytequest_temp_auth` localStorage flag.
+- `ByteQuest-Web-Dashboard/src/components/auth/LoginForm.tsx` accepts any syntactically plausible email and non-empty password.
+- `ByteQuest-Web-Dashboard/src/components/auth/SignUpForm.tsx` creates Firebase Auth accounts and assigns `instructor_admin` from the browser.
+- `ByteQuest-Web-Dashboard/src/services/firebase.service.ts` exposes generic collection CRUD through the browser SDK.
 - Dummy or random production data is present in dashboard, analytics, progress, reports, modules, and users.
 - Root dependencies include Firebase but no Supabase JavaScript/SSR package.
 - The Next.js production build succeeds. A typecheck fails against stale `.next/types` before a build and passes after `next build` regenerates types.
