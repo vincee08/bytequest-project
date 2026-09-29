@@ -5,6 +5,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 /// Supabase Configuration
 /// Centralized configuration for Supabase initialization and client access
 class SupabaseConfig {
+  static const _runtimeUrl = String.fromEnvironment('BQ_SUPABASE_URL');
+  static const _runtimeAnonKey = String.fromEnvironment('BQ_SUPABASE_ANON_KEY');
+
   // Private constructor to prevent instantiation
   SupabaseConfig._();
 
@@ -31,17 +34,21 @@ class SupabaseConfig {
       // Load environment variables
       await dotenv.load(fileName: '.env');
 
-      // Get Supabase credentials from environment
-      final supabaseUrl = dotenv.env['SUPABASE_URL'];
-      final supabaseAnonKey = dotenv.env['SUPABASE_ANON_KEY'];
+      // A build-time override lets Android emulators and isolated QA builds
+      // use an authorized local backend without rewriting the ignored .env.
+      final supabaseUrl =
+          _runtimeUrl.isNotEmpty ? _runtimeUrl : dotenv.env['SUPABASE_URL'];
+      final supabaseAnonKey = _runtimeAnonKey.isNotEmpty
+          ? _runtimeAnonKey
+          : dotenv.env['SUPABASE_ANON_KEY'];
 
       // Validate credentials
       if (supabaseUrl == null || supabaseUrl.isEmpty) {
-        throw Exception('SUPABASE_URL not found in .env file');
+        throw Exception('Supabase URL is not configured');
       }
 
       if (supabaseAnonKey == null || supabaseAnonKey.isEmpty) {
-        throw Exception('SUPABASE_ANON_KEY not found in .env file');
+        throw Exception('Supabase client key is not configured');
       }
 
       // Initialize Supabase with session persistence (enabled by default)

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { NextRequest } from "next/server";
-import { middleware } from "../middleware";
+import { middleware } from "../src/middleware";
 
 test("API requests bypass page redirects and retain JSON route ownership", async () => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

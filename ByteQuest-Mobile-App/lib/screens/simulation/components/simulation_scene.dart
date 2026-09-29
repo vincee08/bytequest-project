@@ -26,6 +26,9 @@ class SimulationScene extends StatefulWidget {
   final ValueChanged<String> onObjectSelected;
   final Widget? backgroundRenderer;
   final List<Widget> statusOverlays;
+  final double initialCameraScale;
+  final Offset initialCameraOffset;
+  final void Function(double scale, Offset offset)? onCameraChanged;
 
   const SimulationScene({
     super.key,
@@ -38,6 +41,9 @@ class SimulationScene extends StatefulWidget {
     required this.onObjectSelected,
     this.backgroundRenderer,
     this.statusOverlays = const [],
+    this.initialCameraScale = 1,
+    this.initialCameraOffset = Offset.zero,
+    this.onCameraChanged,
   }) : assert(
           scene != null || profile != null,
           'Provide either a runtime scene definition or a legacy profile.',
@@ -52,6 +58,22 @@ class _SimulationSceneState extends State<SimulationScene> {
       TransformationController();
 
   @override
+  void initState() {
+    super.initState();
+    final scale = widget.initialCameraScale.clamp(1.0, 3.0).toDouble();
+    _transformationController.value = Matrix4.diagonal3Values(scale, scale, 1)
+      ..setTranslationRaw(
+          widget.initialCameraOffset.dx, widget.initialCameraOffset.dy, 0);
+  }
+
+  void _publishCamera() {
+    final transform = _transformationController.value;
+    final offset = transform.getTranslation();
+    widget.onCameraChanged
+        ?.call(transform.getMaxScaleOnAxis(), Offset(offset.x, offset.y));
+  }
+
+  @override
   void dispose() {
     _transformationController.dispose();
     super.dispose();
@@ -61,6 +83,7 @@ class _SimulationSceneState extends State<SimulationScene> {
     // The logical workspace is fitted into the viewport before camera
     // transforms are applied, so identity is the fit-to-screen transform.
     _transformationController.value = Matrix4.identity();
+    _publishCamera();
     unawaited(HapticFeedback.selectionClick());
   }
 
@@ -72,6 +95,7 @@ class _SimulationSceneState extends State<SimulationScene> {
       nextScale,
       1,
     );
+    _publishCamera();
     unawaited(HapticFeedback.selectionClick());
   }
 
@@ -101,6 +125,7 @@ class _SimulationSceneState extends State<SimulationScene> {
             final canvas = _SceneViewport(
               resolved: resolved,
               transformationController: _transformationController,
+              onCameraInteractionEnd: _publishCamera,
               hotspotStates: widget.hotspotStates,
               inspectedObjectIds: widget.inspectedObjectIds,
               connectedNodePairs: widget.connectedNodePairs,
@@ -268,6 +293,7 @@ class _SceneToolbar extends StatelessWidget {
 class _SceneViewport extends StatelessWidget {
   final _ResolvedScene resolved;
   final TransformationController transformationController;
+  final VoidCallback onCameraInteractionEnd;
   final Map<String, HotspotVisualState> hotspotStates;
   final Set<String> inspectedObjectIds;
   final Set<String> connectedNodePairs;
@@ -279,6 +305,7 @@ class _SceneViewport extends StatelessWidget {
   const _SceneViewport({
     required this.resolved,
     required this.transformationController,
+    required this.onCameraInteractionEnd,
     required this.hotspotStates,
     required this.inspectedObjectIds,
     required this.connectedNodePairs,
@@ -318,6 +345,7 @@ class _SceneViewport extends StatelessWidget {
             );
             final reducedMotion = MediaQuery.disableAnimationsOf(context);
             return InteractiveViewer(
+              onInteractionEnd: (_) => onCameraInteractionEnd(),
               transformationController: transformationController,
               minScale: 1,
               maxScale: 3,
@@ -376,6 +404,7 @@ class _SceneViewport extends StatelessWidget {
                             rect: mappedObjects[object.id]!,
                             child: HotspotWidget(
                               object: object,
+                              visualScale: 1 / workspaceScale,
                               state: hotspotStates[object.id] ??
                                   (inspectedObjectIds.contains(object.id)
                                       ? HotspotVisualState.completed
@@ -505,13 +534,17 @@ class _ResolvedScene {
       );
     }
     final definition = widget.scene!;
+    final kindName = definition.initialStatus['sceneKind'];
+    final resolvedKind = kindName is String
+        ? SimulationSceneKind.values.where((item) => item.name == kindName)
+        : const Iterable<SimulationSceneKind>.empty();
     return _ResolvedScene(
       definition: definition,
       title:
           definition.initialStatus['title'] as String? ?? 'Technical workspace',
       prompt: definition.initialStatus['prompt'] as String? ??
           'Inspect the available schematic objects.',
-      legacyKind: null,
+      legacyKind: resolvedKind.isEmpty ? null : resolvedKind.single,
       legacyIcons: const {},
     );
   }

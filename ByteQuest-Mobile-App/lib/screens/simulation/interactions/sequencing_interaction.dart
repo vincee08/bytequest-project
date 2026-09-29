@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../data/mission_content_data.dart';
 import '../components/tool_tray.dart';
 import '../runtime/mission_runtime_models.dart';
 import '../templates/authoritative_mission_contract.dart';
@@ -55,56 +56,71 @@ class _SequencingInteractionState extends State<SequencingInteraction> {
 
   void _loadRuntimeInputs() {
     _definitions = interactionItems(widget.phase.presentation['items']);
-    _order = widget.state.sequenceOrder.isEmpty
+    final ids = _definitions.map((item) => item.id).toSet();
+    final phases = widget.state.equipmentState['phases'];
+    final phase = phases is Map ? phases[widget.phase.id] : null;
+    final recorded = phase is Map && phase['order'] is List
+        ? (phase['order'] as List).whereType<String>().toList()
+        : widget.state.sequenceOrder;
+    _order = recorded.length != ids.length || !ids.containsAll(recorded)
         ? _definitions.map((item) => item.id).toList()
-        : List<String>.from(widget.state.sequenceOrder);
+        : List<String>.from(recorded);
   }
 
   String _label(String id) =>
       _definitions.firstWhere((item) => item.id == id).label;
 
   @override
-  Widget build(BuildContext context) => ReorderableListView.builder(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        itemCount: _order.length,
-        onReorderItem: widget.enabled
-            ? (oldIndex, newIndex) => _move(oldIndex, newIndex, 'drag')
-            : (_, __) {},
-        itemBuilder: (context, index) {
-          final id = _order[index];
-          final label = _label(id);
-          return Card(
-            key: ValueKey('sequence-item-$id'),
-            child: Row(
-              children: [
-                ReorderableDragStartListener(
-                  index: index,
-                  enabled: widget.enabled,
-                  child: const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: Icon(Icons.drag_handle_rounded),
-                  ),
+  Widget build(BuildContext context) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ReorderableListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _order.length,
+            onReorderItem: widget.enabled
+                ? (oldIndex, newIndex) => _move(oldIndex, newIndex, 'drag')
+                : (_, __) {},
+            itemBuilder: (context, index) {
+              final id = _order[index];
+              final label = _label(id);
+              return Card(
+                key: ValueKey('sequence-item-$id'),
+                child: Row(
+                  children: [
+                    ReorderableDragStartListener(
+                      index: index,
+                      enabled: widget.enabled,
+                      child: const Padding(
+                        padding: EdgeInsets.all(12),
+                        child: Icon(Icons.drag_handle_rounded),
+                      ),
+                    ),
+                    Expanded(child: Text(label)),
+                    IconButton(
+                      tooltip: 'Move $label up',
+                      onPressed: widget.enabled && index > 0
+                          ? () => _move(index, index - 1, 'button')
+                          : null,
+                      icon: const Icon(Icons.arrow_upward_rounded),
+                    ),
+                    IconButton(
+                      tooltip: 'Move $label down',
+                      onPressed: widget.enabled && index < _order.length - 1
+                          ? () => _move(index, index + 1, 'button')
+                          : null,
+                      icon: const Icon(Icons.arrow_downward_rounded),
+                    ),
+                  ],
                 ),
-                Expanded(child: Text(label)),
-                IconButton(
-                  tooltip: 'Move $label up',
-                  onPressed: widget.enabled && index > 0
-                      ? () => _move(index, index - 1, 'button')
-                      : null,
-                  icon: const Icon(Icons.arrow_upward_rounded),
-                ),
-                IconButton(
-                  tooltip: 'Move $label down',
-                  onPressed: widget.enabled && index < _order.length - 1
-                      ? () => _move(index, index + 1, 'button')
-                      : null,
-                  icon: const Icon(Icons.arrow_downward_rounded),
-                ),
-              ],
-            ),
-          );
-        },
+              );
+            },
+          ),
+          FilledButton(
+              key: ValueKey('sequence-confirm-${widget.phase.id}'),
+              onPressed: widget.enabled ? () => _record('button') : null,
+              child: const Text(MissionContentData.confirmSequenceLabel)),
+        ],
       );
 
   void _move(int oldIndex, int newIndex, String inputMethod) {
@@ -112,6 +128,10 @@ class _SequencingInteractionState extends State<SequencingInteraction> {
       final item = _order.removeAt(oldIndex);
       _order.insert(newIndex, item);
     });
+    _record(inputMethod);
+  }
+
+  void _record(String inputMethod) {
     unawaited(widget.onAction('sequence_reordered', widget.phase.id, {
       'order': List<String>.from(_order),
       'input_method': inputMethod,
@@ -160,7 +180,8 @@ class SequenceActivity extends StatelessWidget {
           const SizedBox(height: 10),
           SimulationFeedback(
             icon: Icons.timeline_rounded,
-            text: '${sequence.length} of ${stage.requiredCount} actions recorded',
+            text:
+                '${sequence.length} of ${stage.requiredCount} actions recorded',
           ),
         ],
       );

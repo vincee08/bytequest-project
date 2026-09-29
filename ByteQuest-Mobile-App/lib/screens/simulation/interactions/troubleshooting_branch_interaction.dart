@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/mission_content_data.dart';
 import '../components/tool_tray.dart';
 import '../runtime/mission_runtime_models.dart';
+import '../runtime/mission_equipment_simulator.dart';
 
 /// A diagnostic branch that reveals only facts earned by recorded actions.
 class TroubleshootingBranchInteraction extends StatelessWidget {
@@ -26,7 +27,10 @@ class TroubleshootingBranchInteraction extends StatelessWidget {
   Widget build(BuildContext context) {
     final presentation = phase.presentation;
     final symptom = presentation['symptom'] as String? ?? phase.instruction;
-    final facts = _stringMap(presentation['facts']);
+    final facts = {
+      ..._stringMap(presentation['facts']),
+      ..._stringMap(state.equipmentState['fact_observations'])
+    };
     final actions = _mapList(presentation['diagnostic_actions']);
     final serviceCases = _mapList(presentation['service_cases']);
     final requiredFacts =
@@ -73,7 +77,11 @@ class TroubleshootingBranchInteraction extends StatelessWidget {
           const SizedBox(height: 8),
           for (final action in actions) ...[
             OutlinedButton.icon(
-              onPressed: enabled ? () => _recordDiagnostic(action) : null,
+              onPressed: enabled &&
+                      MissionEquipmentSimulator.conditionsMet(
+                          action['requires'], state)
+                  ? () => _recordDiagnostic(action)
+                  : null,
               icon: const Icon(Icons.search_rounded),
               label: Text(
                 action['label'] as String? ?? MissionContentData.inspectLabel,
@@ -164,8 +172,9 @@ class _ServiceCaseCard extends StatelessWidget {
     final causes = _stringList(serviceCase['causes']);
     return Semantics(
       container: true,
-      label:
-          '$symptom. ${MissionContentData.possibleCausesLabel}: ${causes.join(', ')}',
+      label: causes.isEmpty
+          ? symptom
+          : '$symptom. ${MissionContentData.possibleCausesLabel}: ${causes.join(', ')}',
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: AppTheme.cardWhite,
@@ -178,11 +187,13 @@ class _ServiceCaseCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(symptom, style: AppTheme.labelLarge),
-              const SizedBox(height: 6),
-              Text(
-                '${MissionContentData.possibleCausesLabel}: ${causes.join(' • ')}',
-                style: AppTheme.bodySmall,
-              ),
+              if (causes.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  '${MissionContentData.possibleCausesLabel}: ${causes.join(' • ')}',
+                  style: AppTheme.bodySmall,
+                ),
+              ],
             ],
           ),
         ),

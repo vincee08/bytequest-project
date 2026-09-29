@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../data/mission_content_data.dart';
 import '../components/tool_tray.dart';
 import '../runtime/mission_runtime_models.dart';
 import 'multi_select_interaction.dart';
@@ -33,6 +34,29 @@ class _ControlledPlacementInteractionState
   String? _itemId;
   String? _destinationId;
   String? _orientation;
+  bool _reviewingCompletedControls = false;
+
+  @override
+  void didUpdateWidget(covariant ControlledPlacementInteraction oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.phase.id != widget.phase.id) {
+      _itemId = null;
+      _destinationId = null;
+      _orientation = null;
+      _reviewingCompletedControls = false;
+      return;
+    }
+    if (!widget.state.interactionCompletedPhaseIds.contains(widget.phase.id)) {
+      _reviewingCompletedControls = false;
+    }
+    if (!_reviewingCompletedControls &&
+        _itemId != null &&
+        widget.state.placements.containsKey(_itemId)) {
+      _itemId = null;
+      _destinationId = null;
+      _orientation = null;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -48,6 +72,14 @@ class _ControlledPlacementInteractionState
     final installedItems = items
         .where((item) => widget.state.placements.containsKey(item.id))
         .toList(growable: false);
+    final interactionComplete =
+        widget.state.interactionCompletedPhaseIds.contains(widget.phase.id);
+    final showControls = !interactionComplete || _reviewingCompletedControls;
+    final availableItems = _reviewingCompletedControls
+        ? items
+        : items
+            .where((item) => !widget.state.placements.containsKey(item.id))
+            .toList(growable: false);
     final reduceMotion =
         widget.state.reducedMotion || MediaQuery.disableAnimationsOf(context);
     final transitionDuration =
@@ -55,68 +87,70 @@ class _ControlledPlacementInteractionState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const MissionSectionLabel(
-            icon: Icons.memory_rounded, text: 'Components'),
-        const SizedBox(height: 8),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final item in items)
-              ChoiceChip(
-                key: ValueKey('placement-item-${item.id}'),
-                label: Text(item.label),
-                selected: _itemId == item.id,
-                onSelected: widget.enabled
-                    ? (_) => setState(() {
-                          _itemId = item.id;
-                          _orientation = null;
-                        })
-                    : null,
-              ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        const MissionSectionLabel(
-          icon: Icons.place_outlined,
-          text: 'Destinations',
-        ),
-        const SizedBox(height: 8),
-        for (final destination in destinations)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: OutlinedButton(
-              key: ValueKey('placement-destination-${destination.id}'),
-              onPressed: widget.enabled
-                  ? () => setState(() => _destinationId = destination.id)
-                  : null,
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-              ),
-              child: Text(destination.label),
-            ),
-          ),
-        if (orientations.isNotEmpty) ...[
+        if (showControls) ...[
           const MissionSectionLabel(
-            icon: Icons.screen_rotation_outlined,
-            text: 'Orientation',
-          ),
+              icon: Icons.memory_rounded, text: 'Components'),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
+            runSpacing: 8,
             children: [
-              for (final orientation in orientations)
+              for (final item in availableItems)
                 ChoiceChip(
-                  key: ValueKey('placement-orientation-$orientation'),
-                  label: Text(orientation.replaceAll('_', ' ')),
-                  selected: _orientation == orientation,
+                  key: ValueKey('placement-item-${item.id}'),
+                  label: Text(item.label),
+                  selected: _itemId == item.id,
                   onSelected: widget.enabled
-                      ? (_) => setState(() => _orientation = orientation)
+                      ? (_) => setState(() {
+                            _itemId = item.id;
+                            _orientation = null;
+                          })
                       : null,
                 ),
             ],
           ),
           const SizedBox(height: 12),
+          const MissionSectionLabel(
+            icon: Icons.place_outlined,
+            text: 'Destinations',
+          ),
+          const SizedBox(height: 8),
+          for (final destination in destinations)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: OutlinedButton(
+                key: ValueKey('placement-destination-${destination.id}'),
+                onPressed: widget.enabled
+                    ? () => setState(() => _destinationId = destination.id)
+                    : null,
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48),
+                ),
+                child: Text(destination.label),
+              ),
+            ),
+          if (orientations.isNotEmpty) ...[
+            const MissionSectionLabel(
+              icon: Icons.screen_rotation_outlined,
+              text: 'Orientation',
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: [
+                for (final orientation in orientations)
+                  ChoiceChip(
+                    key: ValueKey('placement-orientation-$orientation'),
+                    label: Text(orientation.replaceAll('_', ' ')),
+                    selected: _orientation == orientation,
+                    onSelected: widget.enabled
+                        ? (_) => setState(() => _orientation = orientation)
+                        : null,
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+          ],
         ],
         AnimatedSwitcher(
           key: const ValueKey('placement-state-transition'),
@@ -151,18 +185,40 @@ class _ControlledPlacementInteractionState
                   ],
                 ),
         ),
-        FilledButton.icon(
-          key: const ValueKey('placement-place'),
-          onPressed: widget.enabled &&
-                  _itemId != null &&
-                  _destinationId != null &&
-                  (orientations.isEmpty || _orientation != null)
-              ? () => _place(items, destinations)
-              : null,
-          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-          icon: const Icon(Icons.place_rounded),
-          label: const Text('Place'),
-        ),
+        if (showControls)
+          FilledButton.icon(
+            key: const ValueKey('placement-place'),
+            onPressed: widget.enabled &&
+                    _itemId != null &&
+                    _destinationId != null &&
+                    (orientations.isEmpty || _orientation != null)
+                ? () => _place(items, destinations)
+                : null,
+            style:
+                FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+            icon: const Icon(Icons.place_rounded),
+            label: const Text('Place'),
+          ),
+        if (interactionComplete)
+          TextButton.icon(
+            key: const ValueKey('placement-toggle-completed-controls'),
+            onPressed: widget.enabled
+                ? () => setState(() {
+                      _reviewingCompletedControls =
+                          !_reviewingCompletedControls;
+                    })
+                : null,
+            icon: Icon(
+              _reviewingCompletedControls
+                  ? Icons.visibility_off_outlined
+                  : Icons.edit_outlined,
+            ),
+            label: Text(
+              _reviewingCompletedControls
+                  ? MissionContentData.hideCompletedControlsLabel
+                  : MissionContentData.reviewOrChangePlacementsLabel,
+            ),
+          ),
       ],
     );
   }

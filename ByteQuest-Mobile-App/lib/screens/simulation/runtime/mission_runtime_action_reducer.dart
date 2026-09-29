@@ -105,6 +105,7 @@ final class MissionRuntimeActionReducer {
   }
 
   static const _runtimeActionTypes = {
+    'equipment_operation',
     'object_inspected',
     'selection_confirmed',
     'tool_attempted',
@@ -129,6 +130,12 @@ final class MissionRuntimeActionReducer {
     String? target,
     Map<String, dynamic> value,
   ) {
+    if (value['equipment_snapshot'] is Map) {
+      state = state.copyWith(
+        equipmentState:
+            Map<String, dynamic>.from(value['equipment_snapshot'] as Map),
+      );
+    }
     final testStatusName = value['test_status'];
     if (target != null && testStatusName is String) {
       for (final status in MissionTestStatus.values) {
@@ -162,11 +169,14 @@ final class MissionRuntimeActionReducer {
               : {...state.toolApplications, target: toolId},
         );
       case 'connection_created':
+        if (value['compatible'] == false) return state;
         final source = value['source_id'] as String?;
         final destination = value['destination_id'] as String?;
         if (source == null || destination == null) return state;
         return state.copyWith(connectedNodePairs: {
-          ...state.connectedNodePairs,
+          ...state.connectedNodePairs.where((pair) =>
+              value['replace_source_connection'] != true ||
+              !pair.startsWith('$source>')),
           '$source>$destination',
         });
       case 'configuration_applied':
@@ -201,6 +211,7 @@ final class MissionRuntimeActionReducer {
           item: destination,
         });
       case 'diagnostic_action':
+      case 'test_completed':
         final factId = value['reveals_fact_id'] as String?;
         return factId == null
             ? state
@@ -211,10 +222,15 @@ final class MissionRuntimeActionReducer {
       case 'retest_requested':
       case 'scenario_decision':
         if (target == null) return state;
-        return state.copyWith(selectedBranchActionIds: {
-          ...state.selectedBranchActionIds,
-          target,
-        });
+        return state.copyWith(
+          selectedBranchActionIds: {...state.selectedBranchActionIds, target},
+          configurationValues: value['available_action_ids'] is List
+              ? {
+                  ...state.configurationValues,
+                  'available_action_ids': value['available_action_ids']
+                }
+              : state.configurationValues,
+        );
       case 'observation_recorded':
         final observation = value['observation'];
         return observation is String && target != null

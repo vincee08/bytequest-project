@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/client";
+import { buildCriterionAdjustment, type ReviewCriterion } from "@/lib/attempts/criterion-adjustment";
 import type { Json } from "@/types/database.generated";
 
 type Outcome = "competent" | "not_yet_competent";
@@ -25,10 +26,14 @@ export function FinalizeAttemptForm({
   attemptId,
   provisional,
   scoringMethod,
+  passingMethod,
+  criteria,
 }: {
   attemptId: string;
   provisional: ProvisionalRevision;
   scoringMethod: string | null;
+  passingMethod: string | null;
+  criteria: ReviewCriterion[];
 }) {
   const router = useRouter();
   const [outcome, setOutcome] = useState<Outcome | "">(
@@ -37,6 +42,21 @@ export function FinalizeAttemptForm({
   const [reason, setReason] = useState("");
   const [remarks, setRemarks] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [overrides, setOverrides] = useState<Partial<Record<string, "satisfied" | "not_satisfied">>>({});
+  const adjustment = buildCriterionAdjustment(provisional.criterionValues, criteria, overrides);
+  const canEditCriteria = scoringMethod === "binary_sum" && passingMethod === "all_required" && adjustment !== null;
+  const originalById = new Map(Array.isArray(provisional.criterionValues)
+    ? provisional.criterionValues.filter((value): value is { [key: string]: Json | undefined } =>
+      value !== null && typeof value === "object" && !Array.isArray(value))
+      .map((value) => [String(value.criterion_id), value])
+    : []);
+
+  const setCriterionObservation = (criterionId: string, observation: "satisfied" | "not_satisfied") => {
+    const next = { ...overrides, [criterionId]: observation };
+    setOverrides(next);
+    const recalculated = buildCriterionAdjustment(provisional.criterionValues, criteria, next);
+    if (recalculated) setOutcome(recalculated.suggestedOutcome);
+  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -45,7 +65,11 @@ export function FinalizeAttemptForm({
       return;
     }
 
-    const changed = outcome !== provisional.outcome;
+    const totalsChanged = canEditCriteria && adjustment !== null && (
+      adjustment.totalValue !== provisional.totalValue || adjustment.maxValue !== provisional.maxValue
+      || adjustment.percentage !== provisional.percentage || adjustment.changed
+    );
+    const changed = outcome !== provisional.outcome || totalsChanged;
     if (changed && reason.trim().length < 5) {
       toast.error("A clear reason is mandatory when changing the provisional result.");
       return;
@@ -54,11 +78,11 @@ export function FinalizeAttemptForm({
     setSubmitting(true);
     const { error } = await createClient().rpc("finalize_attempt", {
       p_attempt_id: attemptId,
-      p_total_value: provisional.totalValue as number,
-      p_max_value: provisional.maxValue as number,
-      p_percentage: provisional.percentage as number,
+      p_total_value: canEditCriteria ? adjustment!.totalValue : provisional.totalValue as number,
+      p_max_value: canEditCriteria ? adjustment!.maxValue : provisional.maxValue as number,
+      p_percentage: canEditCriteria ? adjustment!.percentage : provisional.percentage as number,
       p_outcome: outcome,
-      p_criterion_values: provisional.criterionValues,
+      p_criterion_values: canEditCriteria ? adjustment!.criterionValues : provisional.criterionValues,
       p_reason: reason.trim() || undefined,
       p_remarks: remarks.trim() || undefined,
     });
@@ -102,10 +126,43 @@ export function FinalizeAttemptForm({
           The 1/0 values are technical encodings of SATISFIED / NOT SATISFIED. They are not TESDA weights or a TESDA passing percentage.
         </p>
       </div>
+      {canEditCriteria ? (
+        <div className="space-y-3 sm:col-span-2" aria-label="Criterion score correction">
+          <div>
+            <p className="text-sm font-semibold">Criterion-level correction</p>
+            <p className="mt-1 text-xs text-muted-foreground">Change only a criterion whose evidence was reviewed incorrectly. The technical score is recalculated from the approved rubric; the original evaluation stays in history.</p>
+          </div>
+          {criteria.map((criterion) => {
+            const original = originalById.get(criterion.id);
+            const originalObservation = String(original?.observation ?? "not_evaluated");
+            const selected = overrides[criterion.id] ?? originalObservation;
+            return (
+              <div key={criterion.id} className="grid gap-2 rounded-lg border border-border p-3 sm:grid-cols-[minmax(0,1fr)_13rem] sm:items-center">
+                <div>
+                  <p className="text-sm font-medium">{criterion.code} · {criterion.title}</p>
+                  <p className="text-xs text-muted-foreground">Original: {originalObservation.replaceAll("_", " ")} · {String(original?.score_value ?? "—")} / {criterion.maxValue}</p>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor={`criterion-${criterion.id}`}>Reviewed observation</Label>
+                  <Select value={selected} onValueChange={(value) => setCriterionObservation(criterion.id, value as "satisfied" | "not_satisfied")}>
+                    <SelectTrigger id={`criterion-${criterion.id}`} aria-label={`Reviewed observation for ${criterion.title}`}><SelectValue placeholder="Review criterion" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="satisfied">Satisfied</SelectItem>
+                      <SelectItem value="not_satisfied">Not satisfied</SelectItem>
+                      {selected === "not_evaluated" || selected === "requires_review" ? <SelectItem value={selected} disabled>{selected.replaceAll("_", " ")}</SelectItem> : null}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            );
+          })}
+          <p className="text-sm font-medium" aria-live="polite">Reviewed technical total: {adjustment?.totalValue} / {adjustment?.maxValue} · {adjustment?.percentage}% · Suggested outcome: {adjustment?.suggestedOutcome.replaceAll("_", " ")}</p>
+        </div>
+      ) : null}
       <div className="space-y-2 sm:col-span-2">
-        <Label>Instructor-reviewed outcome</Label>
+        <Label htmlFor="review-outcome">Instructor-reviewed outcome</Label>
         <Select value={outcome} onValueChange={(value) => setOutcome(value as Outcome)}>
-          <SelectTrigger><SelectValue placeholder="Select outcome" /></SelectTrigger>
+          <SelectTrigger id="review-outcome"><SelectValue placeholder="Select outcome" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="competent">Competent</SelectItem>
             <SelectItem value="not_yet_competent">Not yet competent</SelectItem>

@@ -9,6 +9,47 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('asset-free objects retain visible labels and dp-sized icons',
+      (tester) async {
+    await tester.pumpWidget(_sceneHarness());
+    expect(find.text('Server LAN port'), findsOneWidget);
+    final hotspot =
+        tester.widget<HotspotWidget>(find.byType(HotspotWidget).first);
+    final icon = tester.widget<Icon>(find
+        .descendant(
+            of: find.byType(HotspotWidget).first, matching: find.byType(Icon))
+        .first);
+    expect(icon.size! / hotspot.visualScale, closeTo(24, .001));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('restored camera is applied and fit reports persisted identity',
+      (tester) async {
+    double? reportedScale;
+    Offset? reportedOffset;
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SimulationScene(
+      scene: _scene,
+      initialCameraScale: 2,
+      initialCameraOffset: const Offset(20, 30),
+      onObjectSelected: (_) {},
+      onCameraChanged: (scale, offset) {
+        reportedScale = scale;
+        reportedOffset = offset;
+      },
+    ))));
+    final controller = tester
+        .widget<InteractiveViewer>(find.byType(InteractiveViewer))
+        .transformationController!;
+    expect(controller.value.getMaxScaleOnAxis(), 2);
+    expect(controller.value.getTranslation().x, 20);
+    expect(controller.value.getTranslation().y, 30);
+    await tester.tap(find.byTooltip('Fit and reset workspace view'));
+    await tester.pump();
+    expect(reportedScale, 1);
+    expect(reportedOffset, Offset.zero);
+  });
   testWidgets('tiny hotspot keeps a 48 dp semantic tap target', (tester) async {
     await tester.pumpWidget(_sceneHarness());
 

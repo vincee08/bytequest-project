@@ -31,7 +31,9 @@ export async function POST(request: Request) {
   });
 
   if (error || !data.user) {
-    const message = error?.message.toLowerCase().includes("already")
+    const authErrorMessage =
+      typeof error?.message === "string" ? error.message.toLowerCase() : "";
+    const message = authErrorMessage.includes("already")
       ? "An account with that email already exists."
       : "Supabase Auth could not create the account.";
     return NextResponse.json({ error: message }, { status: 400 });

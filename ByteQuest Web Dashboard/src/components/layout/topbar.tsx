@@ -40,7 +40,7 @@ type SearchGroup = { label: string; items: [string, string][] };
 
 const instructorSearch: SearchGroup[] = [
   { label: "Dashboard", items: [["Overview", "/instructor/dashboard"]] },
-  { label: "Teaching", items: [["Classes", "/classes"], ["Learners", "/progress"], ["Assignments and modules", "/modules"]] },
+  { label: "Teaching", items: [["Classes", "/classes"], ["Learners", "/progress"], ["Assignments and modules", "/modules"], ["Training concerns", "/concerns"]] },
   { label: "Assessment", items: [["Reviews and results", "/attempts"], ["Quizzes", "/quizzes"]] },
   { label: "Content", items: [["Resources", "/resources"]] },
   { label: "Insights", items: [["Analytics", "/analytics"], ["Reports", "/reports"]] },
@@ -49,7 +49,7 @@ const instructorSearch: SearchGroup[] = [
 const adminSearch: SearchGroup[] = [
   { label: "Dashboard", items: [["Overview", "/admin/dashboard"]] },
   { label: "User management", items: [["Users", "/users"], ["Instructors", "/instructors"], ["Learners", "/learners"], ["Access and scope", "/admin/access-scope"]] },
-  { label: "System", items: [["TESDA sources", "/tesda-sources"], ["Resource governance", "/admin/resources"], ["Settings and governance", "/settings"]] },
+  { label: "System", items: [["TESDA sources", "/tesda-sources"], ["Resource governance", "/admin/resources"], ["Settings and governance", "/settings"], ["System incidents", "/admin/concerns"]] },
   { label: "Insights", items: [["System analytics", "/admin/analytics"], ["System reports", "/admin/reports"]] },
   { label: "Security", items: [["Security", "/admin/security"], ["Audit logs", "/logs"]] },
 ];
@@ -60,6 +60,7 @@ const pageTitles: Record<string, string> = {
   "/classes": "Classes",
   "/progress": "Learners",
   "/modules": "Assignments & modules",
+  "/concerns": "Training concerns",
   "/attempts": "Assessment review",
   "/quizzes": "Quizzes",
   "/resources": "Resources",
@@ -72,6 +73,7 @@ const pageTitles: Record<string, string> = {
   "/tesda-sources": "TESDA sources",
   "/admin/resources": "Resource governance",
   "/settings": "Governance & settings",
+  "/admin/concerns": "System incidents",
   "/admin/analytics": "System analytics",
   "/admin/reports": "System reports",
   "/admin/security": "Security",
@@ -101,7 +103,11 @@ export function Topbar() {
 
   useEffect(() => {
     const handleKeydown = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() === "k" && (event.ctrlKey || event.metaKey)) {
+      if (
+        typeof event.key === "string" &&
+        event.key.toLowerCase() === "k" &&
+        (event.ctrlKey || event.metaKey)
+      ) {
         event.preventDefault();
         setCommandOpen((open) => !open);
       }

@@ -21,11 +21,24 @@ insert into bytequest_storage_test_context (
   learner_id,
   other_learner_id
 )
+with eligible_learners as (
+  select p.user_id
+  from public.profiles p
+  where p.role = 'learner'::public.user_role
+    and p.status = 'active'::public.account_status
+    and not exists (
+      select 1
+      from public.class_memberships cm
+      where cm.learner_id = p.user_id
+        and cm.status = 'active'::public.membership_status
+    )
+  order by p.user_id
+)
 select
   (select user_id from public.profiles where role = 'instructor' and status = 'active' limit 1),
-  (select user_id from public.profiles where role = 'learner' and status = 'active' order by user_id offset 1 limit 1),
-  (select user_id from public.profiles where role = 'learner' and status = 'active' order by user_id limit 1),
-  (select user_id from public.profiles where role = 'learner' and status = 'active' order by user_id offset 2 limit 1);
+  (select user_id from eligible_learners offset 1 limit 1),
+  (select user_id from eligible_learners limit 1),
+  (select user_id from eligible_learners offset 2 limit 1);
 
 do $$
 declare

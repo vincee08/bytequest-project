@@ -3,7 +3,7 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { CheckCircle2, Users } from "lucide-react";
-import { MetricStrip } from "../src/components/dashboard/MetricStrip";
+import { MetricStrip, type Metric } from "../src/components/dashboard/MetricStrip";
 
 test("metric cards preserve zero values and render authorized destinations as links", () => {
   const markup = renderToStaticMarkup(
@@ -57,4 +57,21 @@ test("metric error state exposes safe recovery copy without implementation detai
   assert.match(markup, /role="alert"/);
   assert.match(markup, /Summary metrics are unavailable/);
   assert.doesNotMatch(markup, /SQL|PostgreSQL|stack|exception/i);
+});
+
+test("metric links tolerate a missing runtime label without throwing", () => {
+  const malformedMetric = {
+    label: undefined,
+    value: 1,
+    icon: Users,
+    href: "/classes",
+  } as unknown as Metric;
+
+  const markup = renderToStaticMarkup(
+    <MetricStrip metrics={[malformedMetric]} ariaLabel="Runtime metrics" />,
+  );
+
+  assert.match(markup, /Summary metric/);
+  assert.match(markup, /Open summary metric/);
+  assert.match(markup, /href="\/classes"/);
 });

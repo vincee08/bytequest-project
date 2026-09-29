@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { afterEach, test } from "node:test";
 import {
+  DEFAULT_OPENROUTER_TIMEOUT_MS,
   getQuizAiConfiguration,
   OPENROUTER_CHAT_COMPLETIONS_URL,
   type QuizAiConfiguration,
@@ -112,12 +113,39 @@ test("uses openrouter/free when no model override is configured", () => {
   }
 });
 
+test("uses a bounded server timeout override and a safe default", () => {
+  const previousKey = process.env.OPENROUTER_API_KEY;
+  const previousTimeout = process.env.OPENROUTER_TIMEOUT_MS;
+  try {
+    process.env.OPENROUTER_API_KEY = "test-only-key";
+    process.env.OPENROUTER_TIMEOUT_MS = "75000";
+    assert.equal(getQuizAiConfiguration().timeoutMs, 75_000);
+
+    process.env.OPENROUTER_TIMEOUT_MS = "999999";
+    assert.equal(getQuizAiConfiguration().timeoutMs, DEFAULT_OPENROUTER_TIMEOUT_MS);
+  } finally {
+    if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previousKey;
+    if (previousTimeout === undefined) delete process.env.OPENROUTER_TIMEOUT_MS;
+    else process.env.OPENROUTER_TIMEOUT_MS = previousTimeout;
+  }
+});
+
 test("normalizes schema-valid OpenRouter structured output", async () => {
-  globalThis.fetch = async () => providerResponse(validQuestions);
+  let providerRequest: unknown = null;
+  globalThis.fetch = async (_input, init) => {
+    providerRequest = JSON.parse(String(init?.body));
+    return providerResponse(validQuestions);
+  };
   const items = await generateQuizDraftWithOpenRouter(request, configuration);
   assert.equal(items.length, 2);
   assert.equal(items[0].item_type, "multiple_choice");
   assert.equal(items[1].correct_answer, "true");
+  assert.ok(providerRequest && typeof providerRequest === "object");
+  const providerBody = providerRequest as Record<string, unknown>;
+  assert.equal(providerBody.max_tokens, 3_000);
+  assert.deepEqual(providerBody.reasoning, { effort: "low", exclude: true });
+  assert.deepEqual(providerBody.provider, { require_parameters: true });
 });
 
 test("rejects duplicate generated questions", async () => {
@@ -153,5 +181,24 @@ test("rejects malformed provider JSON", async () => {
   await assert.rejects(
     generateQuizDraftWithOpenRouter(request, configuration),
     (error: unknown) => error instanceof QuizAiProviderError && error.code === "OPENROUTER_INVALID_RESPONSE",
+  );
+});
+
+test("classifies an abort while reading the provider body as a timeout", async () => {
+  globalThis.fetch = async () =>
+    ({
+      ok: true,
+      status: 200,
+      json: async () => {
+        const error = new Error("body read aborted");
+        error.name = "AbortError";
+        throw error;
+      },
+    }) as unknown as Response;
+
+  await assert.rejects(
+    generateQuizDraftWithOpenRouter(request, configuration),
+    (error: unknown) =>
+      error instanceof QuizAiProviderError && error.code === "OPENROUTER_TIMEOUT" && error.status === 504,
   );
 });

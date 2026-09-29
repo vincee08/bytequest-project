@@ -2479,6 +2479,59 @@ export type Database = {
           },
         ]
       }
+      support_concerns: {
+        Row: {
+          class_id: string | null
+          created_at: string
+          details: string
+          history: Json
+          id: string
+          opened_by: string
+          resolved_at: string | null
+          scope: string
+          status: string
+          status_reason: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          class_id?: string | null
+          created_at?: string
+          details: string
+          history?: Json
+          id?: string
+          opened_by?: string
+          resolved_at?: string | null
+          scope: string
+          status?: string
+          status_reason?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          class_id?: string | null
+          created_at?: string
+          details?: string
+          history?: Json
+          id?: string
+          opened_by?: string
+          resolved_at?: string | null
+          scope?: string
+          status?: string
+          status_reason?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_concerns_class_id_fkey"
+            columns: ["class_id"]
+            isOneToOne: false
+            referencedRelation: "classes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       system_settings: {
         Row: {
           description: string | null

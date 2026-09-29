@@ -11,9 +11,78 @@ import 'package:bytequest/screens/simulation/runtime/mission_runtime_models.dart
 import 'package:bytequest/services/progress_resume_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'support/equipment_practice_driver.dart';
+import 'support/equipment_widget_driver.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  for (final size in const [
+    Size(320, 568),
+    Size(640, 360),
+    Size(800, 360),
+  ]) {
+    testWidgets('all real mission phases fit $size with 2x text',
+        (tester) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      for (final definition in MissionSimulationDefinitions.all) {
+        final plan = EquipmentPracticeDriver(definition);
+        for (final phase in definition.phases) {
+          plan.complete(phase);
+        }
+        for (final phase in definition.phases) {
+          final controller = _controller(definition,
+              initialState: plan.state.copyWith(currentPhaseId: phase.id));
+          await tester.pumpWidget(const SizedBox.shrink());
+          await tester.pumpWidget(
+              _host(definition, controller: controller, textScale: 2));
+          await tester.pumpAndSettle();
+          expect(find.byType(SimulationScene), findsOneWidget,
+              reason: phase.id);
+          expect(tester.takeException(), isNull,
+              reason: '${phase.id} at $size');
+        }
+      }
+    });
+  }
+
+  for (final definition in MissionSimulationDefinitions.all) {
+    testWidgets(
+        '${definition.id}: every work phase completes through touch controls',
+        (tester) async {
+      tester.view.physicalSize = const Size(412, 915);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final controller = _controller(definition);
+      await tester.pumpWidget(_host(definition, controller: controller));
+      await tester.pumpAndSettle();
+      final plan = EquipmentPracticeDriver(definition);
+      for (final phase in definition.phases) {
+        plan.complete(phase);
+      }
+      for (var index = 0; index < definition.phases.length - 1; index++) {
+        final phase = definition.phases[index];
+        for (final action
+            in plan.actions.where((action) => action.phaseId == phase.id)) {
+          await performEquipmentAction(tester, phase, action, controller);
+          expect(tester.takeException(), isNull,
+              reason: '${phase.id}/${action.actionType}');
+        }
+        final next = find.byKey(const ValueKey('mission-next'));
+        expect(tester.widget<FilledButton>(next).onPressed, isNotNull,
+            reason: phase.id);
+        await tapEquipmentControl(tester, next);
+        expect(
+            controller.state.currentPhaseId, definition.phases[index + 1].id);
+      }
+      expect(find.byType(EvidenceReviewPanel), findsOneWidget);
+      expect(controller.state.pendingEvidence, isEmpty);
+    });
+  }
 
   group('MissionSimulationScreen', () {
     testWidgets('does not advance before the active interaction is terminal', (
@@ -29,7 +98,15 @@ void main() {
       final before = tester.widget<FilledButton>(nextFinder);
       expect(before.onPressed, isNull);
 
-      for (final object in const ['motherboard', 'cpu', 'ram', 'psu']) {
+      for (final object in const [
+        'motherboard',
+        'cpu',
+        'ram',
+        'psu',
+        'cpu_socket',
+        'dimm_slot',
+        'atx_power_port'
+      ]) {
         final target = find.byKey(ValueKey('inspect-target-$object'));
         await tester.ensureVisible(target);
         await tester.tap(target);
@@ -95,6 +172,7 @@ void main() {
         final definition = MissionSimulationDefinitions.byId('coc1_m1');
         for (final size in const [
           Size(360, 800),
+          Size(640, 360),
           Size(800, 360),
           Size(1280, 800),
         ]) {
@@ -377,7 +455,11 @@ void main() {
           appendGate: appendGate,
           readError: StateError('offline'),
         );
-        final localState = MissionRuntimeState.initial(definition.id).copyWith(
+        final completedDriver = EquipmentPracticeDriver(definition);
+        for (final phase in definition.phases) {
+          completedDriver.complete(phase);
+        }
+        final localState = completedDriver.state.copyWith(
           currentPhaseId: definition.phases.last.id,
           completedPhaseIds: definition.phases
               .take(definition.phases.length - 1)
@@ -411,6 +493,7 @@ void main() {
         );
 
         transport.readError = null;
+        await tester.ensureVisible(retry);
         await tester.tap(retry);
         await tester.pump();
 
@@ -498,8 +581,11 @@ void main() {
 
       await tester.pumpWidget(_host(definition, controller: controller));
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.widgetWithText(FilledButton, 'Run test'));
       await tester.tap(find.widgetWithText(FilledButton, 'Run test'));
       await tester.pumpAndSettle();
+      await tester
+          .ensureVisible(find.widgetWithText(FilledButton, 'Run test again'));
       await tester.tap(find.widgetWithText(FilledButton, 'Run test again'));
       await tester.pumpAndSettle();
 
@@ -793,20 +879,65 @@ Future<void> _advanceToReview(
       phaseIndex++) {
     switch (phaseIndex) {
       case 0:
-        for (final object in const ['motherboard', 'cpu', 'ram', 'psu']) {
+        for (final object in const [
+          'motherboard',
+          'cpu',
+          'ram',
+          'psu',
+          'cpu_socket',
+          'dimm_slot',
+          'atx_power_port'
+        ]) {
           final target = find.byKey(ValueKey('inspect-target-$object'));
           await tester.ensureVisible(target);
           await tester.tap(target);
           await tester.pumpAndSettle();
         }
       case 1:
-        final choice = find.byKey(const ValueKey('multi-select-motherboard'));
-        await tester.ensureVisible(choice);
-        await tester.tap(choice);
-        final confirm = find.byKey(const ValueKey('multi-select-confirm'));
+        for (final group
+            in {'processing': 'cpu', 'memory': 'ram', 'power': 'psu'}.entries) {
+          final groupFinder =
+              find.byKey(ValueKey('classification-${group.key}'));
+          final choice = find.descendant(
+              of: groupFinder,
+              matching: find.byKey(ValueKey('multi-select-${group.value}')));
+          await tester.ensureVisible(choice);
+          await tester.tap(choice);
+          final confirm = find.descendant(
+              of: groupFinder,
+              matching: find.byKey(const ValueKey('multi-select-confirm')));
+          await tester.ensureVisible(confirm);
+          await tester.tap(confirm);
+          await tester.pumpAndSettle();
+        }
+        for (final id in ['esd_protection', 'open_memory_latch']) {
+          final choice = find.byKey(ValueKey('multi-select-$id'));
+          await tester.ensureVisible(choice);
+          await tester.tap(choice);
+          await tester.pump();
+        }
+        final confirm =
+            find.byKey(const ValueKey('multi-select-confirm')).first;
         await tester.ensureVisible(confirm);
         await tester.tap(confirm);
         await tester.pumpAndSettle();
+        for (final toolApplication in const {
+          'chassis_ground': 'anti_static_strap',
+          'case_fastener': 'screwdriver',
+        }.entries) {
+          final target = find.byKey(
+            ValueKey('tool-target-${toolApplication.key}'),
+          );
+          await tester.ensureVisible(target);
+          await tester.tap(target);
+          await tester.pumpAndSettle();
+          final tool = find.byKey(
+            ValueKey('tool-tray-tool-${toolApplication.value}'),
+          );
+          await tester.ensureVisible(tool);
+          await tester.tap(tool);
+          await tester.pumpAndSettle();
+        }
       case 2:
         final input = find.byKey(
           const ValueKey('observation-input-coc1_m1_p3'),

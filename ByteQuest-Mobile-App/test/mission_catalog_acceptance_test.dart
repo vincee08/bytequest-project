@@ -41,9 +41,8 @@ void main() {
     },
     'coc1_m3': {
       InteractionFamily.sequence,
-      InteractionFamily.connect,
+      InteractionFamily.configure,
       InteractionFamily.testRun,
-      InteractionFamily.interpret,
     },
     'coc1_m4': {
       InteractionFamily.inspect,
@@ -81,7 +80,7 @@ void main() {
     },
     'coc2_m5': {
       InteractionFamily.troubleshoot,
-      InteractionFamily.decide,
+      InteractionFamily.configure,
       InteractionFamily.testRun,
     },
     'coc3_m1': {
@@ -99,7 +98,6 @@ void main() {
     'coc3_m3': {
       InteractionFamily.configure,
       InteractionFamily.troubleshoot,
-      InteractionFamily.decide,
       InteractionFamily.testRun,
     },
     'coc3_m4': {
@@ -160,10 +158,10 @@ void main() {
       'review_evidence'
     ],
     'coc1_m3': [
-      'sequence_installation',
-      'configure_and_detect_issue',
-      'run_test',
-      'interpret_output',
+      'configure_installation',
+      'install_operating_system',
+      'configure_driver_restart',
+      'verify_and_interpret',
       'review_evidence'
     ],
     'coc1_m4': [
@@ -479,19 +477,19 @@ void main() {
               .whereType<Map>();
       expect(
         correctionPhase.primaryInteraction,
-        InteractionFamily.decide,
+        isIn([InteractionFamily.decide, InteractionFamily.configure]),
         reason: correctionPhase.id,
       );
-      expect(
-        correctionChoices.single['id'],
-        entry.value['correctionId'],
-        reason: correctionPhase.id,
-      );
-      expect(
-        correctionChoices.single['label'],
-        isNotEmpty,
-        reason: correctionPhase.id,
-      );
+      if (correctionPhase.primaryInteraction == InteractionFamily.configure) {
+        expect(correctionPhase.presentation['fields'], isNotEmpty);
+      } else {
+        expect(correctionChoices, isNotEmpty);
+        expect(
+            correctionChoices.every((choice) =>
+                choice['label'] is String &&
+                choice['equipment_effects'] is Map),
+            true);
+      }
       expect(
         retestPhase.primaryInteraction,
         InteractionFamily.testRun,
@@ -622,8 +620,8 @@ void main() {
       final interpretation = phases[index + 1];
       final actions = (diagnostic.presentation['diagnostic_actions'] as List)
           .whereType<Map>();
-      expect(actions, hasLength(1), reason: diagnostic.id);
-      final factId = actions.single['reveals_fact_id'];
+      expect(actions, isNotEmpty, reason: diagnostic.id);
+      final factId = actions.first['reveals_fact_id'];
       expect(
         interpretation.presentation['source_fact_ids'],
         [factId],

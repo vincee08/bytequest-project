@@ -80,8 +80,15 @@ export function MetricStrip({
       aria-label={ariaLabel}
       className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 sm:gap-4 xl:grid-cols-4"
     >
-      {metrics.map((metric) => (
-        <MetricCard key={metric.label} metric={metric} />
+      {metrics.map((metric, index) => (
+        <MetricCard
+          key={
+            typeof metric.label === "string" && metric.label.trim()
+              ? metric.label
+              : `metric-${index}`
+          }
+          metric={metric}
+        />
       ))}
     </section>
   );
@@ -89,6 +96,10 @@ export function MetricStrip({
 
 function MetricCard({ metric }: { metric: Metric }) {
   const Icon = metric.icon;
+  const label =
+    typeof metric.label === "string" && metric.label.trim()
+      ? metric.label
+      : "Summary metric";
   const tone = metric.tone ?? "informational";
   const cardClassName = cn(
     "group relative flex min-h-[142px] min-w-0 flex-col overflow-hidden rounded-2xl border bg-card p-4 shadow-card sm:p-[18px]",
@@ -112,7 +123,7 @@ function MetricCard({ metric }: { metric: Metric }) {
             metric.featured ? "text-primary-foreground/80" : "text-muted-foreground",
           )}
         >
-          {metric.label}
+          {label}
         </p>
         <span
           className={cn(
@@ -170,7 +181,7 @@ function MetricCard({ metric }: { metric: Metric }) {
           >
             <ArrowUpRight className="h-4 w-4" aria-hidden={true} />
             <span className="sr-only">
-              {metric.linkLabel ?? `Open ${metric.label.toLowerCase()}`}
+              {metric.linkLabel ?? `Open ${label.toLowerCase()}`}
             </span>
           </span>
         ) : null}

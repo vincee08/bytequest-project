@@ -1152,6 +1152,39 @@ begin
   exception
     when insufficient_privilege then null;
   end;
+
+  begin
+    perform public.finalize_attempt(
+      v_context.attempt_id, 3, 2, 100,
+      'competent'::public.evaluation_outcome,
+      null, 'Rollback-only invalid aggregate test', null
+    );
+    raise exception 'INCONSISTENT_TOTAL_WAS_NOT_BLOCKED';
+  exception
+    when invalid_parameter_value then null;
+  end;
+
+  begin
+    perform public.finalize_attempt(
+      v_context.attempt_id, 2, 2, 50,
+      'competent'::public.evaluation_outcome,
+      null, 'Rollback-only invalid percentage test', null
+    );
+    raise exception 'INCONSISTENT_PERCENTAGE_WAS_NOT_BLOCKED';
+  exception
+    when invalid_parameter_value then null;
+  end;
+
+  begin
+    perform public.finalize_attempt(
+      v_context.attempt_id, 1, 2, 50,
+      'competent'::public.evaluation_outcome,
+      null, 'Rollback-only inconsistent criterion sum test', null
+    );
+    raise exception 'INCONSISTENT_CRITERION_SUM_WAS_NOT_BLOCKED';
+  exception
+    when invalid_parameter_value then null;
+  end;
 end
 $$;
 

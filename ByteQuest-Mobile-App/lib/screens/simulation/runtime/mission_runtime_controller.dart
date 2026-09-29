@@ -155,6 +155,19 @@ final class MissionRuntimeController {
 
   Future<void> flushPending() => _enqueue(_flushPendingNow);
 
+  /// Presentation preference only: camera movement never creates evidence or
+  /// causes evaluation. Persist through the same serialized checkpoint queue.
+  Future<void> updateCamera(double scale, double offsetX, double offsetY) {
+    if (!scale.isFinite || !offsetX.isFinite || !offsetY.isFinite) {
+      throw ArgumentError('Camera coordinates must be finite.');
+    }
+    return _enqueue(() async {
+      _state = _state.copyWith(cameraScale: scale.clamp(1.0, 3.0).toDouble(),
+          cameraOffsetX: offsetX, cameraOffsetY: offsetY);
+      if (!await _saveState()) throw StateError('Camera preference could not be saved.');
+    });
+  }
+
   /// Persists the current runtime snapshot without creating or submitting
   /// evidence. Mission hosts use this for app lifecycle checkpoints.
   Future<void> persist() {

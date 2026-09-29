@@ -12,6 +12,69 @@ class HardwareItem {
 /// Mission Content Data
 /// Contains questions, components, steps, and scenarios for all missions
 class MissionContentData {
+  static const equipmentStateLabel = 'Equipment state';
+  static const equipmentOperationsLabel = 'Operate the equipment';
+  static const equipmentOutputLabel = 'Measured simulation output';
+  static const equipmentReadyLabel = 'Operating';
+  static const equipmentAttentionLabel = 'Attention required';
+  static const equipmentRecordedFeedback = 'Equipment action recorded.';
+  static const equipmentUpdatedFeedback =
+      'Equipment state updated. Run a fresh test to verify the change.';
+  static const incompatibleConnectionFeedback =
+      'These interfaces cannot establish the requested link. Inspect their connector and signal types.';
+  static const incompatiblePlacementFeedback =
+      'The component interface does not fit this destination. Inspect the socket or slot specification.';
+  static const orientationFeedback =
+      'The keyed connector is not aligned. Inspect the notch before seating the component.';
+  static const placementPrerequisiteFeedback =
+      'The mounting support or safety preparation is not installed yet.';
+  static const occupiedDestinationFeedback =
+      'This installation location is occupied. Inspect the installed component before replacing it.';
+  static const sequenceConstraintFeedback =
+      'This order violates a preparation or safety dependency. Inspect the procedure requirements.';
+  static const operationPrerequisiteFeedback =
+      'The equipment is not ready for this operation. Inspect the current state and prerequisites.';
+  static const fieldFormatFeedback =
+      'A configuration value has an invalid format. Check the field specification.';
+  static const testResultRecordedFeedback =
+      'Measured output recorded. Inspect each reading before interpreting the result.';
+  static const confirmSequenceLabel = 'Apply procedure order';
+  static const revisePhaseLabel = 'Return to a completed work phase';
+  static const practiceHintLabel = 'Show practice guidance';
+  static const testOutputUnavailable =
+      'No measured output is available for this test yet.';
+  static const incompatibleToolFeedback =
+      'This tool cannot engage the selected interface. Inspect the tool range and target specification.';
+  static const toolContactFeedback =
+      'Tool contact established with the selected target; functional verification is still required.';
+  static const Map<String, String> toolObservations = {
+    'anti_static_strap':
+        'The wrist strap clips to the bare chassis ground point and provides the required ESD path.',
+    'screwdriver':
+        'The Phillips driver fits the case fastener without contacting nearby components.',
+    'firmware_inventory':
+        'The firmware console can enumerate the selected storage controller. Open its inventory to inspect the attached device.',
+    'wire_stripper':
+        'The stripping jaws engage the outer cable jacket; conductor insulation remains intact.',
+    'crimping_tool':
+        'The termination jaws engage the prepared connector. Continuity has not yet been verified.',
+    'interface_inspection_light':
+        'The interface keying and contact surfaces are visible; no bent contacts are observed.',
+    'lan_loopback_adapter':
+        'Loopback contacts engage the Ethernet interface. This does not verify the external network path.',
+    'esd_driver':
+        'The screwdriver engages the retaining-screw head without contacting the board.',
+    'device_manager':
+        'The device inventory contains an uninitialized peripheral. Inspect individual diagnostic records before changing a driver.',
+    'port_tester':
+        'The known-good probe is detected on the alternate USB port.',
+    'cable_tester':
+        'The selected video lead loses continuity when flexed near the connector.',
+  };
+  static const disconnectedToolReading =
+      'No complete test circuit is connected. Connect both endpoints before interpreting continuity.';
+  static const connectedToolReading =
+      'A test circuit is connected. Run the wire-map procedure to inspect each conductor.';
   static const exitMissionTitle = 'Save and Exit Mission?';
   static const exitMissionMessage =
       'Your current mission progress will remain available when you return.';
@@ -55,6 +118,11 @@ class MissionContentData {
   static const serviceCaseLabel = 'Service case';
   static const correctConnectionLabel = 'Correct';
   static const reviewConnectionLabel = 'Review';
+  static const reviewOrChangePlacementsLabel = 'Review or change placements';
+  static const reviewOrChangeMatchesLabel = 'Review or change matches';
+  static const reviewOrChangeConnectionsLabel = 'Review or change connections';
+  static const hideCompletedControlsLabel = 'Hide completed controls';
+  static const recordedMatchesLabel = 'Recorded matches';
 
   /// Learner-visible technical feedback keyed by stable mission and feedback
   /// identifiers. Evaluation outcomes remain owned by authoritative services.
@@ -77,11 +145,11 @@ class MissionContentData {
     },
     'coc1_m3': {
       'coc1_m3_constraint':
-          'Cable routing and configuration changes must be recorded before testing.',
+          'Inspect firmware, storage destination, and driver configuration before installing and restarting.',
       'coc1_m3_evidence':
           'The test record must include the displayed result for later interpretation.',
       'coc1_m3_review':
-          'Review the connection, configuration, test, and interpretation evidence.',
+          'Review setup, installation, driver configuration, restart, and measured verification evidence.',
     },
     'coc1_m4': {
       'coc1_m4_constraint':

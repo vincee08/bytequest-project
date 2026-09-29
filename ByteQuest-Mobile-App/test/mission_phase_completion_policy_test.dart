@@ -2,6 +2,7 @@ import 'package:bytequest/data/mission_simulation_definitions.dart';
 import 'package:bytequest/screens/simulation/runtime/mission_phase_completion_policy.dart';
 import 'package:bytequest/screens/simulation/runtime/mission_runtime_models.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'support/equipment_practice_driver.dart';
 
 void main() {
   group('MissionPhaseCompletionPolicy', () {
@@ -47,25 +48,17 @@ void main() {
 
     test('every catalog phase requires its own terminal interaction state', () {
       for (final definition in MissionSimulationDefinitions.all) {
-        var state = MissionRuntimeState.initial(definition.id);
+        final driver = EquipmentPracticeDriver(definition);
         for (final phase in definition.phases) {
-          state = state.copyWith(currentPhaseId: phase.id);
           expect(
-            MissionPhaseCompletionPolicy.canAdvance(phase, state),
+            MissionPhaseCompletionPolicy.canAdvance(phase, driver.state),
             isFalse,
             reason: '${definition.id}/${phase.id} advanced before interaction',
           );
 
-          final terminal = _terminalActionFor(phase, state);
-          state = MissionPhaseCompletionPolicy.afterAction(
-            phase: phase,
-            state: terminal.state,
-            emittedActionType: terminal.actionType,
-            target: terminal.target,
-            value: terminal.value,
-          );
+          driver.complete(phase);
           expect(
-            MissionPhaseCompletionPolicy.canAdvance(phase, state),
+            MissionPhaseCompletionPolicy.canAdvance(phase, driver.state),
             phase.primaryInteraction == InteractionFamily.review
                 ? isFalse
                 : isTrue,

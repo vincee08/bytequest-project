@@ -1,4 +1,5 @@
 import 'mission_runtime_models.dart';
+import 'mission_equipment_simulator.dart';
 
 /// Presentation-state gate only. It proves that the learner completed the
 /// phase's required interaction; it never decides correctness or competency.
@@ -12,7 +13,8 @@ abstract final class MissionPhaseCompletionPolicy {
     MissionRuntimeState state,
   ) =>
       interactionFor(phase) != InteractionFamily.review &&
-      state.interactionCompletedPhaseIds.contains(phase.id);
+      state.interactionCompletedPhaseIds.contains(phase.id) &&
+      MissionEquipmentSimulator.phaseReady(phase, state);
 
   static MissionRuntimeState afterAction({
     required MissionPhaseDefinition phase,
@@ -21,6 +23,22 @@ abstract final class MissionPhaseCompletionPolicy {
     required String? target,
     required Map<String, dynamic> value,
   }) {
+    if (value['simulation_valid'] == false) {
+      return state.copyWith(interactionCompletedPhaseIds: {
+        ...state.interactionCompletedPhaseIds.where((id) => id != phase.id),
+      });
+    }
+    if (emittedActionType == 'equipment_operation' &&
+        MissionEquipmentSimulator.maps(
+          MissionEquipmentSimulator.map(
+              phase.presentation['equipment'])['completion'],
+        ).isNotEmpty &&
+        MissionEquipmentSimulator.phaseReady(phase, state)) {
+      return state.copyWith(interactionCompletedPhaseIds: {
+        ...state.interactionCompletedPhaseIds,
+        phase.id,
+      });
+    }
     if (!_isTerminal(
       phase: phase,
       state: state,

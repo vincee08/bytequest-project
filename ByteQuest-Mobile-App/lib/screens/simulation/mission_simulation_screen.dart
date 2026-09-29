@@ -12,12 +12,14 @@ import '../../services/authoritative_assessment_service.dart';
 import '../../services/practice_mission_evidence_service.dart';
 import '../../services/progress_resume_service.dart';
 import 'components/simulation_scene.dart';
+import 'components/equipment_operations.dart';
 import 'interactions/mission_interactions.dart';
 import 'runtime/mission_evidence_gateway.dart';
 import 'runtime/mission_phase_completion_policy.dart';
 import 'runtime/mission_runtime_action_reducer.dart';
 import 'runtime/mission_runtime_controller.dart';
 import 'runtime/mission_runtime_models.dart';
+import 'runtime/mission_equipment_simulator.dart';
 
 typedef MissionSubmitCallback = Future<void> Function();
 
@@ -234,7 +236,16 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
     final phase = widget.definition.phases[phaseIndex];
     final scene = SimulationScene(
       scene: widget.definition.scene,
-      hotspotStates: _state.hotspotStates,
+      initialCameraScale: _state.cameraScale,
+      initialCameraOffset: Offset(_state.cameraOffsetX, _state.cameraOffsetY),
+      onCameraChanged: (scale, offset) => unawaited(_controller
+          .updateCamera(scale, offset.dx, offset.dy)
+          .catchError((Object error) {
+        if (mounted)
+          setState(() => _technicalFeedback =
+              MissionContentData.saveProgressFailedMessage);
+      })),
+      hotspotStates: _equipmentHotspots(),
       inspectedObjectIds: _state.hotspotStates.entries
           .where((entry) => entry.value != HotspotVisualState.neutral)
           .map((entry) => entry.key)
@@ -265,7 +276,9 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final controls = _buildControls(phase, phaseIndex);
-                  if (constraints.maxWidth >= 720) {
+                  final usesCompactLandscape = constraints.maxWidth >= 600 &&
+                      constraints.maxWidth > constraints.maxHeight;
+                  if (constraints.maxWidth >= 720 || usesCompactLandscape) {
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -275,8 +288,8 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
                       ],
                     );
                   }
-                  final sceneHeight = (constraints.maxHeight * .36)
-                      .clamp(190.0, 300.0)
+                  final sceneHeight = (constraints.maxHeight * .52)
+                      .clamp(0.0, 420.0)
                       .toDouble();
                   return Column(
                     children: [
@@ -301,6 +314,32 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (phaseIndex == 0) ...[
+            Text(widget.definition.scenario, style: AppTheme.bodyMedium),
+            const SizedBox(height: 12),
+          ],
+          if (_state.mode == MissionRuntimeMode.practice)
+            ExpansionTile(
+                title: const Text(MissionContentData.practiceHintLabel),
+                children: [
+                  Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Text(widget.definition.practiceGuidance))
+                ]),
+          if (phaseIndex > 0)
+            PopupMenuButton<String>(
+              tooltip: MissionContentData.revisePhaseLabel,
+              enabled: !_writing && !_submitting && !_submitted,
+              onSelected: (id) => unawaited(_revisitPhase(id)),
+              itemBuilder: (_) => [
+                for (final previous
+                    in widget.definition.phases.take(phaseIndex))
+                  PopupMenuItem(value: previous.id, child: Text(previous.title))
+              ],
+              child: const ListTile(
+                  leading: Icon(Icons.history),
+                  title: Text(MissionContentData.revisePhaseLabel)),
+            ),
           Text(phase.title, style: AppTheme.titleMedium),
           const SizedBox(height: 6),
           Text(phase.instruction, style: AppTheme.bodyMedium),
@@ -323,6 +362,8 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
             pendingEvidenceCount: _state.pendingEvidence.length,
             failedEvidenceCount: _controller.failedPendingEvidence.length,
             canSubmit: _controller.canSubmit &&
+                MissionEquipmentSimulator.readyForReview(
+                    widget.definition, _state) &&
                 !_submitting &&
                 !_submitted &&
                 !_retryingEvidence,
@@ -337,6 +378,12 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
             onConfirmReview: () => unawaited(_confirmSubmission()),
             onRetryPendingEvidence: () => unawaited(_retryPendingEvidence()),
           ),
+          EquipmentOperations(
+              phase: phase,
+              state: _state,
+              enabled: !_writing && !_submitting && !_submitted,
+              onAction: (type, target, value) =>
+                  _recordAction(phase, type, target, value)),
           if (_technicalFeedback case final feedback?) ...[
             const SizedBox(height: 14),
             Semantics(
@@ -372,6 +419,33 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
     );
   }
 
+  Map<String, HotspotVisualState> _equipmentHotspots() {
+    final visual = {
+      ..._state.hotspotStates,
+      for (final part in _state.placements.keys)
+        part: HotspotVisualState.completed
+    };
+    final running = _state.equipmentState['service_running'];
+    if (running is bool) {
+      visual['service_console'] =
+          running ? HotspotVisualState.completed : HotspotVisualState.error;
+      visual['status_monitor'] = visual['service_console']!;
+    }
+    final results =
+        MissionEquipmentSimulator.map(_state.equipmentState['results']);
+    if (results.isNotEmpty && widget.definition.scene.objects.isNotEmpty) {
+      final latest = MissionEquipmentSimulator.map(results.values.last);
+      final fresh = latest['input_revision'] ==
+          (_state.equipmentState['input_revision'] ?? 0);
+      visual[widget.definition.scene.objects.first.id] = !fresh
+          ? HotspotVisualState.selected
+          : latest['operating'] == true
+              ? HotspotVisualState.completed
+              : HotspotVisualState.error;
+    }
+    return visual;
+  }
+
   int get _phaseIndex {
     final phaseId = _state.currentPhaseId;
     final index = widget.definition.phases.indexWhere(
@@ -395,32 +469,45 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
     if (_writing) return;
     final queuedTransition = _pendingInteractionTransition;
     _pendingInteractionTransition = null;
+    final actionValue = MissionEquipmentSimulator.describeAction(
+      definition: widget.definition,
+      phase: phase,
+      state: _state,
+      actionType: emittedActionType,
+      target: target,
+      value: value,
+    );
     setState(() => _writing = true);
     try {
       await _controller.dispatch(
         phaseId: phase.id,
         actionType: _adaptActionType(phase, emittedActionType),
         target: target,
-        value: {...value, 'runtime_action_type': emittedActionType},
+        value: {...actionValue, 'runtime_action_type': emittedActionType},
         transition: (state) {
-          final interactionTransition = queuedTransition ??
-              (runtime) => MissionRuntimeActionReducer.transitionForAction(
-                    runtime,
-                    emittedActionType,
-                    target,
-                    value,
-                  );
+          final interactionTransition =
+              (actionValue.containsKey('equipment_snapshot')
+                      ? null
+                      : queuedTransition) ??
+                  (runtime) => MissionRuntimeActionReducer.transitionForAction(
+                        runtime,
+                        emittedActionType,
+                        target,
+                        actionValue,
+                      );
           final transitioned = interactionTransition(state);
           return MissionPhaseCompletionPolicy.afterAction(
             phase: phase,
             state: transitioned,
             emittedActionType: emittedActionType,
             target: target,
-            value: value,
+            value: actionValue,
           );
         },
       );
-      if (phase.feedbackIds.isNotEmpty) {
+      if (actionValue['simulation_feedback'] is String) {
+        _technicalFeedback = actionValue['simulation_feedback'] as String;
+      } else if (phase.feedbackIds.isNotEmpty) {
         _technicalFeedback =
             widget.definition.feedbackCatalog[phase.feedbackIds.first];
       } else {
@@ -438,6 +525,7 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
     MissionPhaseDefinition phase,
     String emittedActionType,
   ) {
+    if (emittedActionType == 'equipment_operation') return emittedActionType;
     if (phase.resolvedInteraction == InteractionFamily.testRun) {
       if (emittedActionType != 'test_completed') return emittedActionType;
       final evidenceType = phase.presentation['evidenceActionType'];
@@ -504,8 +592,31 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
     }
   }
 
+  Future<void> _revisitPhase(String destination) async {
+    if (_writing || !_hasKnownPhase(destination)) return;
+    final phase = widget.definition.phases[_phaseIndex];
+    setState(() => _writing = true);
+    try {
+      await _controller.dispatch(
+          phaseId: phase.id,
+          actionType: 'review_returned',
+          target: destination,
+          value: const {'input_method': 'phase_menu'},
+          transition: (state) => state.copyWith(currentPhaseId: destination));
+      _technicalFeedback = null;
+    } catch (_) {
+      _technicalFeedback = MissionContentData.saveProgressFailedMessage;
+    } finally {
+      if (mounted) setState(() => _writing = false);
+    }
+  }
+
   Future<void> _confirmSubmission() async {
-    if (_submitting || _submitted || !_controller.canSubmit) return;
+    if (_submitting ||
+        _submitted ||
+        !_controller.canSubmit ||
+        !MissionEquipmentSimulator.readyForReview(widget.definition, _state))
+      return;
     setState(() => _submitting = true);
     try {
       if (widget.onSubmit case final callback?) {

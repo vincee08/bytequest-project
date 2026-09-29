@@ -74,7 +74,10 @@ export async function DELETE(
   if (targetError || !target) {
     return NextResponse.json({ error: "The target account no longer exists." }, { status: 404 });
   }
-  if (target.email.toLowerCase() !== parsed.data.confirmationEmail.toLowerCase()) {
+  if (
+    typeof target.email !== "string" ||
+    target.email.toLowerCase() !== parsed.data.confirmationEmail.toLowerCase()
+  ) {
     return NextResponse.json({ error: "The confirmation email does not match." }, { status: 400 });
   }
   if (target.status !== "deactivated") {

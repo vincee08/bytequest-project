@@ -547,6 +547,7 @@ final class MissionRuntimeState {
     Iterable<String> revealedFactIds = const [],
     Iterable<String> selectedBranchActionIds = const [],
     Map<String, dynamic> testState = const {},
+    Map<String, dynamic> equipmentState = const {},
     Iterable<String> acceptedEvidenceIds = const [],
     Iterable<MissionEvidenceAction> pendingEvidence = const [],
     this.mode = MissionRuntimeMode.practice,
@@ -573,6 +574,7 @@ final class MissionRuntimeState {
         revealedFactIds = Set.unmodifiable(revealedFactIds),
         selectedBranchActionIds = Set.unmodifiable(selectedBranchActionIds),
         testState = _immutableJsonMap(testState),
+        equipmentState = _immutableJsonMap(equipmentState),
         acceptedEvidenceIds = Set.unmodifiable(acceptedEvidenceIds),
         pendingEvidence = List.unmodifiable(pendingEvidence),
         updatedAt = updatedAt ?? DateTime.now() {
@@ -639,6 +641,7 @@ final class MissionRuntimeState {
       revealedFactIds: _stringSet(json['revealedFactIds']),
       selectedBranchActionIds: _stringSet(json['selectedBranchActionIds']),
       testState: _jsonMapOrEmpty(json['testState']),
+      equipmentState: _jsonMapOrEmpty(json['equipmentState']),
       acceptedEvidenceIds: _stringSet(json['acceptedEvidenceIds']),
       pendingEvidence: _jsonList(json['pendingEvidence'])
           .map((item) => MissionEvidenceAction.fromJson(_jsonMap(item)))
@@ -674,6 +677,9 @@ final class MissionRuntimeState {
   final Set<String> revealedFactIds;
   final Set<String> selectedBranchActionIds;
   final Map<String, dynamic> testState;
+
+  /// Simulated equipment observations, never an official assessment outcome.
+  final Map<String, dynamic> equipmentState;
   final Set<String> acceptedEvidenceIds;
   final List<MissionEvidenceAction> pendingEvidence;
   final MissionRuntimeMode mode;
@@ -704,6 +710,7 @@ final class MissionRuntimeState {
     Set<String>? revealedFactIds,
     Set<String>? selectedBranchActionIds,
     Map<String, dynamic>? testState,
+    Map<String, dynamic>? equipmentState,
     List<MissionEvidenceAction>? pendingEvidence,
     MissionRuntimeMode? mode,
     String? assessmentAttemptId,
@@ -736,6 +743,7 @@ final class MissionRuntimeState {
       selectedBranchActionIds:
           selectedBranchActionIds ?? this.selectedBranchActionIds,
       testState: testState ?? this.testState,
+      equipmentState: equipmentState ?? this.equipmentState,
       acceptedEvidenceIds: acceptedEvidenceIds ?? this.acceptedEvidenceIds,
       pendingEvidence: pendingEvidence ?? this.pendingEvidence,
       mode: mode ?? this.mode,
@@ -792,6 +800,7 @@ final class MissionRuntimeState {
         'revealedFactIds': revealedFactIds.toList(),
         'selectedBranchActionIds': selectedBranchActionIds.toList(),
         'testState': _jsonCopy(testState),
+        'equipmentState': _jsonCopy(equipmentState),
         'acceptedEvidenceIds': acceptedEvidenceIds.toList(),
         'pendingEvidence':
             pendingEvidence.map((action) => action.toJson()).toList(),
@@ -828,6 +837,7 @@ final class MissionRuntimeState {
       _deepEquals(other.revealedFactIds, revealedFactIds) &&
       _deepEquals(other.selectedBranchActionIds, selectedBranchActionIds) &&
       _deepEquals(other.testState, testState) &&
+      _deepEquals(other.equipmentState, equipmentState) &&
       _deepEquals(other.acceptedEvidenceIds, acceptedEvidenceIds) &&
       _deepEquals(other.pendingEvidence, pendingEvidence) &&
       other.mode == mode &&
@@ -858,6 +868,7 @@ final class MissionRuntimeState {
         _deepHash(revealedFactIds),
         _deepHash(selectedBranchActionIds),
         _deepHash(testState),
+        _deepHash(equipmentState),
         _deepHash(acceptedEvidenceIds),
         _deepHash(pendingEvidence),
         mode,

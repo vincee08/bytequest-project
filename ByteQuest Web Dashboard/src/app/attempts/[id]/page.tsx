@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { requireStaffProfile } from "@/lib/auth/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import type { ReviewCriterion } from "@/lib/attempts/criterion-adjustment";
 
 export const dynamic = "force-dynamic";
 
@@ -98,7 +99,7 @@ export default async function AttemptDetailPage({ params }: { params: Promise<{ 
     supabase.from("classes").select("title,class_code").eq("id", attempt.class_id).maybeSingle(),
     supabase.from("assignments").select("title,assignment_type,instructions,activity_version_id").eq("id", attempt.assignment_id).maybeSingle(),
     attempt.tesda_source_id ? supabase.from("tesda_sources").select("title,edition,qualification_code").eq("id", attempt.tesda_source_id).maybeSingle() : Promise.resolve({ data: null }),
-    attempt.rubric_version_id ? supabase.from("rubric_versions").select("title,version_number,scoring_method").eq("id", attempt.rubric_version_id).maybeSingle() : Promise.resolve({ data: null }),
+    attempt.rubric_version_id ? supabase.from("rubric_versions").select("title,version_number,scoring_method,passing_rule").eq("id", attempt.rubric_version_id).maybeSingle() : Promise.resolve({ data: null }),
     supabase.from("attempt_actions").select("id,sequence_number,action_type,target,value,client_occurred_at,recorded_at").eq("attempt_id", id).order("sequence_number"),
     supabase.from("criterion_results").select("id,rubric_criterion_id,expected_rule,observed_evidence,observation,score_value,remarks,evaluated_at").eq("attempt_id", id).order("evaluated_at"),
     supabase.from("score_revisions").select("id,revision_number,revision_type,total_value,max_value,percentage,outcome,criterion_values,reason,remarks,created_at,actor_role").eq("attempt_id", id).order("revision_number"),
@@ -131,9 +132,17 @@ export default async function AttemptDetailPage({ params }: { params: Promise<{ 
   const criterionRows = criteria.data ?? [];
   const criterionIds = [...new Set(criterionRows.map((row) => row.rubric_criterion_id))];
   const { data: criterionDefinitions } = criterionIds.length
-    ? await supabase.from("rubric_criteria").select("id,criterion_code,title,source_trace,order_index").in("id", criterionIds)
+    ? await supabase.from("rubric_criteria").select("id,criterion_code,title,source_trace,order_index,is_required,max_value,scoring_rule").in("id", criterionIds)
     : { data: [] };
   const criterionById = new Map((criterionDefinitions ?? []).map((row) => [row.id, row]));
+  const reviewCriteria: ReviewCriterion[] = (criterionDefinitions ?? []).sort((a, b) => a.order_index - b.order_index).map((row) => ({
+    id: row.id,
+    code: row.criterion_code,
+    title: row.title,
+    isRequired: row.is_required,
+    maxValue: row.max_value,
+    scoringRule: row.scoring_rule,
+  }));
   const revisionRows = revisions.data ?? [];
   const provisional = [...revisionRows].reverse().find((row) => row.revision_type === "automated_provisional");
   const lifecycleIndex = lifecycleSteps.indexOf(attempt.status as (typeof lifecycleSteps)[number]);
@@ -271,6 +280,9 @@ export default async function AttemptDetailPage({ params }: { params: Promise<{ 
                           <p className="mt-1 text-xs capitalize text-muted-foreground">
                             {criterionCount(revision.criterion_values) ?? "Criterion evidence retained"} · {revision.outcome.replaceAll("_", " ")}
                           </p>
+                          <p className="mt-1 text-xs tabular-nums text-muted-foreground">
+                            Technical total: {revision.total_value ?? "—"} / {revision.max_value ?? "—"} · {revision.percentage ?? "—"}%
+                          </p>
                         </div>
                         <time className="text-xs text-muted-foreground">{formatTimestamp(revision.created_at)}</time>
                       </div>
@@ -284,7 +296,7 @@ export default async function AttemptDetailPage({ params }: { params: Promise<{ 
               )}
             </section>
 
-            {attempt.status === "evaluated" && provisional ? <section className="rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">Instructor review and finalization</h2><p className="mb-4 mt-1 text-sm leading-relaxed text-muted-foreground">Confirm the trusted provisional result or make a justified, append-only adjustment.</p><FinalizeAttemptForm attemptId={id} scoringMethod={rubric.data?.scoring_method ?? null} provisional={{ totalValue: provisional.total_value, maxValue: provisional.max_value, percentage: provisional.percentage, outcome: provisional.outcome, criterionValues: provisional.criterion_values }} /></section> : null}
+            {attempt.status === "evaluated" && provisional ? <section className="rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">Instructor review and finalization</h2><p className="mb-4 mt-1 text-sm leading-relaxed text-muted-foreground">Confirm the trusted provisional result or make a justified, append-only adjustment.</p><FinalizeAttemptForm attemptId={id} scoringMethod={rubric.data?.scoring_method ?? null} passingMethod={typeof rubric.data?.passing_rule === "object" && rubric.data.passing_rule !== null && !Array.isArray(rubric.data.passing_rule) ? String(rubric.data.passing_rule.method ?? "") : null} criteria={reviewCriteria} provisional={{ totalValue: provisional.total_value, maxValue: provisional.max_value, percentage: provisional.percentage, outcome: provisional.outcome, criterionValues: provisional.criterion_values }} /></section> : null}
             {attempt.status === "finalized" ? <section className="rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">Release to learner</h2><p className="mb-4 mt-1 text-sm leading-relaxed text-muted-foreground">Only released final results become visible to the learner. The release RPC is idempotent.</p><ReleaseAttemptForm attemptId={id} /></section> : null}
             {attempt.status === "released" ? <section className="rounded-xl border border-emerald-300 bg-emerald-50 p-5 text-emerald-950"><h2 className="font-semibold">Result released</h2><p className="mt-1 text-sm">Released {formatTimestamp(attempt.released_at)}. The learner can view the current final revision.</p>{releases.data?.[0]?.release_reason ? <p className="mt-2 text-sm">Note: {releases.data[0].release_reason}</p> : null}</section> : null}
           </aside>

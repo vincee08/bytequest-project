@@ -74,6 +74,10 @@ async function subscribe(client, table, event, filter, onPayload) {
       }
     });
   });
+  // A local Realtime tenant can acknowledge the Phoenix channel just before
+  // its Postgres CDC subscription is visible. Avoid racing the first fixture
+  // INSERT, especially immediately after a cold Docker start.
+  await delay(2_000);
 }
 
 async function waitFor(description, predicate, milliseconds = 8_000) {

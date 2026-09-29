@@ -196,6 +196,40 @@ void main() {
     expect(actionTypes, ['test_completed']);
   });
 
+  testWidgets('test completion waits until evidence writing is unlocked',
+      (tester) async {
+    final phase = _phase(InteractionFamily.testRun);
+    final scheduler = _FakeTestRunScheduler();
+    final state = MissionRuntimeState(missionId: 'mission')
+        .withTestStatus(phase.id, MissionTestStatus.running);
+    final actions = <String>[];
+
+    Widget app({required bool enabled}) => _app(TestRunInteraction(
+          phase: phase,
+          state: state,
+          scheduler: scheduler,
+          enabled: enabled,
+          onAction: (type, _, __) async => actions.add(type),
+        ));
+
+    await tester.pumpWidget(app(enabled: false));
+    expect(scheduler.tasks, isEmpty,
+        reason: 'A pending backend write must not consume the timer.');
+
+    await tester.pumpWidget(app(enabled: true));
+    expect(scheduler.tasks, hasLength(1));
+    final first = scheduler.last;
+
+    await tester.pumpWidget(app(enabled: false));
+    expect(first.cancelled, isTrue);
+    await tester.pumpWidget(app(enabled: true));
+    expect(scheduler.tasks, hasLength(2));
+
+    scheduler.last.fire();
+    await tester.pump();
+    expect(actions, ['test_completed']);
+  });
+
   testWidgets('combined test phase requires a recorded interpretation',
       (tester) async {
     final phase = _phase(
@@ -540,19 +574,19 @@ void main() {
       (tester) async {
     const cases = [
       (
-        missionId: 'coc2_m5',
-        mechanic: 'apply_network_fix',
-        actionId: 'apply_network_fix'
+        missionId: 'coc1_m5',
+        mechanic: 'apply_correction',
+        actionId: 'replace_storage_cable'
       ),
       (
-        missionId: 'coc3_m3',
-        mechanic: 'correct_access',
-        actionId: 'apply_permission_change'
+        missionId: 'coc3_m5',
+        mechanic: 'correct_fault',
+        actionId: 'restore_support_membership'
       ),
       (
         missionId: 'coc4_m2',
         mechanic: 'identify_fault',
-        actionId: 'apply_component_repair'
+        actionId: 'replace_storage'
       ),
     ];
 
@@ -576,7 +610,8 @@ void main() {
           );
 
       await tester.pumpWidget(app());
-      final label = ((phase.presentation['choices'] as List).single
+      final label = ((phase.presentation['choices'] as List)
+              .firstWhere((choice) => (choice as Map)['id'] == item.actionId)
           as Map)['label'] as String;
       final button = find.widgetWithText(OutlinedButton, label);
       expect(tester.widget<OutlinedButton>(button).onPressed, isNull);

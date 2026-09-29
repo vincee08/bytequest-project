@@ -514,6 +514,67 @@ void main() {
     );
   });
 
+  testWidgets('completed placement collapses controls and keeps a review path',
+      (tester) async {
+    final phase = _phase(
+      InteractionFamily.place,
+      id: 'placement-complete',
+      presentation: {
+        'items': [
+          {'id': 'memory', 'label': 'Memory module', 'category': 'dimm'},
+        ],
+        'destinations': [
+          {
+            'id': 'slot_a',
+            'label': 'Slot A',
+            'accepted_categories': ['dimm'],
+          },
+        ],
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ControlledPlacementInteraction(
+            phase: phase,
+            state: MissionRuntimeState(
+              missionId: 'mission',
+              placements: const {'memory': 'slot_a'},
+              interactionCompletedPhaseIds: const {'placement-complete'},
+            ),
+            onAction: (_, __, ___) async {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('placement-item-memory')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('placement-destination-slot_a')),
+      findsNothing,
+    );
+    expect(find.byKey(const ValueKey('placement-place')), findsNothing);
+    expect(
+      find.byKey(
+        const ValueKey('placement-toggle-completed-controls'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.text('Installed in Slot A'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('placement-toggle-completed-controls')),
+    );
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('placement-item-memory')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('placement-destination-slot_a')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('placement-place')), findsOneWidget);
+  });
+
   testWidgets('sequencing exposes semantic Move up and Move down controls',
       (tester) async {
     final actions = <Map<String, dynamic>>[];
@@ -594,6 +655,109 @@ void main() {
       'destination_id': 'gateway_role',
       'input_method': 'tap',
     });
+  });
+
+  testWidgets('completed matching collapses controls with recorded matches',
+      (tester) async {
+    final phase = _phase(
+      InteractionFamily.match,
+      id: 'matching-complete',
+      presentation: {
+        'sources': [
+          {'id': 'router', 'label': 'Router'},
+        ],
+        'destinations': [
+          {'id': 'gateway_role', 'label': 'Gateway role'},
+        ],
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: MatchingInteraction(
+            phase: phase,
+            state: MissionRuntimeState(
+              missionId: 'mission',
+              matches: const {'router': 'gateway_role'},
+              interactionCompletedPhaseIds: const {'matching-complete'},
+            ),
+            onAction: (_, __, ___) async {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('matching-source-router')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('matching-destination-gateway_role')),
+      findsNothing,
+    );
+    expect(find.text('Router → Gateway role'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('matching-toggle-completed-controls')),
+    );
+    await tester.pump();
+
+    expect(
+        find.byKey(const ValueKey('matching-source-router')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('matching-destination-gateway_role')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('completed connection collapses controls with a review path',
+      (tester) async {
+    final phase = _phase(
+      InteractionFamily.connect,
+      id: 'connection-complete',
+      presentation: {
+        'sources': [
+          {'id': 'client', 'label': 'Client'},
+        ],
+        'destinations': [
+          {'id': 'switch', 'label': 'Switch'},
+        ],
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ConnectionInteraction(
+            phase: phase,
+            state: MissionRuntimeState(
+              missionId: 'mission',
+              connectedNodePairs: const {'client>switch'},
+              interactionCompletedPhaseIds: const {'connection-complete'},
+            ),
+            onAction: (_, __, ___) async {},
+          ),
+        ),
+      ),
+    );
+
+    expect(
+        find.byKey(const ValueKey('connection-source-client')), findsNothing);
+    expect(
+      find.byKey(const ValueKey('connection-destination-switch')),
+      findsNothing,
+    );
+    expect(find.text('Client → Switch'), findsOneWidget);
+
+    await tester.tap(
+      find.byKey(const ValueKey('connection-toggle-completed-controls')),
+    );
+    await tester.pump();
+
+    expect(
+      find.byKey(const ValueKey('connection-source-client')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('connection-destination-switch')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('configuration serializes dropdown toggle and text values',
@@ -701,7 +865,7 @@ void main() {
     expect(find.textContaining('Wrong'), findsNothing);
   });
 
-  testWidgets('legacy placement restores connection semantic detail',
+  testWidgets('legacy placement keeps connection semantics in review mode',
       (tester) async {
     final handle = tester.ensureSemantics();
     await tester.pumpWidget(
@@ -719,6 +883,21 @@ void main() {
         ),
       ),
     );
+
+    expect(
+      find.byKey(const ValueKey('assessment-match-source-source')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('assessment-match-destination-port')),
+      findsNothing,
+    );
+    await tester.tap(
+      find.byKey(
+        const ValueKey('assessment-match-toggle-completed-controls'),
+      ),
+    );
+    await tester.pump();
 
     expect(
       tester

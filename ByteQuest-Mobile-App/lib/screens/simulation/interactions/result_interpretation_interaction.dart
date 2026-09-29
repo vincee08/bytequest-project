@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../components/tool_tray.dart';
 import '../runtime/mission_runtime_models.dart';
+import '../runtime/mission_equipment_simulator.dart';
+import '../components/equipment_operations.dart';
 
 class ResultInterpretationInteraction extends StatefulWidget {
   const ResultInterpretationInteraction({
@@ -72,6 +74,8 @@ class _ResultInterpretationInteractionState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            for (final result in MissionEquipmentSimulator.map(widget.state.equipmentState['results']).values)
+              EquipmentTestReadout(result: MissionEquipmentSimulator.map(result)),
             TextField(
               key: ValueKey('interpretation-input-${widget.phase.id}'),
               controller: _controller,

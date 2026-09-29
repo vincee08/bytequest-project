@@ -147,6 +147,16 @@ export async function generateQuizDraftWithOpenRouter(
       body: JSON.stringify({
         model: configuration.model,
         temperature: 0.2,
+        max_tokens: Math.min(8_000, 1_000 + request.itemCount * 1_000),
+        reasoning: {
+          effort: "low",
+          exclude: true,
+        },
+        provider: {
+          // OpenRouter recommends this for structured outputs so routing does
+          // not silently choose an endpoint that ignores response_format.
+          require_parameters: true,
+        },
         messages: [
           {
             role: "system",
@@ -194,7 +204,11 @@ export async function generateQuizDraftWithOpenRouter(
     let payload: unknown;
     try {
       payload = await response.json();
-    } catch {
+    } catch (error) {
+      // AbortController can fire after response headers arrive but while the
+      // body is still being read. Preserve that signal so the outer handler
+      // reports a timeout instead of incorrectly calling the body malformed.
+      if (error instanceof Error && error.name === "AbortError") throw error;
       throw new QuizAiProviderError(
         "OPENROUTER_INVALID_RESPONSE",
         "OpenRouter returned malformed data. No question was saved; try again or continue manually.",

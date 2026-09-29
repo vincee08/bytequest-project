@@ -14,6 +14,9 @@ class HotspotWidget extends StatelessWidget {
   final VoidCallback onPressed;
   final IconData? icon;
 
+  /// Counteracts the logical-canvas transform so content stays legible in dp.
+  final double visualScale;
+
   const HotspotWidget({
     super.key,
     required this.object,
@@ -21,6 +24,7 @@ class HotspotWidget extends StatelessWidget {
     required this.enabled,
     required this.onPressed,
     this.icon,
+    this.visualScale = 1,
   });
 
   static const double minimumTapExtent = 48;
@@ -87,20 +91,52 @@ class HotspotWidget extends StatelessWidget {
                         ),
                       ),
                     ),
-                  AnimatedScale(
-                    duration: transitionDuration,
-                    curve: Curves.easeOutCubic,
-                    scale: state == HotspotVisualState.neutral ? .92 : 1,
-                    child: AnimatedSwitcher(
-                      duration: transitionDuration,
-                      switchInCurve: Curves.easeOutCubic,
-                      switchOutCurve: Curves.easeInCubic,
-                      child: Icon(
-                        _stateIcon(state, icon ?? _iconFor(object.hotspotType)),
-                        key: ValueKey(state),
-                        color: colors.foreground,
-                        size: 24,
-                      ),
+                  Padding(
+                    padding: EdgeInsets.all(4 * visualScale),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (imagePath != null ||
+                            MediaQuery.textScalerOf(context).scale(1) <= 1.4)
+                          Flexible(
+                              child: AnimatedScale(
+                            duration: transitionDuration,
+                            curve: Curves.easeOutCubic,
+                            scale:
+                                state == HotspotVisualState.neutral ? .92 : 1,
+                            child: AnimatedSwitcher(
+                              duration: transitionDuration,
+                              switchInCurve: Curves.easeOutCubic,
+                              switchOutCurve: Curves.easeInCubic,
+                              child: Icon(
+                                _stateIcon(state,
+                                    icon ?? _iconFor(object.hotspotType)),
+                                key: ValueKey(state),
+                                color: colors.foreground,
+                                size: 24 * visualScale,
+                              ),
+                            ),
+                          )),
+                        if (imagePath == null) ...[
+                          SizedBox(height: 3 * visualScale),
+                          Flexible(
+                              flex: 2,
+                              child: Text(
+                                object.label,
+                                textAlign: TextAlign.center,
+                                maxLines:
+                                    MediaQuery.textScalerOf(context).scale(1) >
+                                            1.4
+                                        ? 1
+                                        : 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                    fontSize: 12 * visualScale,
+                                    color: colors.foreground,
+                                    height: 1.15),
+                              )),
+                        ],
+                      ],
                     ),
                   ),
                 ],

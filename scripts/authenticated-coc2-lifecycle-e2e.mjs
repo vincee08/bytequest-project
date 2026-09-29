@@ -472,26 +472,39 @@ async function verifyAndFinalize(attemptA, attemptB) {
   });
   if (finalA.error) throw finalA.error;
 
+  // Exercise a conservative, synthetic Instructor correction with criterion
+  // values and aggregates that agree. The original provisional row is retained.
+  const correctedCriterion = revisions.B.criterion_values.find((value) => value.observation === "satisfied");
+  assert(correctedCriterion, "Disposable attempt B needs a satisfied criterion for correction");
+  const correctedValues = revisions.B.criterion_values.map((value) =>
+    value.criterion_id === correctedCriterion.criterion_id
+      ? { ...value, observation: "not_satisfied", score_value: 0 }
+      : value,
+  );
+  const correctedTotal = correctedValues.reduce((total, value) => total + value.score_value, 0);
+  const correctedMax = revisions.B.max_value;
+  const correctedPercentage = Math.round((correctedTotal / correctedMax) * 1_000_000) / 10_000;
+
   await expectDenied("Instructor adjustment requires a reason", () =>
     instructor1.rpc("finalize_attempt", {
       p_attempt_id: attemptB.id,
-      p_total_value: 9,
-      p_max_value: 9,
-      p_percentage: 100,
-      p_outcome: "competent",
-      p_criterion_values: revisions.B.criterion_values,
+      p_total_value: correctedTotal,
+      p_max_value: correctedMax,
+      p_percentage: correctedPercentage,
+      p_outcome: "not_yet_competent",
+      p_criterion_values: correctedValues,
       p_reason: null,
       p_remarks: "Expected denial for missing reason.",
     }),
   );
   const finalB = await instructor1.rpc("finalize_attempt", {
     p_attempt_id: attemptB.id,
-    p_total_value: 9,
-    p_max_value: 9,
-    p_percentage: 100,
-    p_outcome: "competent",
-    p_criterion_values: revisions.B.criterion_values,
-    p_reason: "UAT-only Instructor adjustment to prove append-only revision and mandatory-reason behavior.",
+    p_total_value: correctedTotal,
+    p_max_value: correctedMax,
+    p_percentage: correctedPercentage,
+    p_outcome: "not_yet_competent",
+    p_criterion_values: correctedValues,
+    p_reason: "Disposable UAT Instructor down-correction to prove append-only revision and mandatory-reason behavior.",
     p_remarks: "Disposable acceptance attempt; automated sequence evidence remains preserved.",
   });
   if (finalB.error) throw finalB.error;

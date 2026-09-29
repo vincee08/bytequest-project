@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Archive, Check, Loader2, Pencil, Plus, Send, Sparkles, Trash2, X } from "lucide-react";
+import { Archive, Check, Loader2, Pencil, Plus, RefreshCw, Send, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/client";
+import { buildAlternativeQuizDraftRequest } from "@/lib/ai/alternative-quiz-draft";
 
 type ItemType = "multiple_choice" | "true_false" | "identification" | "scenario_based";
 type ReviewStatus = "draft" | "approved" | "rejected";
@@ -269,6 +270,42 @@ export function QuizAuthoringWorkspace({
     }
   }
 
+  async function regenerateAiItem(item: QuizItem) {
+    if (!version || !isDraft || item.origin !== "ai_generated_draft" || !aiActivityVersionId) return;
+    setAiError(null);
+    setBusy(`regenerate-${item.id}`);
+    try {
+      const response = await fetch("/api/instructor/quizzes/ai-draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(buildAlternativeQuizDraftRequest({
+          quizVersionId: version.id,
+          activityVersionId: aiActivityVersionId,
+          topic: aiTopic,
+          instructorContext: aiInstructorContext,
+          difficulty,
+          itemType: item.itemType,
+          originalPrompt: item.prompt,
+        })),
+      });
+      const result = (await response.json().catch(() => null)) as { error?: string } | null;
+      if (!response.ok) {
+        const message = result?.error || "The alternative question could not be generated. The original draft was kept.";
+        setAiError(message);
+        toast.error(message);
+      } else {
+        toast.success("A separate AI alternative was added as a draft. Review it before removing the original.");
+        router.refresh();
+      }
+    } catch {
+      const message = "The AI service could not be reached. The original draft was kept.";
+      setAiError(message);
+      toast.error(message);
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function archiveQuiz() {
     if (!archiveReason.trim()) {
       toast.error("Explain why this quiz should be archived.");
@@ -368,7 +405,7 @@ export function QuizAuthoringWorkspace({
               <div className="border-b border-border px-5 py-4"><h2 className="font-semibold">Question review</h2><p className="mt-1 text-sm text-muted-foreground">Only approved, active items can be published. AI output has no special authority.</p></div>
               {activeItems.length ? <div className="divide-y divide-border">{activeItems.map((item) => (
                 <article key={item.id} className="p-5">
-                  <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold text-muted-foreground">{item.itemCode}</span><Badge variant="outline">{itemTypeLabels[item.itemType]}</Badge>{item.origin === "ai_generated_draft" ? <Badge>AI generated draft</Badge> : null}<Badge variant={item.reviewStatus === "approved" ? "secondary" : item.reviewStatus === "rejected" ? "destructive" : "outline"}>{item.reviewStatus}</Badge></div><h3 className="mt-3 font-medium leading-relaxed">{item.prompt}</h3></div>{isDraft ? <Button variant="ghost" size="sm" onClick={() => editItem(item)}><Pencil className="mr-2 h-4 w-4" />Edit</Button> : null}</div>
+                  <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="text-xs font-semibold text-muted-foreground">{item.itemCode}</span><Badge variant="outline">{itemTypeLabels[item.itemType]}</Badge>{item.origin === "ai_generated_draft" ? <Badge>AI generated draft</Badge> : null}<Badge variant={item.reviewStatus === "approved" ? "secondary" : item.reviewStatus === "rejected" ? "destructive" : "outline"}>{item.reviewStatus}</Badge></div><h3 className="mt-3 font-medium leading-relaxed">{item.prompt}</h3></div>{isDraft ? <div className="flex flex-wrap gap-2"><Button variant="ghost" size="sm" onClick={() => editItem(item)} disabled={busy !== null}><Pencil className="mr-2 h-4 w-4" />Edit</Button>{item.origin === "ai_generated_draft" ? <Button variant="outline" size="sm" onClick={() => regenerateAiItem(item)} disabled={busy !== null || !aiActivityVersionId || aiTopic.trim().length < 2} aria-label={`Generate an alternative to ${item.itemCode}`}>{busy === `regenerate-${item.id}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}Generate alternative</Button> : null}</div> : null}</div>
                   {item.options.length ? <ol className="mt-3 grid gap-1.5 text-sm text-muted-foreground sm:grid-cols-2">{item.options.map((option, index) => <li key={`${item.id}-${option}`} className="rounded-md bg-muted/45 px-3 py-2"><span className="mr-2 font-semibold">{String.fromCharCode(65 + index)}.</span>{option}</li>)}</ol> : null}
                   <div className="mt-3 text-sm"><span className="font-medium">Answer:</span> {item.correctAnswer}</div>
                   {item.explanation ? <p className="mt-1 text-sm text-muted-foreground"><span className="font-medium text-foreground">Explanation:</span> {item.explanation}</p> : null}

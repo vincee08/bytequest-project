@@ -1,4 +1,5 @@
 import '../models/mission_scenario_model.dart';
+import 'mission_simulation_definitions.dart';
 
 /// Complete Mission Scenarios Data for all COCs
 /// Contains detailed scenario-based mission information
@@ -16,7 +17,19 @@ class MissionScenariosData {
   /// Get scenario by mission ID
   static MissionScenario? getScenarioByMissionId(String missionId) {
     try {
-      return getAllScenarios().firstWhere((s) => s.missionId == missionId);
+      final legacy = getAllScenarios().firstWhere((s) => s.missionId == missionId);
+      final runtime = MissionSimulationDefinitions.byId(missionId);
+      return MissionScenario(
+        missionId: legacy.missionId, cocId: legacy.cocId,
+        missionNumber: legacy.missionNumber, missionTitle: runtime.title,
+        moduleName: legacy.moduleName, scenario: runtime.scenario,
+        objective: runtime.phases.where((phase) => phase != runtime.phases.last)
+            .map((phase) => phase.title).join(' → '),
+        skillsAssessed: runtime.phases.take(runtime.phases.length - 1)
+            .map((phase) => phase.title).toList(),
+        challengeDescription: runtime.practiceGuidance,
+        difficulty: legacy.difficulty, estimatedTime: legacy.estimatedTime,
+      );
     } catch (e) {
       return null;
     }

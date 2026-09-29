@@ -8,6 +8,7 @@ import {
   BarChart3,
   BookOpenCheck,
   ClipboardCheck,
+  CircleHelp,
   FileStack,
   FileText,
   GraduationCap,
@@ -63,6 +64,7 @@ const instructorNavigation: NavigationGroup[] = [
       { label: "Classes", href: "/classes", icon: GraduationCap },
       { label: "Learners", href: "/progress", icon: Users },
       { label: "Assignments & modules", href: "/modules", icon: BookOpenCheck },
+      { label: "Training concerns", href: "/concerns", icon: CircleHelp },
     ],
   },
   {
@@ -102,6 +104,7 @@ const adminNavigation: NavigationGroup[] = [
       { label: "TESDA sources", href: "/tesda-sources", icon: ShieldCheck },
       { label: "Resource governance", href: "/admin/resources", icon: FileStack },
       { label: "Settings & governance", href: "/settings", icon: Settings2 },
+      { label: "System incidents", href: "/admin/concerns", icon: CircleHelp },
     ],
   },
   {

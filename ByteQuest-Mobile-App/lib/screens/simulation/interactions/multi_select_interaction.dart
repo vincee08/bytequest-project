@@ -40,11 +40,30 @@ class _MultiSelectInteractionState extends State<MultiSelectInteraction> {
     }
   }
 
-  static Set<String> _runtimeSelection(MissionRuntimeState state) =>
-      state.hotspotStates.entries
-          .where((entry) => entry.value == HotspotVisualState.selected)
-          .map((entry) => entry.key)
-          .toSet();
+  Set<String> _runtimeSelection(MissionRuntimeState state) {
+    final group = widget.phase.presentation['selection_group'];
+    if (group is String) {
+      final classifications = state.equipmentState['classifications'];
+      final selected = classifications is Map ? classifications[group] : null;
+      return selected is List ? selected.whereType<String>().toSet() : {};
+    }
+    final phases = state.equipmentState['phases'];
+    final phase = phases is Map ? phases[widget.phase.id] : null;
+    if (phase is Map && phase['selection'] is List) {
+      return (phase['selection'] as List).whereType<String>().toSet();
+    }
+    final allowed = interactionItems(
+            widget.phase.presentation['options'] ??
+                widget.phase.presentation['objects'],
+            fallbackIds: widget.phase.availableObjectIds)
+        .map((item) => item.id)
+        .toSet();
+    return state.hotspotStates.entries
+        .where((entry) => entry.value == HotspotVisualState.selected)
+        .map((entry) => entry.key)
+        .where(allowed.contains)
+        .toSet();
+  }
 
   @override
   Widget build(BuildContext context) {

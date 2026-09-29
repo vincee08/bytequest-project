@@ -28,6 +28,11 @@ export function AccountActions({
   const [reason, setReason] = useState("");
   const [confirmationEmail, setConfirmationEmail] = useState("");
   const [submitting, setSubmitting] = useState<"role" | "status" | "remove" | null>(null);
+  const normalizedTargetEmail =
+    typeof targetEmail === "string" ? targetEmail.trim().toLowerCase() : "";
+  const confirmationMatches =
+    normalizedTargetEmail.length > 0 &&
+    confirmationEmail.trim().toLowerCase() === normalizedTargetEmail;
 
   const validateReason = () => {
     if (reason.trim().length < 5) {
@@ -83,7 +88,7 @@ export function AccountActions({
       toast.error("Provide a specific removal reason of at least ten characters.");
       return;
     }
-    if (confirmationEmail.trim().toLowerCase() !== targetEmail.toLowerCase()) {
+    if (!confirmationMatches) {
       toast.error("Type the account email exactly to confirm removal.");
       return;
     }
@@ -177,7 +182,7 @@ export function AccountActions({
             type="button"
             variant="destructive"
             onClick={permanentlyRemove}
-            disabled={submitting !== null || confirmationEmail.trim().toLowerCase() !== targetEmail.toLowerCase()}
+            disabled={submitting !== null || !confirmationMatches}
           >
             {submitting === "remove" ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             Permanently remove empty account

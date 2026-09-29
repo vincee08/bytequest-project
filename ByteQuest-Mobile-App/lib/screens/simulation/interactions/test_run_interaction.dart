@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../../../core/theme/app_theme.dart';
 import '../components/tool_tray.dart';
 import '../runtime/mission_runtime_models.dart';
+import '../runtime/mission_equipment_simulator.dart';
+import '../components/equipment_operations.dart';
 
 abstract interface class TestRunScheduler {
   ScheduledTestRun schedule(Duration duration, VoidCallback onElapsed);
@@ -120,7 +122,7 @@ class _TestRunInteractionState extends State<TestRunInteraction> {
   void _syncSchedule() {
     final running =
         widget.state.testStatusFor(_target) == MissionTestStatus.running;
-    if (!running) {
+    if (!running || !widget.enabled) {
       _cancelSchedule();
       return;
     }
@@ -135,7 +137,12 @@ class _TestRunInteractionState extends State<TestRunInteraction> {
     _scheduledTarget = _target;
     _scheduledDuration = _testDuration;
     _scheduledRun = widget.scheduler.schedule(_testDuration, () {
+      _scheduledRun = null;
+      _scheduledPhaseId = null;
+      _scheduledTarget = null;
+      _scheduledDuration = null;
       if (!mounted ||
+          !widget.enabled ||
           widget.state.testStatusFor(_target) != MissionTestStatus.running) {
         return;
       }
@@ -211,6 +218,11 @@ class _TestRunInteractionState extends State<TestRunInteraction> {
                     : const SizedBox.shrink(),
           ),
           if (running || completed) const SizedBox(height: 12),
+          if (completed)
+            EquipmentTestReadout(
+                result: MissionEquipmentSimulator.map(
+                    MissionEquipmentSimulator.map(
+                        widget.state.equipmentState['results'])[_target])),
           FilledButton.icon(
             key: ValueKey(running ? 'test-run-running' : 'test-run-start'),
             onPressed: !widget.enabled || running ? null : _run,

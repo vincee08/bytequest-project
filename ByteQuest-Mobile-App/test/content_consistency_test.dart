@@ -55,10 +55,10 @@ void main() {
       _actionTypes(MissionSimulationDefinitions.byId('coc1_m2')),
       contains('component_drop_attempted'),
     );
-    expect(
-      _actionTypes(MissionSimulationDefinitions.byId('coc1_m3')),
-      contains('cable_connection_attempted'),
-    );
+    // COC1 M3 practice now follows the PDF's installation workflow. Cable
+    // assessment evidence remains in its immutable server-owned contract.
+    expect(MissionSimulationDefinitions.byId('coc1_m3').title,
+        'Install and Configure a Workstation OS');
     expect(
       _actionTypes(MissionSimulationDefinitions.byId('coc2_m2')),
       containsAll({

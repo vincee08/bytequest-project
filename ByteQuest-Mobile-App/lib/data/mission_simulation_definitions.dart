@@ -5,6 +5,7 @@ part 'mission_definitions/coc1_definitions.dart';
 part 'mission_definitions/coc2_definitions.dart';
 part 'mission_definitions/coc3_definitions.dart';
 part 'mission_definitions/coc4_definitions.dart';
+part 'mission_definitions/equipment_content.dart';
 
 /// Authoritative learner-visible presentation catalog for all simulations.
 ///
@@ -80,7 +81,7 @@ MissionSimulationDefinition _mission({
   final definitions = <MissionPhaseDefinition>[];
 
   for (var index = 0; index < phases.length; index++) {
-    final spec = phases[index];
+    final spec = _equipmentPhase(id, index + 1, phases[index], objects);
     final component = spec.presentation['component'];
     final renderedFamily = component is String
         ? MissionPhasePresentation.familyForComponent(component) ?? spec.family
@@ -107,6 +108,7 @@ MissionSimulationDefinition _mission({
             'id': entry.key,
             'label': entry.value,
             'description': entry.value,
+            'inspection': _inspectionContent(id, entry.key, entry.value),
             'imageAsset': _imageAssetForObject(id, entry.key),
           },
       ];
@@ -125,10 +127,12 @@ MissionSimulationDefinition _mission({
   return MissionSimulationDefinition(
     id: id,
     cocId: id.substring(0, 4),
-    title: title,
-    scenario: scenario,
+    title: _equipmentTitles[id] ?? title,
+    scenario: _equipmentScenarios[id] ?? scenario,
     environmentLabel: environmentLabel,
-    practiceGuidance: practiceGuidance,
+    practiceGuidance: id == 'coc1_m3'
+        ? 'Check the firmware and storage specification, select installation media and destination, then verify the driver after restarting.'
+        : practiceGuidance,
     scene: _scene(id, _sceneObjects(objects, definitions)),
     phases: definitions,
     interactionFamilies: definitions
@@ -149,10 +153,16 @@ Map<String, String> _sceneObjects(
 ) {
   final sceneObjects = Map<String, String>.from(objects);
   for (final phase in phases) {
-    if (phase.resolvedInteraction != InteractionFamily.connect) continue;
+    final equipment = phase.presentation['equipment'] as Map?;
+    final supplementalConnection = equipment?['connection'] as Map?;
+    if (phase.resolvedInteraction != InteractionFamily.connect &&
+        supplementalConnection == null) {
+      continue;
+    }
+    final connection = supplementalConnection ?? phase.presentation;
     for (final key in const ['sources', 'destinations']) {
       for (final endpoint
-          in (phase.presentation[key] as List? ?? const []).whereType<Map>()) {
+          in (connection[key] as List? ?? const []).whereType<Map>()) {
         final id = endpoint['id'];
         final label = endpoint['label'];
         if (id is String && label is String) {
@@ -198,13 +208,32 @@ SimulationSceneDefinition _scene(
         ),
     ],
     backgroundAsset: _backgroundAssetForMission(missionId),
-    initialStatus: const {
+    initialStatus: {
       'schematic': true,
       'replaceableAssets': true,
       'statusLabel': 'Awaiting inspection',
+      'sceneKind': _sceneKindForMission(missionId),
     },
   );
 }
+
+String _sceneKindForMission(String missionId) => switch (missionId) {
+      'coc1_m1' || 'coc1_m4' => 'workbench',
+      'coc1_m2' => 'openChassis',
+      'coc1_m3' => 'firmwareConsole',
+      'coc1_m5' ||
+      'coc4_m1' ||
+      'coc4_m2' ||
+      'coc4_m4' ||
+      'coc4_m5' =>
+        'maintenanceBay',
+      'coc2_m1' => 'networkBench',
+      'coc2_m2' => 'cableTester',
+      'coc2_m3' || 'coc2_m4' || 'coc2_m5' || 'coc4_m3' => 'networkPlan',
+      'coc3_m1' || 'coc3_m2' || 'coc3_m4' || 'coc3_m5' => 'serverRack',
+      'coc3_m3' => 'accessConsole',
+      _ => 'workbench',
+    };
 
 Map<String, dynamic> _presentationWithImageAssets(
   String missionId,
@@ -352,7 +381,7 @@ Map<String, dynamic> _coc4M5ServiceDiagnostics() {
       'reveals_fact_id': factId,
       'case_id': id,
     });
-    facts[factId] = '${observations[id]} ${serviceCase['explanation']}';
+    facts[factId] = observations[id]!;
   }
 
   return {
@@ -363,7 +392,6 @@ Map<String, dynamic> _coc4M5ServiceDiagnostics() {
         {
           'id': serviceCase['id'],
           'symptom': serviceCase['symptom'],
-          'causes': serviceCase['causes'],
         },
     ],
     'diagnostic_actions': actions,
