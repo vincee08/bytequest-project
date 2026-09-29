@@ -12,7 +12,7 @@
 - Vercel production logs confirmed corrected commit `d086d4b` passed all 23 prerendered pages. The exact Supabase prerender failure came from an out-of-order deployment of older commit `51eb0a1`.
 - Added the existing local Supabase URL and publishable key to Vercel Production/Preview/Development and stored the service-role value as a Vercel Secret. Values remain untracked and were not printed.
 - Vercel then exposed a separate output-packaging failure: the project root `ByteQuest Web Dashboard` caused generated serverless paths such as `ByteQuest Web Dashboard/___next_launcher.cjs`, which Vercel rejects because function names cannot contain spaces. Renamed only that repository directory to `ByteQuest-Web-Dashboard`, updated repository path references, and changed the Vercel project Root Directory accordingly.
-- After the directory correction, dashboard TypeScript, Next lint, all **25/25** focused tests, and `next build` pass. The next required gate is the Vercel deployment of this rename commit; do not revert the directory name while the linked Vercel project uses `ByteQuest-Web-Dashboard`.
+- After the directory correction, dashboard TypeScript, Next lint, all **25/25** focused tests, and `next build` pass. Commit `257c038` deployed successfully as Vercel production deployment `dpl_AwuwSRp9ApT6x8TcEnbo3L2rCMcC` with status **Ready**. Protected live checks verified `/` returns `307` to `/login` and `/login` returns `200`. Do not revert the directory name while the linked Vercel project uses `ByteQuest-Web-Dashboard`.
 
 ## Current continuation — 2026-09-28
 
