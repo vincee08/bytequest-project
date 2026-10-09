@@ -75,6 +75,7 @@ class _SequencingInteractionState extends State<SequencingInteraction> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           ReorderableListView.builder(
+            buildDefaultDragHandles: false,
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
             itemCount: _order.length,
@@ -88,14 +89,20 @@ class _SequencingInteractionState extends State<SequencingInteraction> {
                 key: ValueKey('sequence-item-$id'),
                 child: Row(
                   children: [
-                    ReorderableDragStartListener(
-                      index: index,
-                      enabled: widget.enabled,
-                      child: const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: Icon(Icons.drag_handle_rounded),
+                    if (!widget.state.missionId.startsWith('coc4'))
+                      ReorderableDragStartListener(
+                        index: index,
+                        enabled: widget.enabled,
+                        child: const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: Icon(Icons.drag_handle_rounded),
+                        ),
                       ),
-                    ),
+                    if (widget.state.missionId.startsWith('coc4'))
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text('${index + 1}'),
+                      ),
                     Expanded(child: Text(label)),
                     IconButton(
                       tooltip: 'Move $label up',

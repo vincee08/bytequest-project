@@ -130,10 +130,11 @@ Future<void> performEquipmentAction(
           tester,
           find.byKey(
               ValueKey('placement-destination-${value['destination_id']}')));
-      await tapEquipmentControl(
-          tester,
-          find.byKey(
-              ValueKey('placement-orientation-${value['orientation']}')));
+      if (value['orientation'] != null)
+        await tapEquipmentControl(
+            tester,
+            find.byKey(
+                ValueKey('placement-orientation-${value['orientation']}')));
       await tapEquipmentControl(
           tester, find.byKey(const ValueKey('placement-place')));
     case 'diagnostic_action':

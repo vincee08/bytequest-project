@@ -5,6 +5,7 @@ import '../../../data/mission_content_data.dart';
 import '../interactions/tool_selection_interaction.dart';
 import '../interactions/configuration_panel.dart';
 import '../interactions/connection_interaction.dart';
+import '../interactions/controlled_placement_interaction.dart';
 import '../interactions/multi_select_interaction.dart';
 import '../runtime/mission_equipment_simulator.dart';
 import '../runtime/mission_runtime_models.dart';
@@ -32,6 +33,7 @@ class EquipmentOperations extends StatelessWidget {
     final hasTools = spec['tools'] is List && spec['targets'] is List;
     final configuration = MissionEquipmentSimulator.map(spec['configuration']);
     final connection = MissionEquipmentSimulator.map(spec['connection']);
+    final placement = MissionEquipmentSimulator.map(spec['placement']);
     final selectionGroups =
         MissionEquipmentSimulator.maps(spec['selection_groups']);
     final toolOutput = MissionEquipmentSimulator.map(
@@ -41,6 +43,7 @@ class EquipmentOperations extends StatelessWidget {
         !hasTools &&
         configuration.isEmpty &&
         connection.isEmpty &&
+        placement.isEmpty &&
         selectionGroups.isEmpty &&
         toolOutput.isEmpty) return const SizedBox.shrink();
     return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
@@ -88,6 +91,17 @@ class EquipmentOperations extends StatelessWidget {
                 instruction: phase.instruction,
                 primaryInteraction: InteractionFamily.connect,
                 presentation: connection),
+            state: state,
+            onAction: onAction,
+            enabled: enabled),
+      if (placement.isNotEmpty)
+        ControlledPlacementInteraction(
+            phase: MissionPhaseDefinition(
+                id: '${phase.id}_deployment',
+                title: phase.title,
+                instruction: phase.instruction,
+                primaryInteraction: InteractionFamily.place,
+                presentation: placement),
             state: state,
             onAction: onAction,
             enabled: enabled),

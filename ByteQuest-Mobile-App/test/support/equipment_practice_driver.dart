@@ -35,6 +35,13 @@ const practiceConfiguration = <String, dynamic>{
   'device_mode': 'automatic',
   'device_identifier': 'BQ-ETH01',
   'driver_state': 'installed',
+  'wireless_ssid': 'BQ-LAB',
+  'wireless_security': 'wpa2_aes',
+  'wan_mode': 'dhcp',
+  'firewall_policy': 'deny_unsolicited',
+  'repeater_mode': 'bridge',
+  'cable_route': 'protected_design_route',
+  'raceway_material': 'pvc',
 };
 const practiceOrders = {
   'coc1_m2_p3': ['isolate', 'board', 'cooling', 'power'],
@@ -143,9 +150,12 @@ class EquipmentPracticeDriver {
     void connect(Map<String, dynamic> panel) {
       for (final source in MissionEquipmentSimulator.maps(panel['sources'])) {
         final sourceId = source['id'] as String;
-        final destination = sourceId == 'switch'
-            ? (definition.id == 'coc2_m2' ? 'router' : 'server')
-            : practiceConnections[sourceId]!;
+        final destination =
+            sourceId == 'server_node' || sourceId == 'client_node'
+                ? 'server_switch'
+                : sourceId == 'switch'
+                    ? (definition.id == 'coc2_m2' ? 'router' : 'server')
+                    : practiceConnections[sourceId]!;
         act(phase, 'connection_created', destination,
             {'source_id': sourceId, 'destination_id': destination});
       }
@@ -162,6 +172,15 @@ class EquipmentPracticeDriver {
     }
 
     // Supplementary controls operate the same state before the measured test.
+    if (eq['placement'] is Map) {
+      for (final part in MissionEquipmentSimulator.maps(
+          (eq['placement'] as Map)['items'])) {
+        act(phase, 'placement_attempted', '${part['id']}_position', {
+          'item_id': part['id'],
+          'destination_id': '${part['id']}_position',
+        });
+      }
+    }
     if (eq['tools'] is List) {
       tools(eq);
     }
@@ -216,6 +235,10 @@ class EquipmentPracticeDriver {
               {'reveals_fact_id': diagnostic['reveals_fact_id']});
         }
       case InteractionFamily.testRun:
+        for (final operation
+            in MissionEquipmentSimulator.maps(eq['operations'])) {
+          act(phase, 'equipment_operation', operation['id'] as String);
+        }
         final target = p['target'] as String? ?? phase.id;
         act(phase, 'test_started', target, {'test_status': 'running'});
         act(phase, 'test_completed', target, {'test_status': 'completed'});
@@ -242,8 +265,13 @@ class EquipmentPracticeDriver {
       case InteractionFamily.match:
         throw StateError('Add a matching work-order fixture.');
     }
-    for (final operation in MissionEquipmentSimulator.maps(eq['operations'])) {
-      act(phase, 'equipment_operation', operation['id'] as String);
+    if (phase.resolvedInteraction != InteractionFamily.testRun) {
+      for (var pass = 0; pass < 2; pass++) {
+        for (final operation
+            in MissionEquipmentSimulator.maps(eq['operations'])) {
+          act(phase, 'equipment_operation', operation['id'] as String);
+        }
+      }
     }
     if (!MissionPhaseCompletionPolicy.canAdvance(phase, state)) {
       throw StateError(

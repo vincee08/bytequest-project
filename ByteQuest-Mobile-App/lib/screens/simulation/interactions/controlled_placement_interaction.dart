@@ -89,50 +89,31 @@ class _ControlledPlacementInteractionState
       children: [
         if (showControls) ...[
           const MissionSectionLabel(
-              icon: Icons.memory_rounded, text: 'Components'),
+              icon: Icons.memory_rounded,
+              text: MissionContentData.placementComponentsLabel),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
             runSpacing: 8,
             children: [
-              for (final item in availableItems)
-                ChoiceChip(
-                  key: ValueKey('placement-item-${item.id}'),
-                  label: Text(item.label),
-                  selected: _itemId == item.id,
-                  onSelected: widget.enabled
-                      ? (_) => setState(() {
-                            _itemId = item.id;
-                            _orientation = null;
-                          })
-                      : null,
-                ),
+              for (final item in availableItems) _itemControl(item),
             ],
           ),
           const SizedBox(height: 12),
           const MissionSectionLabel(
             icon: Icons.place_outlined,
-            text: 'Destinations',
+            text: MissionContentData.placementDestinationsLabel,
           ),
           const SizedBox(height: 8),
           for (final destination in destinations)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: OutlinedButton(
-                key: ValueKey('placement-destination-${destination.id}'),
-                onPressed: widget.enabled
-                    ? () => setState(() => _destinationId = destination.id)
-                    : null,
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48),
-                ),
-                child: Text(destination.label),
-              ),
+              child: _destinationControl(destination, items, destinations),
             ),
           if (orientations.isNotEmpty) ...[
             const MissionSectionLabel(
               icon: Icons.screen_rotation_outlined,
-              text: 'Orientation',
+              text: MissionContentData.placementOrientationLabel,
             ),
             const SizedBox(height: 8),
             Wrap(
@@ -197,7 +178,7 @@ class _ControlledPlacementInteractionState
             style:
                 FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
             icon: const Icon(Icons.place_rounded),
-            label: const Text('Place'),
+            label: const Text(MissionContentData.placementConfirmLabel),
           ),
         if (interactionComplete)
           TextButton.icon(
@@ -233,14 +214,74 @@ class _ControlledPlacementInteractionState
     return destinationId;
   }
 
-  void _place(List<InteractionItem> items, List<InteractionItem> destinations) {
+  Widget _itemControl(InteractionItem item) {
+    final asset = item.data['imageAsset'];
+    final control = Semantics(
+        label: item.label,
+        button: true,
+        child: ChoiceChip(
+            key: ValueKey('placement-item-${item.id}'),
+            label: Text(item.label),
+            avatar: asset is String
+                ? Image.asset(asset,
+                    width: 28,
+                    height: 28,
+                    errorBuilder: (_, __, ___) =>
+                        const Icon(Icons.memory_outlined))
+                : null,
+            materialTapTargetSize: MaterialTapTargetSize.padded,
+            selected: _itemId == item.id,
+            onSelected: widget.enabled
+                ? (_) => setState(() {
+                      _itemId = item.id;
+                      _orientation = null;
+                    })
+                : null));
+    if (widget.state.missionId.startsWith('coc4')) return control;
+    return Draggable<String>(
+        data: item.id,
+        maxSimultaneousDrags: widget.enabled ? 1 : 0,
+        feedback: Material(child: Chip(label: Text(item.label))),
+        child: control);
+  }
+
+  Widget _destinationControl(InteractionItem destination,
+      List<InteractionItem> items, List<InteractionItem> destinations) {
+    final control = OutlinedButton(
+        key: ValueKey('placement-destination-${destination.id}'),
+        style: OutlinedButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+        onPressed: widget.enabled
+            ? () => setState(() => _destinationId = destination.id)
+            : null,
+        child: Text(destination.label));
+    if (widget.state.missionId.startsWith('coc4')) return control;
+    return DragTarget<String>(
+        onWillAcceptWithDetails: (details) =>
+            widget.enabled && items.any((i) => i.id == details.data),
+        onAcceptWithDetails: (details) {
+          setState(() {
+            _itemId = details.data;
+            _destinationId = destination.id;
+            _orientation = null;
+          });
+          final part = items.firstWhere((i) => i.id == details.data);
+          if ((part.data['orientations'] as List? ?? []).isEmpty) {
+            _place(items, destinations, inputMethod: 'drag');
+          }
+        },
+        builder: (_, __, ___) => control);
+  }
+
+  void _place(List<InteractionItem> items, List<InteractionItem> destinations,
+      {String inputMethod = 'button'}) {
     final item = items.firstWhere((candidate) => candidate.id == _itemId);
     final destination =
         destinations.firstWhere((candidate) => candidate.id == _destinationId);
-    final accepted =
-        (destination.data['accepted_categories'] as List? ?? const [])
-            .whereType<String>()
-            .toSet();
+    final accepted = ((destination.data['socket_categories'] ??
+            destination.data['accepted_categories'] ??
+            const []) as List)
+        .whereType<String>()
+        .toSet();
     final category = item.data['category'] as String?;
     final compatible = accepted.isEmpty || accepted.contains(category);
     if (!compatible) widget.onFeedbackRequested?.call('placement_incompatible');
@@ -250,7 +291,7 @@ class _ControlledPlacementInteractionState
       'compatible': compatible,
       if (_orientation != null) 'orientation': _orientation,
       if (!compatible) 'feedback_id': 'placement_incompatible',
-      'input_method': 'button',
+      'input_method': inputMethod,
     }));
   }
 }

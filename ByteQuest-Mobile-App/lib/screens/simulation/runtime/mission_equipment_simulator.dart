@@ -78,9 +78,12 @@ abstract final class MissionEquipmentSimulator {
         recorded['compatible'] = valid;
         break;
       case 'placement_attempted':
-        final part = item(phase.presentation['items'], value['item_id']);
-        final slot =
-            item(phase.presentation['destinations'], value['destination_id']);
+        final panel = map(spec['placement']);
+        final part = item(
+            panel['items'] ?? phase.presentation['items'], value['item_id']);
+        final slot = item(
+            panel['destinations'] ?? phase.presentation['destinations'],
+            value['destination_id']);
         final categories =
             strings(slot['socket_categories'] ?? slot['accepted_categories']);
         if (part.isEmpty ||

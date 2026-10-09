@@ -83,6 +83,19 @@ class LearnerRealtimeCoordinator extends ChangeNotifier {
       value: userId,
       domains: const {LearnerRealtimeDomain.quizzes},
     );
+    for (final table in const [
+      'practice_coc_progress',
+      'practice_mission_completions'
+    ]) {
+      _listenFiltered(channel,
+          table: table,
+          column: 'learner_id',
+          value: userId,
+          domains: const {
+            LearnerRealtimeDomain.learning,
+            LearnerRealtimeDomain.progress
+          });
+    }
     _listenFiltered(
       channel,
       table: 'coc_bypasses',

@@ -5,6 +5,9 @@ import '../../core/widgets/learner_ui.dart';
 import '../../services/mission_database_service.dart';
 import '../../models/learner_learning_path_model.dart';
 import 'coc_details_screen.dart';
+import 'package:provider/provider.dart';
+import '../../services/mission_service.dart';
+import '../../data/mission_content_data.dart';
 
 class CoursesScreen extends StatefulWidget {
   const CoursesScreen({super.key});
@@ -28,6 +31,8 @@ class _CoursesScreenState extends State<CoursesScreen> {
     try {
       final dbService = MissionDatabaseService();
       final cocModules = await dbService.getLearnerLearningPath();
+      if (!mounted) return;
+      await context.read<MissionService>().refreshPracticeProgress();
 
       if (mounted) {
         setState(() {
@@ -105,19 +110,26 @@ class _CoursesScreenState extends State<CoursesScreen> {
   }
 
   Widget _buildCOCCard(BuildContext context, LearnerCocProjection coc) {
+    final unlocked = context.watch<MissionService>().isCocUnlocked(coc.code);
     final cocNumber = coc.code.replaceAll('coc', '').replaceAll('COC', '');
     final releasedMissions = coc.releasedMissionCount;
     final totalMissions = coc.missions.length;
     final progress = coc.releasedRatio;
 
     return SoftCard(
-      onTap: () {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => COCDetailsScreen(projection: coc),
-          ),
-        );
-      },
+      onTap: !unlocked
+          ? null
+          : () {
+              Navigator.of(context)
+                  .push(
+                MaterialPageRoute(
+                  builder: (context) => COCDetailsScreen(projection: coc),
+                ),
+              )
+                  .then((_) {
+                if (mounted) _loadCOCs();
+              });
+            },
       margin: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -187,9 +199,11 @@ class _CoursesScreenState extends State<CoursesScreen> {
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
-                        coc.assignedMissionCount > 0
-                            ? '${coc.assignedMissionCount} assigned activities'
-                            : 'Practice catalog available',
+                        !unlocked
+                            ? MissionContentData.practiceLockedMessage
+                            : coc.assignedMissionCount > 0
+                                ? '${coc.assignedMissionCount} assigned activities'
+                                : 'Practice catalog available',
                         style: AppTheme.labelMedium.copyWith(
                           color: AppTheme.primaryBlue,
                           fontWeight: FontWeight.w600,

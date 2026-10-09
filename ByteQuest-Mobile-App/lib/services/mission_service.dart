@@ -4,12 +4,27 @@ import '../models/mission_model.dart';
 import '../data/missions_data.dart';
 import '../core/config/supabase_config.dart';
 import 'mission_database_service.dart';
+import 'practice_progress_service.dart';
+import '../models/practice_progress_model.dart';
 
 /// Mission Service for managing mission state and progress
 class MissionService extends ChangeNotifier {
   List<String> _completedMissions = [];
   Map<String, MissionResult> _missionResults = {};
   String? _currentActiveMission;
+  Map<String, PracticeCocProgress> _practiceProgress = {};
+  bool isCocUnlocked(String coc) => _practiceProgress[coc]?.unlocked == true;
+  Future<void> refreshPracticeProgress() async {
+    try {
+      final progress = await PracticeProgressService().getProgress();
+      _practiceProgress = {for (final p in progress) p.coc: p};
+    } catch (_) {
+      _practiceProgress = {};
+      rethrow;
+    } finally {
+      notifyListeners();
+    }
+  }
 
   List<String> get completedMissions => _completedMissions;
   Map<String, MissionResult> get missionResults => _missionResults;
@@ -22,6 +37,11 @@ class MissionService extends ChangeNotifier {
   /// Sync user progress from Supabase database
   Future<void> loadFromDatabase(String userId) async {
     try {
+      try {
+        await refreshPracticeProgress();
+      } catch (_) {
+        debugPrint('Practice progression is temporarily unavailable.');
+      }
       // 1. Fetch database missions to map UUIDs to local IDs
       final dbMissions = await MissionDatabaseService().getAllMissions();
       final uuidToLocalId = {
@@ -144,7 +164,10 @@ class MissionService extends ChangeNotifier {
     return missions.map((mission) {
       return mission.copyWith(
         isUnlocked: isMissionUnlocked(mission.id),
-        isCompleted: _completedMissions.contains(mission.id),
+        isCompleted: _practiceProgress[mission.cocId]
+                ?.completedMissions
+                .contains(mission.id) ==
+            true,
         highScore: _missionResults[mission.id]?.score,
       );
     }).toList();
@@ -168,9 +191,7 @@ class MissionService extends ChangeNotifier {
   bool isMissionUnlocked(String missionId) {
     final mission = MissionsData.getMissionById(missionId);
     if (mission == null) return false;
-    // The retained catalog is practice-only. Authoritative access is granted
-    // by assignments or an audited COC bypass, never by a client threshold.
-    return true;
+    return isCocUnlocked(mission.cocId);
   }
 
   /// Complete a mission
@@ -282,6 +303,7 @@ class MissionService extends ChangeNotifier {
 
   /// Reset all progress (for testing)
   Future<void> resetProgress() async {
+    _practiceProgress = {};
     _completedMissions.clear();
     _missionResults.clear();
     _currentActiveMission = 'coc1_m1';

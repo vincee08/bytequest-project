@@ -11,6 +11,7 @@ import '../../services/auth_service.dart';
 import '../../services/authoritative_assessment_service.dart';
 import '../../services/practice_mission_evidence_service.dart';
 import '../../services/progress_resume_service.dart';
+import '../../services/practice_progress_service.dart';
 import 'components/simulation_scene.dart';
 import 'components/equipment_operations.dart';
 import 'interactions/mission_interactions.dart';
@@ -81,6 +82,7 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
   var _submitted = false;
   var _leaving = false;
   var _allowPop = false;
+  var _accessVerified = false;
   String? _restoreFailure;
   String? _technicalFeedback;
 
@@ -130,15 +132,23 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
 
   Future<void> _restore() async {
     try {
+      if (widget.controller == null &&
+          _state.mode == MissionRuntimeMode.practice) {
+        await PracticeProgressService().requireMissionAccess(widget.mission.id);
+      }
+      _accessVerified = true;
       await _controller.restore();
       if (!_hasKnownPhase(_state.currentPhaseId)) {
         _restoreFailure =
             'Saved progress references a mission phase that is no longer '
             'available.';
       }
-    } catch (_) {
-      _restoreFailure =
-          'Saved progress could not be restored for this mission session.';
+    } catch (error) {
+      _restoreFailure = _accessVerified
+          ? 'Saved progress could not be restored for this mission session.'
+          : error is StateError && error.message == 'PRACTICE_COC_LOCKED'
+              ? MissionContentData.practiceLockedMessage
+              : MissionContentData.practiceProgressUnavailable;
     } finally {
       if (mounted) setState(() => _restoring = false);
     }
@@ -155,6 +165,10 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
   Future<void> _resetSavedProgress() async {
     setState(() => _restoring = true);
     try {
+      if (!_accessVerified) {
+        await PracticeProgressService().requireMissionAccess(widget.mission.id);
+        _accessVerified = true;
+      }
       await _controller.reset(_initialState);
       _restoreFailure = null;
       _technicalFeedback = null;
@@ -224,7 +238,9 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
                 phaseTitle: widget.definition.title,
                 message: failure,
                 onRetry: () => unawaited(_retryRestore()),
-                onReset: () => unawaited(_resetSavedProgress()),
+                onReset: _accessVerified
+                    ? () => unawaited(_resetSavedProgress())
+                    : null,
               ),
             ),
           ),
@@ -626,16 +642,20 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
         // the runtime gateway. Confirming review must never create an
         // authoritative result or award competency.
         await _controller.persist();
+        if (_practiceEvidenceService != null) {
+          await PracticeProgressService().verifyMission(widget.mission.id);
+        }
       } else {
         await _submitAuthoritatively();
       }
       _submitted = true;
       _technicalFeedback = _state.mode == MissionRuntimeMode.practice
-          ? 'Practice evidence saved. Official competency is unchanged.'
+          ? MissionContentData.practiceSavedMessage
           : 'Evidence submitted for authoritative evaluation and review.';
     } catch (_) {
-      _technicalFeedback =
-          'Evidence could not be submitted. Your mission progress is preserved.';
+      _technicalFeedback = _state.mode == MissionRuntimeMode.practice
+          ? MissionContentData.practiceSubmitFailed
+          : MissionContentData.assessmentSubmitFailed;
     } finally {
       if (mounted) setState(() => _submitting = false);
     }

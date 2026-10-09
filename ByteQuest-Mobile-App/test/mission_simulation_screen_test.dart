@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:bytequest/data/mission_simulation_definitions.dart';
+import 'package:bytequest/data/mission_content_data.dart';
 import 'package:bytequest/models/mission_model.dart';
 import 'package:bytequest/screens/simulation/components/simulation_scene.dart';
 import 'package:bytequest/screens/simulation/interactions/mission_interactions.dart';
@@ -430,7 +431,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('Practice evidence saved. Official competency is unchanged.'),
+        find.text(MissionContentData.practiceSavedMessage),
         findsOneWidget,
       );
       expect(controller.state.mode, MissionRuntimeMode.practice);
@@ -950,6 +951,12 @@ Future<void> _advanceToReview(
         await tester.tap(record);
         await tester.pumpAndSettle();
       case 3:
+        for (final operation in ['close_work_area', 'prepare_service_report']) {
+          final button = find.byKey(ValueKey('equipment-operation-$operation'));
+          await tester.ensureVisible(button);
+          await tester.tap(button);
+          await tester.pumpAndSettle();
+        }
         final run = find.byKey(const ValueKey('test-run-start'));
         await tester.ensureVisible(run);
         await tester.tap(run);

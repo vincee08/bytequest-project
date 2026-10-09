@@ -408,7 +408,7 @@ with inserted as (
   select
     learner_id,
     'rollback-practice-action',
-    mission_id::text,
+    'coc1_m1',
     'rollback-practice-phase',
     'object_inspected',
     'rollback-target',
@@ -435,7 +435,7 @@ insert into public.practice_mission_actions (
 select
   learner_id,
   'rollback-practice-action',
-  mission_id::text,
+  'coc1_m1',
   'rollback-practice-phase',
   'object_inspected',
   'rollback-target',
@@ -501,7 +501,7 @@ begin
     ) values (
       v_context.instructor_id,
       'forbidden-instructor-practice-action',
-      v_context.mission_id::text,
+      'coc1_m1',
       'forbidden-role-phase',
       'object_inspected',
       '{}'::jsonb,
@@ -545,7 +545,7 @@ begin
     ) values (
       v_context.admin_id,
       'forbidden-admin-practice-action',
-      v_context.mission_id::text,
+      'coc1_m1',
       'forbidden-role-phase',
       'object_inspected',
       '{}'::jsonb,
@@ -597,7 +597,7 @@ begin
     ) values (
       v_context.learner_id,
       'forbidden-inactive-learner-practice-action',
-      v_context.mission_id::text,
+      'coc1_m1',
       'forbidden-status-phase',
       'object_inspected',
       '{}'::jsonb,

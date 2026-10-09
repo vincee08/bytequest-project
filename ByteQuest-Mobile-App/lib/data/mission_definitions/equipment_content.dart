@@ -1136,6 +1136,266 @@ _PhaseSpec _equipmentPhase(String missionId, int number, _PhaseSpec original,
       break;
   }
 
+  // Supplement the existing work orders with the supplied SAG, pages 1-7.
+  // Operations change equipment state and are verified by the measured test.
+  if (missionId == 'coc2_m3' && number == 1 ||
+      missionId == 'coc3_m1' && number == 1) {
+    equipment['placement'] = _deploymentPanel(missionId == 'coc2_m3');
+    equipment['completion'] = [
+      for (final part in (equipment['placement'] as Map)['items'] as List)
+        _present('placed.${part['id']}'),
+    ];
+  }
+  if (missionId == 'coc3_m1' && number == 1) {
+    equipment['connection'] = {
+      'sources': [
+        {
+          'id': 'server_node',
+          'label': 'File server Ethernet',
+          'interfaces': ['ethernet']
+        },
+        {
+          'id': 'client_node',
+          'label': 'Client Ethernet',
+          'interfaces': ['ethernet']
+        },
+      ],
+      'destinations': [
+        {
+          'id': 'server_switch',
+          'label': 'Server LAN switch',
+          'interface': 'ethernet'
+        }
+      ],
+    };
+    equipment['completion'] = [
+      ...(equipment['completion'] as List),
+      _eq('link.server_node>server_switch', true),
+      _eq('link.client_node>server_switch', true),
+    ];
+  }
+  void addOperation(Map<String, dynamic> operation) {
+    equipment['operations'] = [
+      ...(equipment['operations'] as List? ?? []),
+      operation
+    ];
+  }
+
+  void addChecks(List<Map<String, dynamic>> checks) {
+    equipment['checks'] = [...(equipment['checks'] as List? ?? []), ...checks];
+  }
+
+  if (missionId == 'coc1_m3' && number == 2) {
+    addOperation(_operation(
+        'prepare_boot_media',
+        'Create verified bootable USB and licensed installer',
+        {'boot_media_ready': true}));
+    final install = (equipment['operations'] as List).first as Map;
+    install['requires'] = [
+      ...(install['requires'] as List),
+      _eq('setting.boot_media_ready', true)
+    ];
+  }
+  if (missionId == 'coc1_m3' && number == 3) {
+    addOperation(_operation(
+        'install_licensed_apps',
+        'Install licensed application and portable utility',
+        {'licensed_apps_ready': true},
+        requires: [_eq('setting.os_installed', true)]));
+    addOperation(_operation(
+        'apply_vendor_updates',
+        'Apply verified OS, driver, and application updates',
+        {'vendor_updates_ready': true},
+        requires: [_eq('setting.os_installed', true)]));
+  }
+  if (missionId == 'coc1_m3' && number == 4) {
+    addChecks([
+      _reading(
+          'software_readiness',
+          'Software and update verification',
+          [
+            _eq('setting.boot_media_ready', true),
+            _eq('setting.licensed_apps_ready', true),
+            _eq('setting.vendor_updates_ready', true),
+          ],
+          'Boot media, licensed software, and verified vendor updates are recorded.',
+          'Media preparation, licensed software, or vendor updates remain incomplete.')
+    ]);
+  }
+  if (missionId == 'coc1_m5' && number == 5) {
+    addOperation(_operation(
+        'run_monitored_stress_test',
+        'Run a monitored load test after correcting the storage link',
+        {'load_test_verified': true},
+        requires: [_eq('setting.storage_link_stable', true)]));
+    addChecks([
+      _reading(
+          'reliability',
+          'Monitored reliability test',
+          [_eq('setting.load_test_verified', true)],
+          'Sustained load completes without link resets or thermal alarms.',
+          'Correct the storage fault and run the monitored load test.')
+    ]);
+  }
+  if (missionId == 'coc2_m1' && number == 3) {
+    instruction =
+        'Use the protected route in the network plan and PVC raceway for this indoor work order. Then prepare and terminate the copper link safely.';
+    equipment['configuration'] = {
+      'fields': [
+        _dropdown('cable_route', 'Cable route', {
+          'protected_design_route': 'Protected route from network plan',
+          'walkway': 'Across the unprotected walkway'
+        }),
+        _dropdown('raceway_material', 'Raceway for this work order',
+            {'pvc': 'PVC raceway', 'metallic': 'Metallic conduit'}),
+      ]
+    };
+    equipment['completion'] = [
+      _eq('sequence.$id', true),
+      _eq('config.cable_route', 'protected_design_route'),
+      _eq('config.raceway_material', 'pvc')
+    ];
+  }
+  if (missionId == 'coc2_m1' && number == 5) {
+    addChecks([
+      _reading(
+          'route',
+          'Route and raceway inspection',
+          [
+            _eq('config.cable_route', 'protected_design_route'),
+            _eq('config.raceway_material', 'pvc')
+          ],
+          'Protected indoor cable route and specified PVC raceway verified.',
+          'Check the route and raceway against this network plan.')
+    ]);
+  }
+  if (missionId == 'coc2_m4' && (number == 2 || number == 5)) {
+    final fields = [
+      ..._networkFields(),
+      _field('wireless_ssid', 'Training wireless SSID'),
+      _dropdown('wireless_security', 'Wireless security',
+          {'wpa2_aes': 'WPA2 with AES', 'open': 'Open network'}),
+      _dropdown('wan_mode', 'WAN uplink',
+          {'dhcp': 'DHCP from upstream router', 'disabled': 'Disabled'}),
+      _dropdown('firewall_policy', 'Firewall policy', {
+        'deny_unsolicited': 'Deny unsolicited inbound traffic',
+        'allow_all': 'Allow all traffic'
+      }),
+      _dropdown('repeater_mode', 'Wireless repeater mode', {
+        'bridge': 'Bridge the existing secured LAN',
+        'isolated': 'Create an isolated client network'
+      }),
+    ];
+    if (number == 2) p['fields'] = fields;
+    if (number == 5) equipment['configuration'] = {'fields': fields};
+    instruction =
+        'Configure the switch, router, and bridged repeater: SSID BQ-LAB, WPA2/AES, DHCP WAN uplink, and deny unsolicited inbound traffic. Verify client Wi-Fi and LAN access.';
+  }
+  if (missionId == 'coc2_m4' && number == 5) {
+    addChecks([
+      _reading(
+          'wireless_security',
+          'Router, Wi-Fi client, WAN and firewall',
+          [
+            _eq('config.wireless_ssid', 'BQ-LAB'),
+            _eq('config.wireless_security', 'wpa2_aes'),
+            _eq('config.wan_mode', 'dhcp'),
+            _eq('config.firewall_policy', 'deny_unsolicited'),
+            _eq('config.repeater_mode', 'bridge'),
+          ],
+          'Client joins BQ-LAB securely; WAN lease and inbound filtering verified.',
+          'Inspect the SSID, encryption, WAN lease, or inbound firewall policy.')
+    ]);
+  }
+  if (missionId == 'coc3_m3' && number == 4) {
+    addOperation(_operation('create_user_folder',
+        'Create the technician user folder and verify access isolation', {
+      'user_folder_ready': true
+    },
+        requires: [
+          _eq('config.account_name', 'technician'),
+          _eq('config.group_assignment', 'support')
+        ]));
+  }
+  if (missionId == 'coc3_m3' && number == 5) {
+    addChecks([
+      _reading(
+          'user_folder',
+          'User folder and security check',
+          [_eq('setting.user_folder_ready', true)],
+          'Technician folder exists; unauthorized users retain restricted access.',
+          'Create the requested user folder and verify its access policy.')
+    ]);
+  }
+  if (missionId == 'coc3_m4' && number == 2) {
+    addOperation(_operation(
+        'install_service_modules',
+        'Install approved NOS service modules and updates',
+        {'service_modules_ready': true}));
+    addOperation(_operation('configure_printer_share',
+        'Configure the authorized printer share', {'printer_share_ready': true},
+        requires: [_eq('setting.service_modules_ready', true)]));
+  }
+  if (missionId == 'coc3_m4' && number == 4) {
+    addChecks([
+      _reading(
+          'deployment',
+          'Client file and printer sharing',
+          [
+            _eq('setting.service_modules_ready', true),
+            _eq('setting.printer_share_ready', true)
+          ],
+          'Approved modules loaded; client file access and printer test page succeed.',
+          'Verify required modules and printer sharing before deployment.')
+    ]);
+  }
+  final finalTest = equipment['completion'] is List &&
+      (equipment['completion'] as List)
+          .any((c) => c['path'].toString().startsWith('result.'));
+  if (missionId.startsWith('coc4') && number == 1) {
+    addOperation(_operation(
+        'protect_service_data',
+        'Verify backup and record the contingency plan before servicing',
+        {'contingency_ready': true}));
+    equipment['completion'] = [
+      ...(equipment['completion'] as List? ?? []),
+      _eq('setting.contingency_ready', true),
+      if (resolved == InteractionFamily.inspect)
+        for (final object in objects.keys) _eq('inspected.$object', true),
+      if (resolved == InteractionFamily.troubleshoot)
+        for (final fact in p['required_fact_ids'] as List? ?? [])
+          _eq('fact.$fact', true),
+      if (resolved == InteractionFamily.sequence) _eq('sequence.$id', true),
+    ];
+  }
+  if (finalTest) {
+    addOperation(_operation(
+        'close_work_area',
+        missionId.startsWith('coc4')
+            ? 'Clear debris and record 5S and 4Rs close-out'
+            : 'Record 5S and 3Rs work-area close-out',
+        {'work_area_safe': true}));
+    addOperation(_operation(
+        'prepare_service_report',
+        'Prepare the technical work report for handover',
+        {'service_report_ready': true},
+        requires: [_eq('setting.work_area_safe', true)]));
+    addChecks([
+      _reading(
+          'close_out',
+          'Safety and documentation',
+          [
+            _eq('setting.work_area_safe', true),
+            _eq('setting.service_report_ready', true),
+            if (missionId.startsWith('coc4'))
+              _eq('setting.contingency_ready', true),
+          ],
+          'Work-area safety, contingency where required, and service handover recorded.',
+          'Complete safety close-out and the service report before final verification.')
+    ]);
+  }
+  if (missionId.startsWith('coc4')) p['allow_drag'] = false;
+
   if (resolved == InteractionFamily.inspect && p['objects'] is List) {
     p['objects'] = [
       for (final raw in p['objects'] as List)
@@ -1156,6 +1416,42 @@ _PhaseSpec _equipmentPhase(String missionId, int number, _PhaseSpec original,
       family: family,
       mechanic: original.mechanic,
       presentation: p);
+}
+
+Map<String, dynamic> _deploymentPanel(bool network) {
+  final devices = network
+      ? {
+          'router': 'Router',
+          'switch': 'Switch',
+          'workstation_a': 'Workstation A',
+          'workstation_b': 'Workstation B',
+          'server': 'Server'
+        }
+      : {
+          'server_node': 'File server',
+          'client_node': 'Client workstation',
+          'server_switch': 'LAN switch'
+        };
+  return {
+    'items': [
+      for (final d in devices.entries)
+        {
+          'id': d.key,
+          'label': d.value,
+          'category': d.key,
+          'imageAsset': _imageAssetForObject('coc2_m3', d.key) ??
+              _imageAssetForObject('coc1_m1', 'system_unit')
+        }
+    ],
+    'destinations': [
+      for (final d in devices.entries)
+        {
+          'id': '${d.key}_position',
+          'label': '${d.value} position',
+          'socket_categories': [d.key]
+        }
+    ],
+  };
 }
 
 List<Map<String, dynamic>> _networkChecks(String address) => [

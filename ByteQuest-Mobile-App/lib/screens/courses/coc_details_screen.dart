@@ -6,6 +6,8 @@ import '../../services/mission_service.dart';
 import '../../models/mission_model.dart';
 import '../../models/learner_learning_path_model.dart';
 import '../simulation/mission_launcher.dart';
+import '../../widgets/practice_progress_panel.dart';
+import '../../data/mission_content_data.dart';
 
 /// COC Details Screen - Shows missions for a specific COC
 class COCDetailsScreen extends StatelessWidget {
@@ -57,75 +59,77 @@ class COCDetailsScreen extends StatelessWidget {
             final missions = missionService.getMissionsByCOC(cocId);
             final releasedCount = projection.releasedMissionCount;
 
-            return Column(
+            return ListView(
               children: [
-                // COC Header
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(24),
-                  color: Colors.white,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _getCOCTitle(cocId),
-                        style: AppTheme.headlineMedium.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _buildStatItem(
-                              'Missions',
-                              '${missions.length}',
-                              Icons.assignment_turned_in,
-                            ),
-                          ),
-                          Container(
-                            width: 1,
-                            height: 40,
-                            color: AppTheme.textLight.withOpacity(0.2),
-                          ),
-                          Expanded(
-                            child: _buildStatItem(
-                              'Released',
-                              '$releasedCount/${projection.missions.length}',
-                              Icons.trending_up,
-                            ),
-                          ),
-                          Container(
-                            width: 1,
-                            height: 40,
-                            color: AppTheme.textLight.withOpacity(0.2),
-                          ),
-                          Expanded(
-                            child: _buildStatItem(
-                              'Status',
-                              projection.lifecycleLabel,
-                              Icons.route_outlined,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Missions List
-                Expanded(
-                  child: ListView.builder(
+                if (!missionService.isCocUnlocked(cocId))
+                  const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text(MissionContentData.practiceLockedMessage)),
+                if (missionService.isCocUnlocked(cocId)) ...[
+                  // COC Header
+                  Container(
+                    width: double.infinity,
                     padding: const EdgeInsets.all(24),
-                    itemCount: missions.length,
-                    itemBuilder: (context, index) {
-                      final mission = missions[index];
-                      final missionProjection = _projectionFor(mission);
-                      return _buildMissionCard(
-                          context, mission, missionProjection);
-                    },
+                    color: Colors.white,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _getCOCTitle(cocId),
+                          style: AppTheme.headlineMedium.copyWith(
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildStatItem(
+                                'Missions',
+                                '${missions.length}',
+                                Icons.assignment_turned_in,
+                              ),
+                            ),
+                            Container(
+                              width: 1,
+                              height: 40,
+                              color: AppTheme.textLight.withOpacity(0.2),
+                            ),
+                            Expanded(
+                              child: _buildStatItem(
+                                'Released',
+                                '$releasedCount/${projection.missions.length}',
+                                Icons.trending_up,
+                              ),
+                            ),
+                            Container(
+                              width: 1,
+                              height: 40,
+                              color: AppTheme.textLight.withOpacity(0.2),
+                            ),
+                            Expanded(
+                              child: _buildStatItem(
+                                'Status',
+                                projection.lifecycleLabel,
+                                Icons.route_outlined,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+
+                  Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 24),
+                      child: PracticeProgressPanel(coc: cocId)),
+                  // Missions List
+                  for (final mission in missions)
+                    Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: _buildMissionCard(
+                            context, mission, _projectionFor(mission))),
+                ],
               ],
             );
           },
@@ -165,7 +169,13 @@ class COCDetailsScreen extends StatelessWidget {
 
     return SoftCard(
       margin: const EdgeInsets.only(bottom: 16),
-      onTap: () => MissionLauncher.launch(context, mission),
+      onTap: mission.isUnlocked != true
+          ? null
+          : () async {
+              await MissionLauncher.launch(context, mission);
+              if (context.mounted)
+                await context.read<MissionService>().refreshPracticeProgress();
+            },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

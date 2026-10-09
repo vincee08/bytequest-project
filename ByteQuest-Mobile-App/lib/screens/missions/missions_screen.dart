@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/learner_ui.dart';
 import '../../data/missions_data.dart';
+import '../../data/mission_content_data.dart';
+import '../../models/practice_progress_model.dart';
+import '../../services/practice_progress_service.dart';
+import '../../widgets/practice_progress_panel.dart';
 import '../../models/assigned_activity_model.dart';
 import '../../models/learning_resource_model.dart';
 import '../../models/mission_model.dart';
@@ -36,6 +41,24 @@ class _MissionsScreenState extends State<MissionsScreen>
   bool _loading = true;
   String? _error;
   String? _startingAssignmentId;
+  List<PracticeCocProgress> _practiceProgress = const [];
+  String? _practiceError;
+  Future<void> _loadPracticeProgress() async {
+    try {
+      final progress = await PracticeProgressService().getProgress();
+      if (mounted)
+        setState(() {
+          _practiceProgress = progress;
+          _practiceError = null;
+        });
+    } catch (_) {
+      if (mounted)
+        setState(() {
+          _practiceProgress = const [];
+          _practiceError = MissionContentData.practiceProgressUnavailable;
+        });
+    }
+  }
 
   @override
   Set<LearnerRealtimeDomain> get realtimeDomains => const {
@@ -45,13 +68,16 @@ class _MissionsScreenState extends State<MissionsScreen>
       };
 
   @override
-  Future<void> refreshFromRealtime() => _loadAssignments();
+  Future<void> refreshFromRealtime() async {
+    await Future.wait([_loadAssignments(), _loadPracticeProgress()]);
+  }
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
     _loadAssignments();
+    unawaited(_loadPracticeProgress());
   }
 
   @override
@@ -151,6 +177,7 @@ class _MissionsScreenState extends State<MissionsScreen>
   Future<void> _launchPractice(Mission mission) async {
     _assessmentService.abandonLocalSession();
     await MissionLauncher.launch(context, mission);
+    await _loadPracticeProgress();
   }
 
   Future<void> _openResource(LearningResource resource) async {
@@ -446,39 +473,55 @@ class _MissionsScreenState extends State<MissionsScreen>
     final missions = MissionsData.getAllMissions();
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
-      itemCount: missions.length + 1,
+      itemCount: missions.length + 5,
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, index) {
         if (index == 0) {
-          return Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: AppTheme.backgroundPaleBlue,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: AppTheme.primaryBlue.withValues(alpha: 0.18),
+          return Column(children: [
+            if (_practiceError != null)
+              ListTile(
+                  title: Text(_practiceError!),
+                  trailing: IconButton(
+                      tooltip: MissionContentData.practiceQuizRetry,
+                      onPressed: _loadPracticeProgress,
+                      icon: const Icon(Icons.refresh))),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.backgroundPaleBlue,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: AppTheme.primaryBlue.withValues(alpha: 0.18),
+                ),
               ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.info_outline, color: AppTheme.primaryBlue),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Practice activities provide local feedback only. They do not create an official score, competency decision, XP, points, or class result.',
-                    style: AppTheme.bodySmall.copyWith(
-                      height: 1.45,
-                      color: AppTheme.textDark,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.info_outline, color: AppTheme.primaryBlue),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      MissionContentData.practiceQuizNotice,
+                      style: AppTheme.bodySmall.copyWith(
+                        height: 1.45,
+                        color: AppTheme.textDark,
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          );
+                ],
+              ),
+            )
+          ]);
         }
 
-        final mission = missions[index - 1];
+        final group = (index - 1) ~/ 6;
+        final position = (index - 1) % 6;
+        if (position == 0)
+          return PracticeProgressPanel(
+              coc: 'coc${group + 1}', onChanged: _loadPracticeProgress);
+        final mission = missions[group * 5 + position - 1];
+        final unlocked =
+            _practiceProgress.any((p) => p.coc == mission.cocId && p.unlocked);
         return Card(
           elevation: 0,
           color: AppTheme.cardWhite,
@@ -517,14 +560,17 @@ class _MissionsScreenState extends State<MissionsScreen>
             subtitle: Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Text(
-                '${mission.missionCode} - Practice',
+                unlocked
+                    ? '${mission.missionCode} - Practice'
+                    : MissionContentData.practiceLockedMessage,
                 style: AppTheme.bodySmall.copyWith(
                   color: AppTheme.textMedium,
                 ),
               ),
             ),
-            trailing: const Icon(Icons.chevron_right_rounded),
-            onTap: () => _launchPractice(mission),
+            trailing: Icon(
+                unlocked ? Icons.chevron_right_rounded : Icons.lock_outline),
+            onTap: unlocked ? () => _launchPractice(mission) : null,
           ),
         );
       },

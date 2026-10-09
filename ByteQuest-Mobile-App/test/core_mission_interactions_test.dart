@@ -428,7 +428,7 @@ void main() {
     await tester
         .tap(find.byKey(const ValueKey('placement-orientation-notch_left')));
     await tester.pump();
-    await tester.tap(find.widgetWithText(FilledButton, 'Place'));
+    await tester.tap(find.byKey(const ValueKey('placement-place')));
     await tester.pump();
 
     expect(actions, hasLength(1));

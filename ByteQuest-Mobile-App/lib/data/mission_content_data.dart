@@ -12,6 +12,35 @@ class HardwareItem {
 /// Mission Content Data
 /// Contains questions, components, steps, and scenarios for all missions
 class MissionContentData {
+  static const practiceProgressTitle = 'Virtual practice progression';
+  static const practiceProgressUnavailable =
+      'Practice access could not be verified. Check your connection and retry.';
+  static const practiceLockedMessage =
+      'Complete the earlier COCs and pass their practice quizzes to unlock this workspace.';
+  static const practiceSavedMessage =
+      'Practice work verified and saved. Complete all five missions, then take the COC quiz.';
+  static const practiceSubmitFailed =
+      'The server could not verify this work. Review the measured results and retry; your progress is saved.';
+  static const assessmentSubmitFailed =
+      'Evidence could not be submitted. Your mission progress is preserved.';
+  static const practiceQuizTitle = 'COC practice quiz';
+  static const practiceQuizNotice =
+      'Pass with at least 80% to complete this practice COC. This learning score is separate from instructor-released assessment results.';
+  static const practiceQuizStart = 'Take or resume COC quiz';
+  static const practiceQuizSubmit = 'Submit quiz';
+  static const practiceQuizRetry = 'Try again';
+  static const practiceQuizFailed =
+      'Quiz unavailable. Your saved answers are preserved. Retry when connected.';
+  static const practiceQuizFallback = 'Using the TESDA-aligned question bank.';
+  static const practiceQuizAi =
+      'Questions generated from the TESDA-aligned practice bank.';
+  static const practiceQuizPassed = 'Practice quiz passed. COC progress saved.';
+  static const practiceQuizNeedsReview =
+      'Review the explanations and practice again before retrying.';
+  static const placementComponentsLabel = 'Components and devices';
+  static const placementDestinationsLabel = 'Installation locations';
+  static const placementOrientationLabel = 'Orientation';
+  static const placementConfirmLabel = 'Install selected component';
   static const equipmentStateLabel = 'Equipment state';
   static const equipmentOperationsLabel = 'Operate the equipment';
   static const equipmentOutputLabel = 'Measured simulation output';
