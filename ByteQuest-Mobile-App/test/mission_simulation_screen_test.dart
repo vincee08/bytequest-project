@@ -79,6 +79,16 @@ void main() {
         await tapEquipmentControl(tester, next);
         expect(
             controller.state.currentPhaseId, definition.phases[index + 1].id);
+        final controlsScrollable = find
+            .descendant(
+              of: find.byKey(const ValueKey('mission-controls-scroll')),
+              matching: find.byType(Scrollable),
+            )
+            .first;
+        expect(
+            tester.state<ScrollableState>(controlsScrollable).position.pixels,
+            0,
+            reason: 'New phase controls must start with visible components');
       }
       expect(find.byType(EvidenceReviewPanel), findsOneWidget);
       expect(controller.state.pendingEvidence, isEmpty);

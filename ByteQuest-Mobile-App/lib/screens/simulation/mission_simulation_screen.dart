@@ -85,6 +85,7 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
   var _accessVerified = false;
   String? _restoreFailure;
   String? _technicalFeedback;
+  String? _workspaceFeedback;
 
   MissionRuntimeState get _state => _controller.state;
 
@@ -172,6 +173,7 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
       await _controller.reset(_initialState);
       _restoreFailure = null;
       _technicalFeedback = null;
+      _workspaceFeedback = null;
       _submitted = false;
     } catch (_) {
       _restoreFailure =
@@ -264,6 +266,8 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
               MissionContentData.saveProgressFailedMessage);
       })),
       hotspotStates: _equipmentHotspots(),
+      saving: _writing,
+      feedback: _workspaceFeedback,
       enabled: !_writing &&
           !_submitting &&
           !_submitted &&
@@ -285,7 +289,10 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
-                  final controls = _buildControls(phase, phaseIndex);
+                  final controls = KeyedSubtree(
+                    key: ValueKey('mission-controls-phase-${phase.id}'),
+                    child: _buildControls(phase, phaseIndex),
+                  );
                   final usesCompactLandscape = constraints.maxWidth >= 600 &&
                       constraints.maxWidth > constraints.maxHeight;
                   if (constraints.maxWidth >= 720 || usesCompactLandscape) {
@@ -487,7 +494,12 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
       target: target,
       value: value,
     );
-    setState(() => _writing = true);
+    setState(() {
+      _writing = true;
+      _workspaceFeedback = actionValue['simulation_valid'] == false
+          ? actionValue['simulation_feedback'] as String?
+          : null;
+    });
     try {
       await _controller.dispatch(
         phaseId: phase.id,
@@ -559,7 +571,10 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
     final current = widget.definition.phases[phaseIndex];
     if (!MissionPhaseCompletionPolicy.canAdvance(current, _state)) return;
     final next = widget.definition.phases[phaseIndex + 1];
-    setState(() => _writing = true);
+    setState(() {
+      _writing = true;
+      _workspaceFeedback = null;
+    });
     try {
       await _controller.dispatch(
         phaseId: current.id,
@@ -605,7 +620,10 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
   Future<void> _revisitPhase(String destination) async {
     if (_writing || !_hasKnownPhase(destination)) return;
     final phase = widget.definition.phases[_phaseIndex];
-    setState(() => _writing = true);
+    setState(() {
+      _writing = true;
+      _workspaceFeedback = null;
+    });
     try {
       await _controller.dispatch(
           phaseId: phase.id,

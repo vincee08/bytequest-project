@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../data/mission_content_data.dart';
+import '../components/scrollable_equipment_draggable.dart';
 import '../components/tool_tray.dart';
 import '../runtime/mission_runtime_models.dart';
 import '../templates/authoritative_mission_contract.dart';
@@ -78,9 +79,9 @@ class _ConnectionInteractionState extends State<ConnectionInteraction> {
                   button: true,
                   selected: _sourceId == source.id,
                   enabled: widget.enabled,
-                  child: Draggable<String>(
+                  child: ScrollableEquipmentDraggable(
                     data: source.id,
-                    maxSimultaneousDrags: widget.enabled ? 1 : 0,
+                    enabled: widget.enabled,
                     feedback: Material(child: Chip(label: Text(source.label))),
                     child: ChoiceChip(
                       key: ValueKey('connection-source-${source.id}'),

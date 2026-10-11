@@ -7,6 +7,55 @@ ELCCSS 213-0119, revision 00, 03/01/17. Source SHA-256:
 The original competency mapping remains in
 `CSS_NC_II_PRACTICE_IMPLEMENTATION_2026-10-09.md`.
 
+## COC1 drag repair follow-up
+
+The learner reported that both the canvas and lower-panel installation and
+connection controls would not accept drags. Device reproduction found that a
+second drag during an evidence save moved the canvas because its draggable was
+disabled while panning stayed active. A regression reproduced that camera shift
+before the fix. Lower-panel parts also required a separate, easily missed
+orientation selection after a drop, and later destinations extended below the
+visible controls.
+
+The shared workspace now freezes camera gestures during saving and displays
+`Saving action…`. Placement/connection gestures retain stable work locations;
+inspection supports camera panning, with zoom and Fit controls available. Both
+installation areas use one alignment dialog and record a drag only after the
+learner selects an orientation. Cancelling the dialog records no action. The
+shared lower-panel draggable scrolls at the top/bottom edge while held, making
+offscreen installation and cable destinations reachable. New phases start their
+controls at the top. Technical rejection messages appear inside the workspace
+and do not intercept touches or cover Continue.
+
+Final verification passes dependency resolution, analyzer **0 errors / 0
+warnings / 212 existing infos**, **370/370 Flutter tests**, Android debug APK
+build and dashboard TypeScript/lint/production build. New tests cover the
+save-time gesture regression, all six COC1 M2 assembly parts, both internal
+cables, all four COC1 M4 peripheral cables, lower-panel orientation acceptance
+and cancellation, and actual offscreen drops in a 300dp controls viewport.
+The existing all-twenty touch-driven work orders now also check phase-scroll
+reset. Portrait/landscape/2x-text and COC4 interaction checks pass.
+
+On Android API 35, real gestures installed all six COC1 M2 parts with explicit
+alignment. A lower-panel power-supply drag auto-scrolled to its destination and
+opened the alignment dialog. ATX power and SATA data cable drags saved the two
+endpoint pairs. Hosted `practice_mission_actions` contains exactly six assembly
+drag records and two cable drag records for these phases, with their existing
+raw action IDs and orientation/input-method fields. The saved runtime has eight
+placements (six parts plus two preparation items), both connections, phase
+`coc1_m2_p3` and no pending evidence. Hosted evidence totals 27 records including
+prior activity; mission/COC completions remain zero.
+
+Latest installed APK SHA-256:
+`D0E72582869815F58D0C3F15679D84440280E97DE3E120B95B378D2D6E3DCE29`.
+The installed package hash matches the build. Reinstallation, force-stop/relaunch
+and mission reentry preserve login, all eight placements, both connections and
+phase 3, with the hosted evidence count unchanged at 27. The emulator is open on
+COC1 M2 Connect ports. This follow-up supersedes the APK
+hash and device evidence counts in the earlier rollout section below. Existing
+Supabase contracts/migrations and the Vercel practice API remain current; this
+repair changes Flutter interaction behavior and requires a mobile rebuild.
+
 ## Learner practice behavior
 
 All fifteen COC1–COC3 work orders now start with required equipment deployment.

@@ -41,6 +41,7 @@ class MissionContentData {
   static const workspaceBuildLabel = 'Place equipment';
   static const workspaceInspectLabel = 'Inspect';
   static const workspaceConnectLabel = 'Connect ports';
+  static const workspaceSavingLabel = 'Saving action…';
   static const workspaceBuildHint =
       'Drag equipment to a work location. You can also select equipment, then tap its destination.';
   static const workspaceConnectHint =

@@ -2,6 +2,20 @@
 
 > Read this file with `AGENTS.md`, `README.md`, and `bytequest.md` before changing the repository.
 
+## Current continuation - 2026-10-11 COC1 drag repair
+
+This section supersedes the APK and device-check status below. Continue on the
+user-selected `new` branch, tracking `bytequest-project/new`.
+
+- Reproduced the reported problem in both installation areas. During evidence synchronization, disabled draggables let the canvas pan instead of accepting a drop. Lower-panel keyed parts silently required an orientation selection farther down the controls, and offscreen destinations were unreachable during a drag.
+- The shared workspace freezes camera gestures during saving and distinguishes equipment placement/connection gestures from inspection panning. A visible, accessible `Saving action…` status identifies the wait. Existing zoom/Fit controls remain available.
+- Canvas and lower-panel installation now share the explicit alignment dialog; selecting an orientation records one drag action, and cancelling records none. A reusable edge-scrolling draggable makes lower-panel part and cable destinations reachable. Changing phases starts controls at the top. Technical rejection messages appear inside the workspace without covering Continue.
+- Preserved existing action IDs/payloads, backend evaluation, evidence/resume services and COC4 behavior. This is a Flutter deployment; hosted contracts, Supabase migrations and Vercel API source are unchanged.
+- Final gates PASS: dependency resolution; mobile analyzer **0 errors / 0 warnings / 212 existing infos**; **370/370 Flutter tests**; Android debug APK build; dashboard TypeScript/lint/production build. Regression coverage includes a previously failing save-time pan gesture, all six assembly drops, both internal cables, all four peripheral cables, alignment cancellation, offscreen lower-panel part/cable drops and phase-scroll reset across all twenty touch-driven work orders.
+- Real Android API 35 gestures installed all six COC1 M2 components with explicit alignment. The lower-panel power-supply drag auto-scrolled to its destination. Both ATX power and SATA data connections saved to hosted `practice_mission_actions` with `input_method=drag`; six assembly records and two cable records are present exactly once. The saved runtime contains all eight placements (including two preparation items), both endpoint pairs, phase `coc1_m2_p3` and zero pending evidence.
+- Final installed APK SHA-256: `D0E72582869815F58D0C3F15679D84440280E97DE3E120B95B378D2D6E3DCE29`, confirmed against the installed package. Reinstallation, force-stop/relaunch and mission reentry retained login, all eight placements, both connections and phase 3. Hosted evidence stayed at **27** records, including earlier activity, with exactly six assembly drags and two cable drags; mission and COC completions remain **zero**. No completion was fabricated. The emulator is open on COC1 M2 Connect ports. See the repair section in `docs/CSS_DRAG_WORKSPACE_UPDATE_2026-10-11.md`.
+- Preserve the user's untracked PDF and dashboard `package-lock.json`. `.tmp/coc1-drag-device.ps1` is an ignored, credential-free device QA helper, not an application asset. Full hosted mission/quiz completion, independent TalkBack/device-matrix acceptance and successful live AI generation remain separate checks.
+
 ## Current continuation - 2026-10-11 practice canvas follow-up
 
 This section supersedes the practice canvas/contracts status below. The user's

@@ -13,6 +13,75 @@ import 'package:flutter_test/flutter_test.dart';
 import 'support/equipment_practice_driver.dart';
 
 void main() {
+  testWidgets('a drag while saving cannot move the equipment out of reach',
+      (tester) async {
+    final driver =
+        EquipmentPracticeDriver(MissionSimulationDefinitions.byId('coc1_m2'));
+    await tester.pumpWidget(
+        _host(driver, driver.definition.phases.first, enabled: false));
+    final panel = MissionEquipmentSimulator.map(
+        driver.definition.phases.first.presentation['equipment']['placement']);
+    final source =
+        MissionEquipmentSimulator.maps(panel['items']).first['id'] as String;
+    await _drag(tester, source, '${source}_position');
+    final viewer =
+        tester.widget<InteractiveViewer>(find.byType(InteractiveViewer));
+    expect(viewer.transformationController!.value, Matrix4.identity());
+    expect(driver.actions, isEmpty);
+  });
+
+  testWidgets('all six assembly parts can be dragged in a phone-sized canvas',
+      (tester) async {
+    tester.view.physicalSize = const Size(412, 915);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final driver =
+        EquipmentPracticeDriver(MissionSimulationDefinitions.byId('coc1_m2'));
+    driver.complete(driver.definition.phases.first);
+    final phase = driver.definition.phases[1];
+    final initialActions = driver.actions.length;
+    await tester.pumpWidget(_host(driver, phase, height: 330));
+    for (final part in practicePlacements.entries.take(6)) {
+      await _drag(tester, part.key, part.value);
+      await tester
+          .tap(find.byKey(const ValueKey('workspace-orientation-aligned')));
+      await tester.pumpAndSettle();
+      expect(driver.state.placements[part.key], part.value);
+    }
+    expect(driver.actions.length - initialActions, 6);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final mission in ['coc1_m2', 'coc1_m4']) {
+    testWidgets('$mission connects every cable in a phone-sized canvas',
+        (tester) async {
+      tester.view.physicalSize = const Size(412, 915);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final driver =
+          EquipmentPracticeDriver(MissionSimulationDefinitions.byId(mission));
+      for (final phase in driver.definition.phases.take(2)) {
+        driver.complete(phase);
+      }
+      final phase = driver.definition.phases[2];
+      await tester.pumpWidget(_host(driver, phase, height: 330));
+      final panel = phase.resolvedInteraction == InteractionFamily.connect
+          ? phase.presentation
+          : MissionEquipmentSimulator.map(
+              phase.presentation['equipment']['connection']);
+      for (final source in MissionEquipmentSimulator.maps(panel['sources'])) {
+        final id = source['id'] as String;
+        final destination = practiceConnections[id]!;
+        await _drag(tester, id, destination);
+        expect(driver.state.connectedNodePairs, contains('$id>$destination'));
+        expect(driver.actions.last.value['input_method'], 'drag');
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   for (final definition
       in MissionSimulationDefinitions.all.where((d) => d.cocId != 'coc4')) {
     testWidgets(
@@ -183,7 +252,7 @@ Future<void> _drag(
 }
 
 Widget _host(EquipmentPracticeDriver driver, MissionPhaseDefinition phase,
-        {double textScale = 1}) =>
+        {double textScale = 1, bool enabled = true, double? height}) =>
     MaterialApp(
       home: Scaffold(
           body: StatefulBuilder(
@@ -191,17 +260,21 @@ Widget _host(EquipmentPracticeDriver driver, MissionPhaseDefinition phase,
                     data: MediaQuery.of(context).copyWith(
                         textScaler: TextScaler.linear(textScale),
                         disableAnimations: true),
-                    child: EquipmentWorkspace(
-                      definition: driver.definition,
-                      phase: phase,
-                      state: driver.state,
-                      hotspotStates: driver.state.hotspotStates,
-                      enabled: true,
-                      onCameraChanged: (_, __) {},
-                      onAction: (type, target, value) async {
-                        driver.act(phase, type, target, value);
-                        refresh(() {});
-                      },
+                    child: SizedBox(
+                      height: height,
+                      child: EquipmentWorkspace(
+                        definition: driver.definition,
+                        phase: phase,
+                        state: driver.state,
+                        hotspotStates: driver.state.hotspotStates,
+                        enabled: enabled,
+                        saving: !enabled,
+                        onCameraChanged: (_, __) {},
+                        onAction: (type, target, value) async {
+                          driver.act(phase, type, target, value);
+                          refresh(() {});
+                        },
+                      ),
                     ),
                   ))),
     );

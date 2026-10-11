@@ -6,6 +6,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../data/mission_content_data.dart';
 import '../runtime/mission_equipment_simulator.dart';
 import '../runtime/mission_runtime_models.dart';
+import 'component_orientation_dialog.dart';
 import 'simulation_scene.dart';
 import 'tool_tray.dart';
 
@@ -24,6 +25,8 @@ class EquipmentWorkspace extends StatefulWidget {
     required this.onCameraChanged,
     required this.hotspotStates,
     required this.enabled,
+    this.saving = false,
+    this.feedback,
   });
 
   final MissionSimulationDefinition definition;
@@ -33,6 +36,8 @@ class EquipmentWorkspace extends StatefulWidget {
   final void Function(double scale, Offset offset) onCameraChanged;
   final Map<String, HotspotVisualState> hotspotStates;
   final bool enabled;
+  final bool saving;
+  final String? feedback;
 
   @override
   State<EquipmentWorkspace> createState() => _EquipmentWorkspaceState();
@@ -103,12 +108,17 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                       child: Semantics(
                         button: true,
                         selected: mode == option,
-                        label: _label(option),
+                        liveRegion: widget.saving && mode == option,
+                        label: widget.saving && mode == option
+                            ? MissionContentData.workspaceSavingLabel
+                            : _label(option),
                         child: ChoiceChip(
                           key: ValueKey('workspace-mode-${option.name}'),
                           materialTapTargetSize: MaterialTapTargetSize.padded,
                           selected: mode == option,
-                          label: Text(_label(option)),
+                          label: Text(widget.saving && mode == option
+                              ? MissionContentData.workspaceSavingLabel
+                              : _label(option)),
                           onSelected: widget.enabled
                               ? (_) => setState(() {
                                     _mode = option;
@@ -123,103 +133,138 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
             ),
           ),
         Expanded(
-          child: SimulationScene(
-            scene: scene,
-            compactToolbar: mode != _WorkspaceMode.inspect,
-            initialCameraScale: widget.state.cameraScale,
-            initialCameraOffset:
-                Offset(widget.state.cameraOffsetX, widget.state.cameraOffsetY),
-            onCameraChanged: widget.onCameraChanged,
-            interactionHint: switch (mode) {
-              _WorkspaceMode.place => MissionContentData.workspaceBuildHint,
-              _WorkspaceMode.connect => MissionContentData.workspaceConnectHint,
-              _WorkspaceMode.inspect => MissionContentData.workspaceInspectHint,
-            },
-            hotspotStates: {
-              ...widget.hotspotStates,
-              if (mode != _WorkspaceMode.inspect)
-                for (final destination in destinations)
-                  if (widget.hotspotStates[destination['id']] != null)
-                    'destination:${destination['id']}':
-                        widget.hotspotStates[destination['id']]!,
-              if (_selected != null) _selected!: HotspotVisualState.selected,
-            },
-            connectedNodePairs: mode == _WorkspaceMode.inspect
-                ? widget.state.connectedNodePairs
-                : mode == _WorkspaceMode.connect
-                    ? {
-                        for (final pair in widget.state.connectedNodePairs)
-                          '${pair.split('>').first}>destination:${pair.split('>').last}',
-                      }
-                    : const {},
-            enabled: widget.enabled && !_choosingOrientation,
-            onObjectSelected: (id) {
-              if (mode == _WorkspaceMode.inspect) {
-                unawaited(widget.onAction(
-                    'object_inspected', id, const {'input_method': 'scene'}));
-              } else if (id.startsWith('destination:')) {
-                if (_selected != null) {
-                  unawaited(_apply(mode, _selected!,
-                      id.substring('destination:'.length), sources, 'tap'));
-                }
-              } else if (sources.any((source) => source['id'] == id)) {
-                setState(() => _selected = id);
-              }
-            },
-            objectBuilder: mode == _WorkspaceMode.inspect
-                ? null
-                : (object, hotspot) {
-                    final equipmentId =
-                        object.metadata['equipmentId'] as String;
-                    if (object.metadata['destination'] != true) {
-                      return Semantics(
-                        label:
-                            MissionContentData.workspaceDragLabel(object.label),
-                        child: Draggable<String>(
-                          key: ValueKey('workspace-source-$equipmentId'),
-                          data: equipmentId,
-                          maxSimultaneousDrags:
-                              widget.enabled && !_choosingOrientation ? 1 : 0,
-                          feedback: Material(
-                            elevation: 2,
-                            borderRadius: AppTheme.radiusSm,
-                            child: Padding(
-                              padding: const EdgeInsets.all(12),
-                              child: Text(object.label,
-                                  style: AppTheme.labelLarge),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              SimulationScene(
+                scene: scene,
+                compactToolbar: mode != _WorkspaceMode.inspect,
+                panEnabled: widget.enabled && mode == _WorkspaceMode.inspect,
+                initialCameraScale: widget.state.cameraScale,
+                initialCameraOffset: Offset(
+                    widget.state.cameraOffsetX, widget.state.cameraOffsetY),
+                onCameraChanged: widget.onCameraChanged,
+                interactionHint: switch (mode) {
+                  _WorkspaceMode.place => MissionContentData.workspaceBuildHint,
+                  _WorkspaceMode.connect =>
+                    MissionContentData.workspaceConnectHint,
+                  _WorkspaceMode.inspect =>
+                    MissionContentData.workspaceInspectHint,
+                },
+                hotspotStates: {
+                  ...widget.hotspotStates,
+                  if (mode != _WorkspaceMode.inspect)
+                    for (final destination in destinations)
+                      if (widget.hotspotStates[destination['id']] != null)
+                        'destination:${destination['id']}':
+                            widget.hotspotStates[destination['id']]!,
+                  if (_selected != null)
+                    _selected!: HotspotVisualState.selected,
+                },
+                connectedNodePairs: mode == _WorkspaceMode.inspect
+                    ? widget.state.connectedNodePairs
+                    : mode == _WorkspaceMode.connect
+                        ? {
+                            for (final pair in widget.state.connectedNodePairs)
+                              '${pair.split('>').first}>destination:${pair.split('>').last}',
+                          }
+                        : const {},
+                enabled: widget.enabled && !_choosingOrientation,
+                onObjectSelected: (id) {
+                  if (mode == _WorkspaceMode.inspect) {
+                    unawaited(widget.onAction('object_inspected', id,
+                        const {'input_method': 'scene'}));
+                  } else if (id.startsWith('destination:')) {
+                    if (_selected != null) {
+                      unawaited(_apply(mode, _selected!,
+                          id.substring('destination:'.length), sources, 'tap'));
+                    }
+                  } else if (sources.any((source) => source['id'] == id)) {
+                    setState(() => _selected = id);
+                  }
+                },
+                objectBuilder: mode == _WorkspaceMode.inspect
+                    ? null
+                    : (object, hotspot) {
+                        final equipmentId =
+                            object.metadata['equipmentId'] as String;
+                        if (object.metadata['destination'] != true) {
+                          return Semantics(
+                            label: MissionContentData.workspaceDragLabel(
+                                object.label),
+                            child: Draggable<String>(
+                              key: ValueKey('workspace-source-$equipmentId'),
+                              data: equipmentId,
+                              maxSimultaneousDrags:
+                                  widget.enabled && !_choosingOrientation
+                                      ? 1
+                                      : 0,
+                              feedback: Material(
+                                elevation: 2,
+                                borderRadius: AppTheme.radiusSm,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(12),
+                                  child: Text(object.label,
+                                      style: AppTheme.labelLarge),
+                                ),
+                              ),
+                              childWhenDragging:
+                                  Opacity(opacity: .35, child: hotspot),
+                              child: hotspot,
+                            ),
+                          );
+                        }
+                        return Semantics(
+                          label: MissionContentData.workspaceDropLabel(
+                              object.label),
+                          child: DragTarget<String>(
+                            key: ValueKey('workspace-destination-$equipmentId'),
+                            onWillAcceptWithDetails: (details) =>
+                                widget.enabled &&
+                                !_choosingOrientation &&
+                                sources.any(
+                                    (source) => source['id'] == details.data),
+                            onAcceptWithDetails: (details) => unawaited(_apply(
+                                mode,
+                                details.data,
+                                equipmentId,
+                                sources,
+                                'drag')),
+                            builder: (_, candidates, __) => DecoratedBox(
+                              decoration: BoxDecoration(
+                                border: candidates.isEmpty
+                                    ? null
+                                    : Border.all(
+                                        color: AppTheme.primaryBlue, width: 3),
+                                borderRadius: AppTheme.radiusSm,
+                              ),
+                              child: hotspot,
                             ),
                           ),
-                          childWhenDragging:
-                              Opacity(opacity: .35, child: hotspot),
-                          child: hotspot,
-                        ),
-                      );
-                    }
-                    return Semantics(
-                      label:
-                          MissionContentData.workspaceDropLabel(object.label),
-                      child: DragTarget<String>(
-                        key: ValueKey('workspace-destination-$equipmentId'),
-                        onWillAcceptWithDetails: (details) =>
-                            widget.enabled &&
-                            !_choosingOrientation &&
-                            sources
-                                .any((source) => source['id'] == details.data),
-                        onAcceptWithDetails: (details) => unawaited(_apply(
-                            mode, details.data, equipmentId, sources, 'drag')),
-                        builder: (_, candidates, __) => DecoratedBox(
-                          decoration: BoxDecoration(
-                            border: candidates.isEmpty
-                                ? null
-                                : Border.all(
-                                    color: AppTheme.primaryBlue, width: 3),
-                            borderRadius: AppTheme.radiusSm,
-                          ),
-                          child: hotspot,
-                        ),
+                        );
+                      },
+              ),
+              if (widget.feedback != null)
+                Positioned(
+                  left: 8,
+                  right: 8,
+                  top: 56,
+                  child: IgnorePointer(
+                    child: Semantics(
+                      liveRegion: true,
+                      label: widget.feedback,
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        color: AppTheme.softBlueAccent,
+                        child: Text(widget.feedback!,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTheme.bodySmall),
                       ),
-                    );
-                  },
+                    ),
+                  ),
+                ),
+            ],
           ),
         ),
       ],
@@ -294,24 +339,8 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
           MissionEquipmentSimulator.strings(part['orientations']);
       if (orientations.isNotEmpty) {
         setState(() => _choosingOrientation = true);
-        orientation = await showDialog<String>(
-          context: context,
-          builder: (dialogContext) => SimpleDialog(
-            title: const Text(MissionContentData.workspaceOrientationTitle),
-            children: [
-              const Padding(
-                  padding: EdgeInsets.all(16),
-                  child: Text(MissionContentData.workspaceOrientationHint)),
-              for (final value in orientations)
-                SimpleDialogOption(
-                  key: ValueKey('workspace-orientation-$value'),
-                  padding: const EdgeInsets.all(16),
-                  onPressed: () => Navigator.of(dialogContext).pop(value),
-                  child: Text(value.replaceAll('_', ' ')),
-                ),
-            ],
-          ),
-        );
+        orientation =
+            await showComponentOrientationDialog(context, orientations);
         if (!mounted) return;
         setState(() => _choosingOrientation = false);
         if (orientation == null || widget.phase.id != phaseId) return;

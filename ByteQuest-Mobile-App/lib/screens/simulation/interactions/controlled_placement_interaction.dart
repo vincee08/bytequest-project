@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../data/mission_content_data.dart';
+import '../components/component_orientation_dialog.dart';
+import '../components/scrollable_equipment_draggable.dart';
 import '../components/tool_tray.dart';
 import '../runtime/mission_runtime_models.dart';
 import 'multi_select_interaction.dart';
@@ -35,6 +37,7 @@ class _ControlledPlacementInteractionState
   String? _destinationId;
   String? _orientation;
   bool _reviewingCompletedControls = false;
+  bool _choosingOrientation = false;
 
   @override
   void didUpdateWidget(covariant ControlledPlacementInteraction oldWidget) {
@@ -238,9 +241,9 @@ class _ControlledPlacementInteractionState
                     })
                 : null));
     if (widget.state.missionId.startsWith('coc4')) return control;
-    return Draggable<String>(
+    return ScrollableEquipmentDraggable(
         data: item.id,
-        maxSimultaneousDrags: widget.enabled ? 1 : 0,
+        enabled: widget.enabled && !_choosingOrientation,
         feedback: Material(child: Chip(label: Text(item.label))),
         child: control);
   }
@@ -257,19 +260,41 @@ class _ControlledPlacementInteractionState
     if (widget.state.missionId.startsWith('coc4')) return control;
     return DragTarget<String>(
         onWillAcceptWithDetails: (details) =>
-            widget.enabled && items.any((i) => i.id == details.data),
-        onAcceptWithDetails: (details) {
-          setState(() {
-            _itemId = details.data;
-            _destinationId = destination.id;
-            _orientation = null;
-          });
-          final part = items.firstWhere((i) => i.id == details.data);
-          if ((part.data['orientations'] as List? ?? []).isEmpty) {
-            _place(items, destinations, inputMethod: 'drag');
-          }
-        },
+            widget.enabled &&
+            !_choosingOrientation &&
+            items.any((i) => i.id == details.data),
+        onAcceptWithDetails: (details) =>
+            unawaited(_drop(details.data, destination.id, items, destinations)),
         builder: (_, __, ___) => control);
+  }
+
+  Future<void> _drop(String itemId, String destinationId,
+      List<InteractionItem> items, List<InteractionItem> destinations) async {
+    if (!widget.enabled || _choosingOrientation) return;
+    final phaseId = widget.phase.id;
+    final part = items.firstWhere((item) => item.id == itemId);
+    final orientations = (part.data['orientations'] as List? ?? const [])
+        .whereType<String>()
+        .toList(growable: false);
+    setState(() {
+      _itemId = itemId;
+      _destinationId = destinationId;
+      _orientation = null;
+      _choosingOrientation = orientations.isNotEmpty;
+    });
+    if (orientations.isNotEmpty) {
+      final orientation =
+          await showComponentOrientationDialog(context, orientations);
+      if (!mounted) return;
+      setState(() => _choosingOrientation = false);
+      if (!widget.enabled ||
+          widget.phase.id != phaseId ||
+          orientation == null) {
+        return;
+      }
+      setState(() => _orientation = orientation);
+    }
+    _place(items, destinations, inputMethod: 'drag');
   }
 
   void _place(List<InteractionItem> items, List<InteractionItem> destinations,

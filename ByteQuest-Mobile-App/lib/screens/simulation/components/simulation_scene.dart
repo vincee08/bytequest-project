@@ -24,6 +24,7 @@ class SimulationScene extends StatefulWidget {
   final Set<String> inspectedObjectIds;
   final Set<String> connectedNodePairs;
   final bool enabled;
+  final bool panEnabled;
   final ValueChanged<String> onObjectSelected;
   final Widget? backgroundRenderer;
   final List<Widget> statusOverlays;
@@ -43,6 +44,7 @@ class SimulationScene extends StatefulWidget {
     this.inspectedObjectIds = const {},
     this.connectedNodePairs = const {},
     this.enabled = true,
+    this.panEnabled = true,
     required this.onObjectSelected,
     this.backgroundRenderer,
     this.statusOverlays = const [],
@@ -138,6 +140,7 @@ class _SimulationSceneState extends State<SimulationScene> {
               inspectedObjectIds: widget.inspectedObjectIds,
               connectedNodePairs: widget.connectedNodePairs,
               enabled: widget.enabled,
+              panEnabled: widget.panEnabled,
               onObjectSelected: _selectObject,
               backgroundRenderer: widget.backgroundRenderer,
               statusOverlays: widget.statusOverlays,
@@ -324,6 +327,7 @@ class _SceneViewport extends StatelessWidget {
   final Set<String> inspectedObjectIds;
   final Set<String> connectedNodePairs;
   final bool enabled;
+  final bool panEnabled;
   final ValueChanged<String> onObjectSelected;
   final Widget? backgroundRenderer;
   final List<Widget> statusOverlays;
@@ -338,6 +342,7 @@ class _SceneViewport extends StatelessWidget {
     required this.inspectedObjectIds,
     required this.connectedNodePairs,
     required this.enabled,
+    required this.panEnabled,
     required this.onObjectSelected,
     required this.backgroundRenderer,
     required this.statusOverlays,
@@ -379,8 +384,8 @@ class _SceneViewport extends StatelessWidget {
               minScale: 1,
               maxScale: 3,
               boundaryMargin: const EdgeInsets.all(96),
-              panEnabled: true,
-              scaleEnabled: true,
+              panEnabled: panEnabled,
+              scaleEnabled: enabled,
               child: SizedBox.fromSize(
                 size: viewport,
                 child: FittedBox(
