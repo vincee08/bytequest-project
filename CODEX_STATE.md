@@ -2,6 +2,15 @@
 
 > Read this file with `AGENTS.md`, `README.md`, and `bytequest.md` before changing the repository.
 
+## Current continuation - 2026-10-11
+
+- At the user's request, fast-forwarded local `new` from `64441c4` to `64dcbac` (`Add TESDA-aligned COC practice progression and free AI quizzes`). All 41 files from `Dro-branch` are included, with the original commit and history preserved. Application source equality and inclusion of the `Dro-branch` head were verified; the implementation was not recreated.
+- The integrated features include the extended 20 TESDA-aligned practice work orders, server-owned COC1 -> COC2 -> COC3 -> COC4 progression, five verified missions plus a server-graded quiz per COC, and free OpenRouter wording variants with a grounded fallback bank. The 2026-10-09 implementation and acceptance limits below still apply.
+- Fresh mobile gates PASS: dependency resolution; analyzer with 0 errors, 0 warnings and 212 existing infos; full Flutter suite 338/338; Android debug APK build. Existing Kotlin/plugin migration and SDK XML warnings remain non-blocking.
+- Fresh dashboard gates PASS: TypeScript, lint with zero warnings/errors, production build with 24/24 generated pages, and 13/13 practice-quiz/provider tests. Local database gates PASS: PostgreSQL rollback suite 8 files / 17 assertions, all-20 raw mission replays and four sequential quiz completions with resume/failure/grading/idempotency/RLS/tampering checks, and database lint with no findings. No hosted migration or fresh device/HTTP/live-provider acceptance run is claimed.
+- Branch `new` continues to track `bytequest-project/new`. The branch update is local; no remote push or hosted deployment was performed. The user's untracked PDF and dashboard `package-lock.json` are preserved.
+- Both new migrations are already recorded on the local Supabase stack. Hosted activation still requires the reviewed two-migration rollout, dashboard API deployment and the mobile practice API endpoint configuration described in `docs/CSS_NC_II_PRACTICE_IMPLEMENTATION_2026-10-09.md`. Existing device/TalkBack and successful live AI generation acceptance limits remain open.
+
 ## Current continuation - 2026-10-09
 
 - Read the full seven-page supplied `Computer-Systems-Servicing-NC-II_copy.pdf`: TESDA Self-Assessment Guide ELCCSS 213-0119, revision 00, 03/01/17. It is not the full Training Regulations or an official scoring rubric. The competency mapping, source hash, deployment configuration and acceptance limits are in `docs/CSS_NC_II_PRACTICE_IMPLEMENTATION_2026-10-09.md`.
