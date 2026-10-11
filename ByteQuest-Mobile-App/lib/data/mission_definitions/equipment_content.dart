@@ -1138,6 +1138,18 @@ _PhaseSpec _equipmentPhase(String missionId, int number, _PhaseSpec original,
 
   // Supplement the existing work orders with the supplied SAG, pages 1-7.
   // Operations change equipment state and are verified by the measured test.
+  if (number == 1 &&
+      !missionId.startsWith('coc4') &&
+      missionId != 'coc2_m3' &&
+      missionId != 'coc3_m1') {
+    final placement = _practiceWorkspacePanel(missionId);
+    equipment['placement'] = placement;
+    equipment['completion'] = [
+      ...(equipment['completion'] as List? ?? []),
+      for (final part in placement['items'] as List)
+        _present('placed.${part['id']}'),
+    ];
+  }
   if (missionId == 'coc2_m3' && number == 1 ||
       missionId == 'coc3_m1' && number == 1) {
     equipment['placement'] = _deploymentPanel(missionId == 'coc2_m3');
@@ -1395,6 +1407,9 @@ _PhaseSpec _equipmentPhase(String missionId, int number, _PhaseSpec original,
     ]);
   }
   if (missionId.startsWith('coc4')) p['allow_drag'] = false;
+  if (number == 1 && !missionId.startsWith('coc4')) {
+    instruction = '${MissionContentData.workspacePreparationHint} $instruction';
+  }
 
   if (resolved == InteractionFamily.inspect && p['objects'] is List) {
     p['objects'] = [

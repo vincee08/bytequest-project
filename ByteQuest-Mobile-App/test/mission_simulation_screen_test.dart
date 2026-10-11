@@ -114,6 +114,16 @@ void main() {
         await tester.pumpAndSettle();
       }
 
+      expect(tester.widget<FilledButton>(nextFinder).onPressed, isNull,
+          reason: 'Inspection alone must not complete workspace preparation');
+      final plan = EquipmentPracticeDriver(definition)
+        ..complete(definition.phases.first);
+      for (final action in plan.actions
+          .where((action) => action.actionType == 'placement_attempted')) {
+        await performEquipmentAction(
+            tester, definition.phases.first, action, controller);
+      }
+
       final after = tester.widget<FilledButton>(nextFinder);
       expect(after.onPressed, isNotNull);
       await tester.ensureVisible(nextFinder);
@@ -875,103 +885,19 @@ Future<void> _advanceToReview(
   MissionSimulationDefinition definition,
   MissionRuntimeController controller,
 ) async {
-  for (var phaseIndex = 0;
-      phaseIndex < definition.phases.length - 1;
-      phaseIndex++) {
-    switch (phaseIndex) {
-      case 0:
-        for (final object in const [
-          'motherboard',
-          'cpu',
-          'ram',
-          'psu',
-          'cpu_socket',
-          'dimm_slot',
-          'atx_power_port'
-        ]) {
-          final target = find.byKey(ValueKey('inspect-target-$object'));
-          await tester.ensureVisible(target);
-          await tester.tap(target);
-          await tester.pumpAndSettle();
-        }
-      case 1:
-        for (final group
-            in {'processing': 'cpu', 'memory': 'ram', 'power': 'psu'}.entries) {
-          final groupFinder =
-              find.byKey(ValueKey('classification-${group.key}'));
-          final choice = find.descendant(
-              of: groupFinder,
-              matching: find.byKey(ValueKey('multi-select-${group.value}')));
-          await tester.ensureVisible(choice);
-          await tester.tap(choice);
-          final confirm = find.descendant(
-              of: groupFinder,
-              matching: find.byKey(const ValueKey('multi-select-confirm')));
-          await tester.ensureVisible(confirm);
-          await tester.tap(confirm);
-          await tester.pumpAndSettle();
-        }
-        for (final id in ['esd_protection', 'open_memory_latch']) {
-          final choice = find.byKey(ValueKey('multi-select-$id'));
-          await tester.ensureVisible(choice);
-          await tester.tap(choice);
-          await tester.pump();
-        }
-        final confirm =
-            find.byKey(const ValueKey('multi-select-confirm')).first;
-        await tester.ensureVisible(confirm);
-        await tester.tap(confirm);
-        await tester.pumpAndSettle();
-        for (final toolApplication in const {
-          'chassis_ground': 'anti_static_strap',
-          'case_fastener': 'screwdriver',
-        }.entries) {
-          final target = find.byKey(
-            ValueKey('tool-target-${toolApplication.key}'),
-          );
-          await tester.ensureVisible(target);
-          await tester.tap(target);
-          await tester.pumpAndSettle();
-          final tool = find.byKey(
-            ValueKey('tool-tray-tool-${toolApplication.value}'),
-          );
-          await tester.ensureVisible(tool);
-          await tester.tap(tool);
-          await tester.pumpAndSettle();
-        }
-      case 2:
-        final input = find.byKey(
-          const ValueKey('observation-input-coc1_m1_p3'),
-        );
-        await tester.ensureVisible(input);
-        await tester.enterText(input, 'No visible damage was observed.');
-        await tester.pump();
-        final record = find.text('Record observation');
-        await tester.ensureVisible(record);
-        await tester.tap(record);
-        await tester.pumpAndSettle();
-      case 3:
-        for (final operation in ['close_work_area', 'prepare_service_report']) {
-          final button = find.byKey(ValueKey('equipment-operation-$operation'));
-          await tester.ensureVisible(button);
-          await tester.tap(button);
-          await tester.pumpAndSettle();
-        }
-        final run = find.byKey(const ValueKey('test-run-start'));
-        await tester.ensureVisible(run);
-        await tester.tap(run);
-        await tester.pumpAndSettle();
+  final plan = EquipmentPracticeDriver(definition);
+  for (final phase in definition.phases) {
+    plan.complete(phase);
+  }
+  for (final phase in definition.phases.take(definition.phases.length - 1)) {
+    for (final action
+        in plan.actions.where((action) => action.phaseId == phase.id)) {
+      await performEquipmentAction(tester, phase, action, controller);
     }
     final next = find.byKey(const ValueKey('mission-next'));
-    expect(
-      tester.widget<FilledButton>(next).onPressed,
-      isNotNull,
-      reason: 'phase $phaseIndex did not reach terminal interaction state: '
-          '${controller.state.toJson()}',
-    );
-    await tester.ensureVisible(next);
-    await tester.tap(next);
-    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(next).onPressed, isNotNull,
+        reason: '${phase.id} did not reach terminal interaction state');
+    await tapEquipmentControl(tester, next);
   }
 }
 

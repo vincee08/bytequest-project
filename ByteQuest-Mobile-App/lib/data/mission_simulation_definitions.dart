@@ -6,6 +6,7 @@ part 'mission_definitions/coc2_definitions.dart';
 part 'mission_definitions/coc3_definitions.dart';
 part 'mission_definitions/coc4_definitions.dart';
 part 'mission_definitions/equipment_content.dart';
+part 'mission_definitions/workspace_content.dart';
 
 /// Authoritative learner-visible presentation catalog for all simulations.
 ///
@@ -133,7 +134,7 @@ MissionSimulationDefinition _mission({
     practiceGuidance: id == 'coc1_m3'
         ? 'Check the firmware and storage specification, select installation media and destination, then verify the driver after restarting.'
         : practiceGuidance,
-    scene: _scene(id, _sceneObjects(objects, definitions)),
+    scene: _scene(id, _sceneObjects(id, objects, definitions)),
     phases: definitions,
     interactionFamilies: definitions
         .map((phase) => phase.resolvedInteraction)
@@ -148,12 +149,28 @@ MissionSimulationDefinition _mission({
 }
 
 Map<String, String> _sceneObjects(
+  String missionId,
   Map<String, String> objects,
   List<MissionPhaseDefinition> phases,
 ) {
   final sceneObjects = Map<String, String>.from(objects);
   for (final phase in phases) {
     final equipment = phase.presentation['equipment'] as Map?;
+    final placement = missionId.startsWith('coc4')
+        ? null
+        : equipment?['placement'] as Map? ??
+            (phase.resolvedInteraction == InteractionFamily.place
+                ? phase.presentation
+                : null);
+    for (final key in const ['items', 'destinations']) {
+      for (final entry
+          in (placement?[key] as List? ?? const []).whereType<Map>()) {
+        if (entry['id'] is String && entry['label'] is String) {
+          sceneObjects.putIfAbsent(
+              entry['id'] as String, () => entry['label'] as String);
+        }
+      }
+    }
     final supplementalConnection = equipment?['connection'] as Map?;
     if (phase.resolvedInteraction != InteractionFamily.connect &&
         supplementalConnection == null) {

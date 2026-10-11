@@ -33,6 +33,14 @@ do $$ begin
 end $$;
 insert into public.practice_mission_actions(learner_id,client_action_id,mission_id,phase_id,action_type,target,value,client_occurred_at) values
 ${rows.join(',\n')};
+savepoint placement_gate;
+delete from public.practice_mission_actions
+ where learner_id=(select learner from ctx) and mission_id='coc1_m1'
+ and action_type='placement_attempted';
+do $$ begin
+ begin perform public.practice_verify_mission((select learner from ctx),'coc1_m1'); raise exception 'WORKSPACE_PLACEMENT_BYPASS'; exception when invalid_parameter_value then null; end;
+end $$;
+rollback to savepoint placement_gate;
 do $$ declare learner uuid:=(select learner from ctx); coc text; mission text; a public.practice_quiz_attempts; b public.practice_quiz_attempts;
  questions jsonb:=(select jsonb_agg(jsonb_build_object('id','q'||n,'question','Test question '||n,'choices',jsonb_build_array('A','B','C','D'),'answer',0,'explanation','Verified bank fact','page',1)) from generate_series(1,5) n);
  answers jsonb:='{"q1":0,"q2":0,"q3":0,"q4":0,"q5":0}';

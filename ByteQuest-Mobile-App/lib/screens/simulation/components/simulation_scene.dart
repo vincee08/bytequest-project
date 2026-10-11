@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../data/mission_content_data.dart';
 import '../runtime/mission_runtime_models.dart';
 import 'hotspot_widget.dart';
 import 'mission_simulation_profile.dart';
@@ -29,6 +30,10 @@ class SimulationScene extends StatefulWidget {
   final double initialCameraScale;
   final Offset initialCameraOffset;
   final void Function(double scale, Offset offset)? onCameraChanged;
+  final Widget Function(SceneObjectDefinition object, Widget hotspot)?
+      objectBuilder;
+  final String? interactionHint;
+  final bool compactToolbar;
 
   const SimulationScene({
     super.key,
@@ -44,6 +49,9 @@ class SimulationScene extends StatefulWidget {
     this.initialCameraScale = 1,
     this.initialCameraOffset = Offset.zero,
     this.onCameraChanged,
+    this.objectBuilder,
+    this.interactionHint,
+    this.compactToolbar = false,
   }) : assert(
           scene != null || profile != null,
           'Provide either a runtime scene definition or a legacy profile.',
@@ -133,6 +141,7 @@ class _SimulationSceneState extends State<SimulationScene> {
               onObjectSelected: _selectObject,
               backgroundRenderer: widget.backgroundRenderer,
               statusOverlays: widget.statusOverlays,
+              objectBuilder: widget.objectBuilder,
             );
             return Column(
               mainAxisSize:
@@ -141,6 +150,8 @@ class _SimulationSceneState extends State<SimulationScene> {
               children: [
                 _SceneToolbar(
                   title: resolved.title,
+                  interactionHint: widget.interactionHint,
+                  compact: widget.compactToolbar,
                   onShowObjects: () => _showObjectPicker(resolved),
                   onFit: _fitView,
                   onZoomOut: () => _zoomBy(.8),
@@ -204,6 +215,8 @@ class _SimulationSceneState extends State<SimulationScene> {
 
 class _SceneToolbar extends StatelessWidget {
   final String title;
+  final String? interactionHint;
+  final bool compact;
   final VoidCallback onShowObjects;
   final VoidCallback onFit;
   final VoidCallback onZoomOut;
@@ -211,6 +224,8 @@ class _SceneToolbar extends StatelessWidget {
 
   const _SceneToolbar({
     required this.title,
+    this.interactionHint,
+    this.compact = false,
     required this.onShowObjects,
     required this.onFit,
     required this.onZoomOut,
@@ -231,24 +246,35 @@ class _SceneToolbar extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                Text(
-                  'Inspect the schematic workspace and its objects.',
-                  style: AppTheme.caption.copyWith(color: AppTheme.textMedium),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                if (!compact)
+                  Text(
+                    interactionHint ??
+                        'Inspect the schematic workspace and its objects.',
+                    style:
+                        AppTheme.caption.copyWith(color: AppTheme.textMedium),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
               ],
             );
             final actions = Wrap(
               alignment: WrapAlignment.end,
               runAlignment: WrapAlignment.end,
               children: [
-                TextButton.icon(
-                  onPressed: onShowObjects,
-                  icon: const Icon(Icons.list_alt_outlined, size: 20),
-                  label: const Text('Objects'),
-                  style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
-                ),
+                if (compact)
+                  IconButton(
+                    tooltip: MissionContentData.workspaceObjectsLabel,
+                    onPressed: onShowObjects,
+                    icon: const Icon(Icons.list_alt_outlined),
+                  )
+                else
+                  TextButton.icon(
+                    onPressed: onShowObjects,
+                    icon: const Icon(Icons.list_alt_outlined, size: 20),
+                    label: const Text('Objects'),
+                    style:
+                        TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                  ),
                 IconButton(
                   key: const ValueKey('simulation-zoom-out'),
                   tooltip: 'Zoom out workspace',
@@ -269,7 +295,7 @@ class _SceneToolbar extends StatelessWidget {
                 ),
               ],
             );
-            if (constraints.maxWidth < 560) {
+            if (constraints.maxWidth < 560 && !compact) {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -301,6 +327,8 @@ class _SceneViewport extends StatelessWidget {
   final ValueChanged<String> onObjectSelected;
   final Widget? backgroundRenderer;
   final List<Widget> statusOverlays;
+  final Widget Function(SceneObjectDefinition object, Widget hotspot)?
+      objectBuilder;
 
   const _SceneViewport({
     required this.resolved,
@@ -313,6 +341,7 @@ class _SceneViewport extends StatelessWidget {
     required this.onObjectSelected,
     required this.backgroundRenderer,
     required this.statusOverlays,
+    this.objectBuilder,
   });
 
   @override
@@ -402,17 +431,7 @@ class _SceneViewport extends StatelessWidget {
                           Positioned.fromRect(
                             key: ValueKey('simulation-object-${object.id}'),
                             rect: mappedObjects[object.id]!,
-                            child: HotspotWidget(
-                              object: object,
-                              visualScale: 1 / workspaceScale,
-                              state: hotspotStates[object.id] ??
-                                  (inspectedObjectIds.contains(object.id)
-                                      ? HotspotVisualState.completed
-                                      : object.initialState),
-                              enabled: enabled,
-                              icon: _iconForObject(resolved, object),
-                              onPressed: () => onObjectSelected(object.id),
-                            ),
+                            child: _objectControl(object, workspaceScale),
                           ),
                       ],
                     ),
@@ -423,6 +442,21 @@ class _SceneViewport extends StatelessWidget {
           },
         ),
       );
+
+  Widget _objectControl(SceneObjectDefinition object, double workspaceScale) {
+    final hotspot = HotspotWidget(
+      object: object,
+      visualScale: 1 / workspaceScale,
+      state: hotspotStates[object.id] ??
+          (inspectedObjectIds.contains(object.id)
+              ? HotspotVisualState.completed
+              : object.initialState),
+      enabled: enabled,
+      icon: _iconForObject(resolved, object),
+      onPressed: () => onObjectSelected(object.id),
+    );
+    return objectBuilder?.call(object, hotspot) ?? hotspot;
+  }
 }
 
 class _SceneBackground extends StatelessWidget {

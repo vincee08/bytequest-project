@@ -5,6 +5,11 @@ practice schema and twenty mission contracts, the production Vercel practice API
 is deployed, and the rebuilt Android app is installed with existing data retained.
 The earlier missing-RPC and missing-endpoint blockers are resolved.
 
+The subsequent PDF-driven practice canvas update is recorded in
+`CSS_DRAG_WORKSPACE_UPDATE_2026-10-11.md`. It adds required canvas deployment to
+COC1–COC3 and updates those fifteen hosted contracts to `css-sag-20261011-v2`.
+The version counts and APK hash below describe the earlier activation build.
+
 ## Hosted Supabase
 
 Project: `rslmteqipxqfifwftugk` (`ByteQuest`, Tokyo). Hosted migration history

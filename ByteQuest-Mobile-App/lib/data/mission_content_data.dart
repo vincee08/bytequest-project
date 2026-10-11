@@ -38,6 +38,25 @@ class MissionContentData {
   static const practiceQuizNeedsReview =
       'Review the explanations and practice again before retrying.';
   static const placementComponentsLabel = 'Components and devices';
+  static const workspaceBuildLabel = 'Place equipment';
+  static const workspaceInspectLabel = 'Inspect';
+  static const workspaceConnectLabel = 'Connect ports';
+  static const workspaceBuildHint =
+      'Drag equipment to a work location. You can also select equipment, then tap its destination.';
+  static const workspaceConnectHint =
+      'Drag from a source port to a destination. You can also tap the two endpoints.';
+  static const workspaceInspectHint =
+      'Inspect equipment, configure it, and run the work-order checks.';
+  static const workspacePreparationHint =
+      'Place the equipment in the workspace, then complete the inspection and work-order checks.';
+  static const workspaceOrientationTitle = 'Align the component';
+  static const workspaceOrientationHint =
+      'Choose the physical orientation before seating this component.';
+  static const workspaceObjectsLabel = 'Objects';
+  static String workspaceDragLabel(String label) =>
+      'Drag $label to a work location';
+  static String workspaceDropLabel(String label) =>
+      'Place selected equipment at $label';
   static const placementDestinationsLabel = 'Installation locations';
   static const placementOrientationLabel = 'Orientation';
   static const placementConfirmLabel = 'Install selected component';

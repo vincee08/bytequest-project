@@ -2,7 +2,23 @@
 
 > Read this file with `AGENTS.md`, `README.md`, and `bytequest.md` before changing the repository.
 
-## Current continuation - 2026-10-11
+## Current continuation - 2026-10-11 practice canvas follow-up
+
+This section supersedes the practice canvas/contracts status below. The user's
+explicit branch choice remains `new`, tracking `bytequest-project/new`.
+
+- Re-scanned all seven pages of `Computer-Systems-Servicing-NC-II_copy.pdf` and retained the existing TESDA SAG competency mapping. Source, behavior, migration mapping and acceptance limits are in `docs/CSS_DRAG_WORKSPACE_UPDATE_2026-10-11.md`.
+- All fifteen COC1–COC3 practices now require equipment deployment before the first phase can advance. The main zoomable canvas supports actual equipment drops, compatible cable gestures, explicit keyed-part orientation and an equivalent tap path. Inspection, configuration, diagnosis, tests and review remain required. COC4 retains its progressive troubleshooting flow without draggable controls.
+- `EquipmentWorkspace` composes the existing `SimulationScene`, controller, evidence transport and resume service. Source and destination canvas IDs are distinct for devices that serve both roles, while raw evidence preserves contract IDs. A horizontally scrollable mode selector prevents overflow in small, large-text workspaces.
+- Created/applied forward migration `20261011043723_css_drag_workspace_contracts.sql`; hosted project `rslmteqipxqfifwftugk` records it as `20261011044331`. Local history now has **51** migrations and hosted history **49**. Fifteen COC1–COC3 definitions use `css-sag-20261011-v2`; five COC4 definitions retain `css-sag-20261009-v1`. All twenty local/hosted definition digests match. No schema, grant, RLS policy, evaluator function or official assessment contract changed.
+- The existing production Vercel practice API reads the updated Supabase contracts; no dashboard source change or extra API deployment is required. Old evidence/completions remain; starting a new quiz requires mission verification against current contract versions. Completed COCs retain their progression records.
+- Local rollback suite PASS **8 files / 19 assertions**, including foundation lifecycle, grants and new workspace coverage. All **20 raw mission replays**, four sequential COCs, quiz resume/failure/grading, idempotency, RLS and tampering checks PASS. Removing COC1 M1 placement evidence in a rollback transaction correctly blocks backend completion.
+- Android API 35 device check PASS: a real motherboard drag saved hosted `placement_attempted` evidence with `input_method=drag`. Background/force-stop/relaunch and mission reentry restored the installed motherboard and phase 1, with exactly **one** drag-placement record, **five** total evidence records (including earlier discarded activity), and **zero** mission/COC completions. Existing login/data are preserved.
+- Final mobile gates PASS: dependency resolution, analyzer **0 errors / 0 warnings / 212 existing infos**, **361/361 Flutter tests**, and debug APK build. This includes all-20 real-control work orders, all-phase portrait/landscape/2x-text matrices and 23 canvas regressions. Dashboard TypeScript/lint/production build PASS. The explicit temporary contract export matches the applied migration byte-for-byte. Production API still returns the expected anonymous JSON 401.
+- Installed the final APK SHA-256 `C972A9091954D3D87FF5A88C2249AFAD49D264034A3175E39519457B31ACF923`, checked embedded hosted/public endpoints without printing keys, and confirmed the installed motherboard restores after the final rebuild. The learner remains signed in and the visible emulator is open on COC1 M1; hosted evidence remains five records with exactly one drag placement and no fabricated completion. Existing Kotlin plugin migration notices remain non-blocking.
+- Preserve the user's untracked PDF and dashboard `package-lock.json`. Independent TalkBack/device-matrix acceptance, full hosted learner mission/quiz completion and successful live AI generation remain separate checks; do not fabricate learner completion.
+
+## Current continuation - 2026-10-11 hosted activation
 
 This section supersedes earlier hosted-activation blockers and pending-rollout
 claims. The user explicitly authorized continuing on branch `new`.

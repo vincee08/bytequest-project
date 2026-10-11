@@ -72,19 +72,8 @@ void main() {
       final definition = MissionSimulationDefinitions.byId('coc1_m1');
       final first = definition.phases.first;
       final later = definition.phases[2];
-      final terminal = _terminalActionFor(
-        first,
-        MissionRuntimeState.initial(definition.id).copyWith(
-          currentPhaseId: first.id,
-        ),
-      );
-      final afterFirst = MissionPhaseCompletionPolicy.afterAction(
-        phase: first,
-        state: terminal.state,
-        emittedActionType: terminal.actionType,
-        target: terminal.target,
-        value: terminal.value,
-      ).copyWith(currentPhaseId: later.id);
+      final driver = EquipmentPracticeDriver(definition)..complete(first);
+      final afterFirst = driver.state.copyWith(currentPhaseId: later.id);
 
       expect(
           MissionPhaseCompletionPolicy.canAdvance(first, afterFirst), isTrue);

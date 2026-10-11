@@ -12,8 +12,8 @@ import '../../services/authoritative_assessment_service.dart';
 import '../../services/practice_mission_evidence_service.dart';
 import '../../services/progress_resume_service.dart';
 import '../../services/practice_progress_service.dart';
-import 'components/simulation_scene.dart';
 import 'components/equipment_operations.dart';
+import 'components/equipment_workspace.dart';
 import 'interactions/mission_interactions.dart';
 import 'runtime/mission_evidence_gateway.dart';
 import 'runtime/mission_phase_completion_policy.dart';
@@ -250,10 +250,12 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
 
     final phaseIndex = _phaseIndex;
     final phase = widget.definition.phases[phaseIndex];
-    final scene = SimulationScene(
-      scene: widget.definition.scene,
-      initialCameraScale: _state.cameraScale,
-      initialCameraOffset: Offset(_state.cameraOffsetX, _state.cameraOffsetY),
+    final scene = EquipmentWorkspace(
+      definition: widget.definition,
+      phase: phase,
+      state: _state,
+      onAction: (type, target, value) =>
+          _recordAction(phase, type, target, value),
       onCameraChanged: (scale, offset) => unawaited(_controller
           .updateCamera(scale, offset.dx, offset.dy)
           .catchError((Object error) {
@@ -262,18 +264,10 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
               MissionContentData.saveProgressFailedMessage);
       })),
       hotspotStates: _equipmentHotspots(),
-      inspectedObjectIds: _state.hotspotStates.entries
-          .where((entry) => entry.value != HotspotVisualState.neutral)
-          .map((entry) => entry.key)
-          .toSet(),
-      connectedNodePairs: _state.connectedNodePairs,
-      enabled:
-          !_writing && phase.primaryInteraction != InteractionFamily.review,
-      onObjectSelected: (objectId) => unawaited(
-        _recordAction(phase, 'object_inspected', objectId, const {
-          'input_method': 'scene',
-        }),
-      ),
+      enabled: !_writing &&
+          !_submitting &&
+          !_submitted &&
+          phase.primaryInteraction != InteractionFamily.review,
     );
 
     return Scaffold(
