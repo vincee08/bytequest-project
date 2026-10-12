@@ -12,7 +12,105 @@ class HardwareItem {
 /// Mission Content Data
 /// Contains questions, components, steps, and scenarios for all missions
 class MissionContentData {
+  static const loadingLabel = 'Working…';
+  static const backLabel = 'Back';
+  static const settingsLabel = 'Settings';
+  static const learningPathLabel = 'Learning path';
+  static const quizzesLabel = 'Quizzes';
+  static const controlsLabel = 'Task controls';
+  static const taskStatusLabel = 'Remaining actions';
+  static const inspectionsTaskLabel = 'Inspections';
+  static const placementsTaskLabel = 'Placements';
+  static const connectionsTaskLabel = 'Connections';
+  static const configurationTaskLabel = 'Configuration fields';
+  static const learnLabel = 'Learn';
+  static const fullNameFieldLabel = 'Full name (required)';
+  static const emailFieldLabel = 'Email address (required)';
+  static const passwordFieldLabel = 'Password (required)';
+  static const confirmPasswordFieldLabel = 'Confirm password (required)';
+  static const newPasswordFieldLabel = 'New password (required)';
+  static const studentIdFieldLabel = 'Student ID (optional)';
+  static const sectionFieldLabel = 'Section or set (optional)';
+  static const goalFieldLabel = 'Learning goal (optional)';
+  static const profileAvatarLabel = 'Profile avatar';
+  static const phaseCompleteLabel = 'Actions complete';
+  static const controlsScrollHint = 'Scroll here for all task controls';
+  static const readyToContinueLabel =
+      'Phase actions complete. Continue when ready.';
+  static const phaseActionsPendingLabel =
+      'Complete the task controls for this phase.';
+  static const technicalEvidenceSyncFailed =
+      'Technical evidence could not be synchronized. Retry this action.';
+  static const retryActionLabel = 'Retry';
+  static const phaseSaveFailed =
+      'The phase could not be saved. Retry before continuing.';
+  static const reviewSaveFailed =
+      'The review state could not be saved. Retry before returning.';
+  static const equipmentChecksPendingLabel =
+      'Complete the equipment checks below.';
+  static const sequencePendingLabel =
+      'Arrange the steps and apply the procedure order.';
+  static const sequenceRecordedLabel = 'Procedure order recorded.';
+  static const sequenceHelp =
+      'Move steps with the arrows or drag handle, then tap Apply procedure order.';
+  static const sequenceTapHelp =
+      'Move steps with the arrows, then tap Apply procedure order.';
+  static const placementTapHelp =
+      'Tap a component, choose a location and orientation, then install. You can also drag in the workspace.';
+  static const connectionTapHelp =
+      'Tap a source, then its destination. You can also drag in the workspace.';
+  static const sourcesLabel = '1. Select a source';
+  static const destinationsLabel = '2. Select a destination';
+  static const workspaceSourceAction = 'Drag or tap';
+  static const workspaceDestinationAction = 'Drop here';
+  static const workspaceInstalledLabel = 'Installed';
+  static const workspaceConnectedLabel = 'Connected';
+  static const workspaceSelectSourceFirst =
+      'Select a part or cable on the left first, then choose a location on the right.';
+  static const workspaceSelectDestination =
+      'Selected. Tap a destination on the right.';
+  static const reviewEvidenceLabel = 'Review evidence';
+  static const confirmEvidenceLabel = 'Confirm evidence';
+  static const reviewReadyLabel =
+      'Review the recorded work above, then confirm.';
+  static const reviewPendingLabel =
+      'Evidence is waiting to sync. Use Retry pending evidence in the controls.';
+  static const reviewSavedLabel =
+      'Saved successfully. Use Back to leave this mission.';
+  static const resetProgressTitle = 'Reset this practice run?';
+  static const resetProgressMessage =
+      'This removes the saved work for this practice run. You will start the mission again.';
+  static const discardProgressTitle = 'Discard this practice run?';
+  static const discardProgressMessage =
+      'Your current placements, connections and phase progress will be removed. This cannot be undone.';
+  static const profileLoadFailed =
+      'Your profile could not be loaded. Check your connection and try again.';
+  static const profileSaveFailed =
+      'Your changes could not be saved. Your entries are still here. Check your connection and tap Save Changes again.';
+  static const termsLinkLabel = 'Read Terms & Privacy';
+  static const termsAgreementLabel =
+      'I agree to the Terms of Service and Privacy Policy';
+  static const showPasswordLabel = 'Show password';
+  static const hidePasswordLabel = 'Hide password';
+  static const searchHelpLabel = 'Search help articles';
+  static const optionalLearnerIdLabel = 'Learner ID (optional)';
+  static const optionalSchoolLabel = 'School (optional)';
+  static const optionalSectionLabel = 'Course / Section (optional)';
+  static String taskCount(String task, int done, int total) =>
+      '$task: $done of $total';
+  static String phasePosition(int phase, int total, String title) =>
+      'Phase $phase of $total · $title';
+  static String moveStep(String label, String direction) =>
+      'Move $label $direction';
   static const practiceProgressTitle = 'Virtual practice progression';
+  static const loadingPracticeProgressLabel = 'Loading practice access';
+  static const practiceMissionsPendingLabel =
+      'Complete the remaining missions below to unlock the COC quiz.';
+  static const practiceQuizReadyLabel =
+      'All five missions are verified. Take the COC quiz to finish this COC.';
+  static const practiceQuizReviewLabel = 'Review COC quiz';
+  static String practiceMissionCount(int count) =>
+      '$count of 5 practice missions verified';
   static const practiceProgressUnavailable =
       'Practice access could not be verified. Check your connection and retry.';
   static const practiceLockedMessage =
@@ -88,8 +186,8 @@ class MissionContentData {
   static const testResultRecordedFeedback =
       'Measured output recorded. Inspect each reading before interpreting the result.';
   static const confirmSequenceLabel = 'Apply procedure order';
-  static const revisePhaseLabel = 'Return to a completed work phase';
-  static const practiceHintLabel = 'Show practice guidance';
+  static const revisePhaseLabel = 'Review earlier phase';
+  static const practiceHintLabel = 'Practice help';
   static const testOutputUnavailable =
       'No measured output is available for this test yet.';
   static const incompatibleToolFeedback =

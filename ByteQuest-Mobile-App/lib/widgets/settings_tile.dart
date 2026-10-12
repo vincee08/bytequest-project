@@ -29,72 +29,78 @@ class SettingsTile extends StatelessWidget {
     final effectiveTextColor =
         isDestructive ? AppTheme.errorRed : AppTheme.textDark;
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppTheme.cardWhite,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: AppTheme.borderLight,
-            width: 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            // Icon
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: effectiveIconColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                icon,
-                color: effectiveIconColor,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 16),
-            // Title and Subtitle
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: AppTheme.labelLarge.copyWith(
-                      color: effectiveTextColor,
-                      fontWeight: FontWeight.w600,
-                    ),
+    return Semantics(
+        button: onTap != null,
+        enabled: onTap != null,
+        label: title,
+        child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(16),
+              child: Ink(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppTheme.cardWhite,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: AppTheme.borderLight,
+                    width: 1,
                   ),
-                  if (subtitle != null) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle!,
-                      style: AppTheme.bodySmall.copyWith(
-                        color: AppTheme.textMedium,
+                ),
+                child: Row(
+                  children: [
+                    // Icon
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: effectiveIconColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        icon,
+                        color: effectiveIconColor,
+                        size: 20,
                       ),
                     ),
+                    const SizedBox(width: 16),
+                    // Title and Subtitle
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: AppTheme.labelLarge.copyWith(
+                              color: effectiveTextColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          if (subtitle != null) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              subtitle!,
+                              style: AppTheme.bodySmall.copyWith(
+                                color: AppTheme.textMedium,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    // Trailing Widget or Arrow
+                    if (trailing != null)
+                      trailing!
+                    else if (onTap != null)
+                      Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        color: AppTheme.textLight,
+                        size: 16,
+                      ),
                   ],
-                ],
+                ),
               ),
-            ),
-            // Trailing Widget or Arrow
-            if (trailing != null)
-              trailing!
-            else
-              Icon(
-                Icons.arrow_forward_ios_rounded,
-                color: AppTheme.textLight,
-                size: 16,
-              ),
-          ],
-        ),
-      ),
-    );
+            )));
   }
 }
 

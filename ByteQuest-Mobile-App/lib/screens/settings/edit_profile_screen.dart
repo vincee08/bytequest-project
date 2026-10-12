@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_button.dart';
+import '../../data/mission_content_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/profile_service.dart';
 
@@ -22,6 +23,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   bool _isLoading = true;
   bool _isSaving = false;
   String? _errorMessage;
+  String? _saveError;
 
   @override
   void initState() {
@@ -43,13 +45,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         throw Exception('No authenticated user');
       }
 
-      final profileService = ProfileService();
+      final profileService = context.read<ProfileService>();
       final profile = await profileService.getProfileByUserId(userId);
 
       if (profile == null) {
         throw Exception('Profile not found');
       }
 
+      if (!mounted) return;
       setState(() {
         _fullNameController.text = profile.fullName;
         _learnerIdController.text = profile.learnerId ?? '';
@@ -58,19 +61,21 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _errorMessage = e.toString();
+        _errorMessage = MissionContentData.profileLoadFailed;
         _isLoading = false;
       });
     }
   }
 
   Future<void> _saveChanges() async {
+    if (_isSaving) return;
     if (!_formKey.currentState!.validate()) return;
 
     setState(() {
       _isSaving = true;
-      _errorMessage = null;
+      _saveError = null;
     });
 
     try {
@@ -81,7 +86,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         throw Exception('No authenticated user');
       }
 
-      final profileService = ProfileService();
+      final profileService = context.read<ProfileService>();
       await profileService.updateProfile(userId, {
         'full_name': _fullNameController.text.trim(),
         'learner_id': _learnerIdController.text.trim().isEmpty
@@ -106,8 +111,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             context, true); // Return true to indicate changes were saved
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() {
-        _errorMessage = 'Failed to update profile: ${e.toString()}';
+        _saveError = MissionContentData.profileSaveFailed;
         _isSaving = false;
       });
     }
@@ -130,6 +136,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
+          tooltip: MissionContentData.backLabel,
           icon: const Icon(Icons.arrow_back, color: AppTheme.textDark),
           onPressed: () => Navigator.pop(context),
         ),
@@ -171,26 +178,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                     ),
                                   ),
                                 ),
-                                Positioned(
-                                  bottom: 0,
-                                  right: 0,
-                                  child: Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.primaryBlue,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: Colors.white,
-                                        width: 2,
-                                      ),
-                                    ),
-                                    child: const Icon(
-                                      Icons.camera_alt,
-                                      size: 16,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
                               ],
                             ),
                           ),
@@ -207,6 +194,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           TextFormField(
                             controller: _fullNameController,
                             decoration: InputDecoration(
+                              labelText: MissionContentData.fullNameFieldLabel,
                               hintText: 'Enter your full name',
                               prefixIcon: Icon(
                                 Icons.person_outline,
@@ -233,6 +221,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           TextFormField(
                             controller: _learnerIdController,
                             decoration: InputDecoration(
+                              labelText:
+                                  MissionContentData.optionalLearnerIdLabel,
                               hintText: 'Enter your learner ID (optional)',
                               prefixIcon: Icon(
                                 Icons.badge_outlined,
@@ -253,6 +243,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           TextFormField(
                             controller: _schoolController,
                             decoration: InputDecoration(
+                              labelText: MissionContentData.optionalSchoolLabel,
                               hintText: 'Enter your school (optional)',
                               prefixIcon: Icon(
                                 Icons.school_outlined,
@@ -273,6 +264,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           TextFormField(
                             controller: _courseSectionController,
                             decoration: InputDecoration(
+                              labelText:
+                                  MissionContentData.optionalSectionLabel,
                               hintText: 'Enter your course/section (optional)',
                               prefixIcon: Icon(
                                 Icons.class_outlined,
@@ -283,6 +276,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                           const SizedBox(height: 32),
 
                           // Save Button
+                          if (_saveError != null) ...[
+                            Semantics(
+                                liveRegion: true,
+                                child: Text(_saveError!,
+                                    style: AppTheme.bodySmall
+                                        .copyWith(color: AppTheme.errorRed))),
+                            const SizedBox(height: 12),
+                          ],
                           AppButton.primary(
                             label: 'Save Changes',
                             onPressed: _saveChanges,

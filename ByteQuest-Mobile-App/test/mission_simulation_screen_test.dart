@@ -142,6 +142,65 @@ void main() {
       expect(controller.state.currentPhaseId, definition.phases[1].id);
     });
 
+    testWidgets(
+        'failed evidence save shows an immediate retry without duplication',
+        (tester) async {
+      final definition = MissionSimulationDefinitions.byId('coc1_m1');
+      final store = _MemoryStore()..saveSucceeds = false;
+      final transport = _MemoryTransport();
+      final controller =
+          _controller(definition, store: store, transport: transport);
+      await tester.pumpWidget(_host(definition, controller: controller));
+      await tester.pumpAndSettle();
+      final target = find.byKey(const ValueKey('inspect-target-motherboard'));
+      await tester.ensureVisible(target);
+      await tester.tap(target);
+      await tester.pumpAndSettle();
+      expect(find.byType(SnackBar), findsOneWidget);
+      expect(
+          find.descendant(
+              of: find.byType(SnackBar),
+              matching:
+                  find.text(MissionContentData.technicalEvidenceSyncFailed)),
+          findsOneWidget);
+      final actionId = controller.state.pendingEvidence.single.clientActionId;
+      store.saveSucceeds = true;
+      await tester.tap(find.byType(SnackBarAction));
+      await tester.pumpAndSettle();
+      expect(controller.state.pendingEvidence, isEmpty);
+      expect(transport.appendedIds, [actionId]);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+        'failed phase save retries the pending action instead of advancing again',
+        (tester) async {
+      final definition = MissionSimulationDefinitions.byId('coc1_m1');
+      final plan = EquipmentPracticeDriver(definition)
+        ..complete(definition.phases.first);
+      final store = _MemoryStore()..saveSucceeds = false;
+      final transport = _MemoryTransport();
+      final controller = _controller(definition,
+          store: store,
+          transport: transport,
+          initialState:
+              plan.state.copyWith(currentPhaseId: definition.phases.first.id));
+      await tester.pumpWidget(_host(definition, controller: controller));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('mission-next')));
+      await tester.pumpAndSettle();
+      final actionId = controller.state.pendingEvidence.single.clientActionId;
+      expect(controller.state.currentPhaseId, definition.phases[1].id);
+      store.saveSucceeds = true;
+      await tester.tap(find.byType(SnackBarAction));
+      await tester.pumpAndSettle();
+      expect(controller.state.currentPhaseId, definition.phases[1].id);
+      expect(controller.state.pendingEvidence, isEmpty);
+      expect(transport.appendedIds, [actionId]);
+      expect(transport.appendedActions.single.actionType, 'phase_completed');
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('restores before exposing the interactive workspace', (
       tester,
     ) async {
@@ -180,6 +239,9 @@ void main() {
       expect(find.byType(TapInspectInteraction), findsNothing);
 
       await tester.tap(find.text('Reset saved progress'));
+      await tester.pumpAndSettle();
+      expect(store.clearCount, 0);
+      await tester.tap(find.text(MissionContentData.discardProgressLabel));
       await tester.pumpAndSettle();
 
       expect(store.clearCount, 1);
@@ -337,6 +399,11 @@ void main() {
       await tester.tap(find.byTooltip('Exit mission'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Discard Progress'));
+      await tester.pumpAndSettle();
+      expect(store.clearCount, 0);
+      expect(
+          find.text(MissionContentData.discardProgressMessage), findsOneWidget);
+      await tester.tap(find.text(MissionContentData.discardProgressLabel));
       await tester.pumpAndSettle();
 
       expect(find.byType(MissionSimulationScreen), findsNothing);

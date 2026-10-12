@@ -102,6 +102,8 @@ class _ControlledPlacementInteractionState
               for (final item in availableItems) _itemControl(item),
             ],
           ),
+          const SizedBox(height: 8),
+          const Text(MissionContentData.placementTapHelp),
           const SizedBox(height: 12),
           const MissionSectionLabel(
             icon: Icons.place_outlined,

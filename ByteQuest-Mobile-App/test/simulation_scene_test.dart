@@ -6,9 +6,46 @@ import 'package:bytequest/screens/simulation/interactions/multi_select_interacti
 import 'package:bytequest/screens/simulation/runtime/mission_runtime_models.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets(
+      'hotspot screen-reader tap activates once and is disabled during saving',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    var taps = 0;
+    for (final enabled in [true, false]) {
+      await tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+              body: Center(
+                  child: SizedBox(
+                      width: 120,
+                      height: 90,
+                      child: HotspotWidget(
+                        object: _scene.objects.first,
+                        state: HotspotVisualState.completed,
+                        enabled: enabled,
+                        onPressed: () => taps++,
+                      ))))));
+      final node = tester
+          .getSemantics(find.bySemanticsLabel('Server LAN port, completed'));
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), enabled);
+      if (enabled) {
+        tester.binding.pipelineOwner.semanticsOwner!
+            .performAction(node.id, SemanticsAction.tap);
+        expect(taps, 1);
+      } else {
+        final icon = tester.widget<Icon>(find
+            .descendant(
+                of: find.byType(HotspotWidget), matching: find.byType(Icon))
+            .first);
+        expect(icon.color, isNot(Colors.white));
+      }
+    }
+    semantics.dispose();
+  });
+
   testWidgets('asset-free objects retain visible labels and dp-sized icons',
       (tester) async {
     await tester.pumpWidget(_sceneHarness());

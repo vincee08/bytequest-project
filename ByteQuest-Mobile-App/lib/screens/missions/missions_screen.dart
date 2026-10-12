@@ -3,6 +3,7 @@ import 'dart:async';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/learner_ui.dart';
+import '../../core/widgets/learner_navigation_shell.dart';
 import '../../data/missions_data.dart';
 import '../../data/mission_content_data.dart';
 import '../../models/practice_progress_model.dart';
@@ -43,19 +44,23 @@ class _MissionsScreenState extends State<MissionsScreen>
   String? _startingAssignmentId;
   List<PracticeCocProgress> _practiceProgress = const [];
   String? _practiceError;
+  bool _practiceLoading = true;
   Future<void> _loadPracticeProgress() async {
+    if (mounted) setState(() => _practiceLoading = true);
     try {
       final progress = await PracticeProgressService().getProgress();
       if (mounted)
         setState(() {
           _practiceProgress = progress;
           _practiceError = null;
+          _practiceLoading = false;
         });
     } catch (_) {
       if (mounted)
         setState(() {
           _practiceProgress = const [];
           _practiceError = MissionContentData.practiceProgressUnavailable;
+          _practiceLoading = false;
         });
     }
   }
@@ -193,6 +198,12 @@ class _MissionsScreenState extends State<MissionsScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.backgroundOffWhite,
+      appBar: LearnerNavigationScope.maybeOf(context) == null &&
+              Navigator.canPop(context)
+          ? AppBar(
+              leading: BackButton(onPressed: () => Navigator.pop(context)),
+              title: const Text(MissionContentData.learnLabel))
+          : null,
       body: SafeArea(
         child: Column(
           children: [
@@ -202,36 +213,6 @@ class _MissionsScreenState extends State<MissionsScreen>
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Semantics(
-                    label: 'Open CSS NC II learning path',
-                    button: true,
-                    child: IconButton.filledTonal(
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute<void>(
-                          builder: (_) => const CoursesScreen(),
-                        ),
-                      ),
-                      tooltip: 'Learning path',
-                      icon: const Icon(Icons.route_outlined),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Semantics(
-                    label: 'Open assigned quizzes',
-                    button: true,
-                    child: IconButton.filledTonal(
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute<void>(
-                          builder: (_) => const LearnerQuizzesScreen(),
-                        ),
-                      ),
-                      tooltip: 'Quizzes',
-                      icon: const Icon(Icons.quiz_outlined),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
                   Semantics(
                     label: 'Refresh assigned activities and resources',
                     button: true,
@@ -245,6 +226,27 @@ class _MissionsScreenState extends State<MissionsScreen>
               ),
             ),
             Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+              child: Wrap(spacing: 8, runSpacing: 8, children: [
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                          builder: (_) => const CoursesScreen())),
+                  icon: const Icon(Icons.route_outlined),
+                  label: const Text(MissionContentData.learningPathLabel),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute<void>(
+                          builder: (_) => const LearnerQuizzesScreen())),
+                  icon: const Icon(Icons.quiz_outlined),
+                  label: const Text(MissionContentData.quizzesLabel),
+                ),
+              ]),
+            ),
+            Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Container(
                 decoration: BoxDecoration(
@@ -252,6 +254,8 @@ class _MissionsScreenState extends State<MissionsScreen>
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: TabBar(
+                  isScrollable: true,
+                  tabAlignment: TabAlignment.start,
                   controller: _tabController,
                   padding: const EdgeInsets.all(4),
                   indicatorSize: TabBarIndicatorSize.tab,
@@ -436,29 +440,30 @@ class _MissionsScreenState extends State<MissionsScreen>
                       ),
                     ],
                     const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 48,
-                      child: FilledButton.icon(
-                        onPressed: isStarting
-                            ? null
-                            : () => _launchAssigned(assignment),
-                        icon: isStarting
-                            ? const SizedBox.square(
-                                dimension: 18,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Icon(Icons.play_arrow_rounded),
-                        label: Text(
-                          isStarting
-                              ? 'Starting...'
-                              : 'Start ${isAssessment ? "assessment" : "practice"}',
-                        ),
-                      ),
-                    ),
+                    ConstrainedBox(
+                        constraints: const BoxConstraints(minHeight: 48),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: FilledButton.icon(
+                            onPressed: isStarting
+                                ? null
+                                : () => _launchAssigned(assignment),
+                            icon: isStarting
+                                ? const SizedBox.square(
+                                    dimension: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Icon(Icons.play_arrow_rounded),
+                            label: Text(
+                              isStarting
+                                  ? 'Starting...'
+                                  : 'Start ${isAssessment ? "assessment" : "practice"}',
+                            ),
+                          ),
+                        )),
                   ],
                 ),
               ),
@@ -470,6 +475,18 @@ class _MissionsScreenState extends State<MissionsScreen>
   }
 
   Widget _buildPracticeTab() {
+    if (_practiceLoading) {
+      return const LearnerLoadingView(
+          label: MissionContentData.loadingPracticeProgressLabel);
+    }
+    if (_practiceError != null) {
+      return _EmptyState(
+          icon: Icons.cloud_off_outlined,
+          title: MissionContentData.practiceProgressTitle,
+          message: _practiceError!,
+          actionLabel: MissionContentData.practiceQuizRetry,
+          onAction: _loadPracticeProgress);
+    }
     final missions = MissionsData.getAllMissions();
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
@@ -527,7 +544,8 @@ class _MissionsScreenState extends State<MissionsScreen>
           color: AppTheme.cardWhite,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(14),
-            side: BorderSide(color: AppTheme.borderLight),
+            side: BorderSide(
+                color: unlocked ? AppTheme.primaryBlue : AppTheme.borderLight),
           ),
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_button.dart';
+import '../../data/mission_content_data.dart';
 import '../../core/config/supabase_config.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
@@ -76,6 +77,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
+          tooltip: MissionContentData.backLabel,
           icon: const Icon(Icons.arrow_back, color: AppTheme.textDark),
           onPressed: () => Navigator.pop(context),
         ),
@@ -141,10 +143,14 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   controller: _newPasswordController,
                   obscureText: !_isNewPasswordVisible,
                   decoration: InputDecoration(
+                    labelText: MissionContentData.newPasswordFieldLabel,
                     hintText: 'Enter new password',
                     prefixIcon:
                         Icon(Icons.lock_outline, color: AppTheme.primaryBlue),
                     suffixIcon: IconButton(
+                      tooltip: _isNewPasswordVisible
+                          ? MissionContentData.hidePasswordLabel
+                          : MissionContentData.showPasswordLabel,
                       icon: Icon(
                         _isNewPasswordVisible
                             ? Icons.visibility_outlined
@@ -182,10 +188,14 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   controller: _confirmPasswordController,
                   obscureText: !_isConfirmPasswordVisible,
                   decoration: InputDecoration(
+                    labelText: MissionContentData.confirmPasswordFieldLabel,
                     hintText: 'Confirm new password',
                     prefixIcon:
                         Icon(Icons.lock_outline, color: AppTheme.primaryBlue),
                     suffixIcon: IconButton(
+                      tooltip: _isConfirmPasswordVisible
+                          ? MissionContentData.hidePasswordLabel
+                          : MissionContentData.showPasswordLabel,
                       icon: Icon(
                         _isConfirmPasswordVisible
                             ? Icons.visibility_outlined

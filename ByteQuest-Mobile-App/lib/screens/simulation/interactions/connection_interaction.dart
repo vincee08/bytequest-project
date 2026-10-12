@@ -67,8 +67,11 @@ class _ConnectionInteractionState extends State<ConnectionInteraction> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (showControls) ...[
+          const Text(MissionContentData.connectionTapHelp),
+          const SizedBox(height: 8),
           const MissionSectionLabel(
-              icon: Icons.cable_outlined, text: 'Sources'),
+              icon: Icons.cable_outlined,
+              text: MissionContentData.sourcesLabel),
           const SizedBox(height: 8),
           Wrap(
             spacing: 8,
@@ -98,7 +101,7 @@ class _ConnectionInteractionState extends State<ConnectionInteraction> {
           const SizedBox(height: 12),
           const MissionSectionLabel(
             icon: Icons.hub_outlined,
-            text: 'Destinations',
+            text: MissionContentData.destinationsLabel,
           ),
           const SizedBox(height: 8),
           for (final destination in destinations) ...[

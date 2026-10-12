@@ -18,37 +18,36 @@ class ByteQuestBottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       minimum: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-      child: Container(
-        padding: const EdgeInsets.all(5),
-        decoration: BoxDecoration(
-          color: AppTheme.cardWhite,
-          borderRadius: BorderRadius.circular(22),
-          boxShadow: AppTheme.floatingShadow,
-          border: Border.all(color: AppTheme.borderLight),
-        ),
-        child: Row(
-          children: [
-            _buildNavItem(context, 0, Icons.home_rounded, 'Home'),
-            _buildNavItem(
-              context,
-              1,
-              Icons.explore_rounded,
-              'Learn',
-            ),
-            _buildNavItem(
-              context,
-              2,
-              Icons.insights_rounded,
-              'Progress',
-            ),
-            _buildNavItem(
-              context,
-              3,
-              Icons.workspace_premium_rounded,
-              'Rewards',
-            ),
-          ],
-        ),
+      child: Material(
+        color: AppTheme.cardWhite,
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+            side: const BorderSide(color: AppTheme.borderLight)),
+        child: Padding(
+            padding: const EdgeInsets.all(5),
+            child: Row(
+              children: [
+                _buildNavItem(context, 0, Icons.home_rounded, 'Home'),
+                _buildNavItem(
+                  context,
+                  1,
+                  Icons.explore_rounded,
+                  'Learn',
+                ),
+                _buildNavItem(
+                  context,
+                  2,
+                  Icons.insights_rounded,
+                  'Progress',
+                ),
+                _buildNavItem(
+                  context,
+                  3,
+                  Icons.workspace_premium_rounded,
+                  'Rewards',
+                ),
+              ],
+            )),
       ),
     );
   }
@@ -60,7 +59,6 @@ class ByteQuestBottomNav extends StatelessWidget {
     String label,
   ) {
     final isSelected = currentIndex == index;
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
 
     return Expanded(
       child: Semantics(
@@ -73,38 +71,37 @@ class ByteQuestBottomNav extends StatelessWidget {
             onTap(index);
           },
           borderRadius: BorderRadius.circular(17),
-          child: AnimatedContainer(
-            duration: reduceMotion
-                ? Duration.zero
-                : const Duration(milliseconds: 180),
-            curve: Curves.easeOutCubic,
-            constraints: const BoxConstraints(minHeight: 55),
-            padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
+          child: Ink(
             decoration: BoxDecoration(
               color: isSelected ? AppTheme.primaryBlue : Colors.transparent,
               borderRadius: BorderRadius.circular(17),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  icon,
-                  color: isSelected ? Colors.white : AppTheme.textLight,
-                  size: 21,
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  label,
-                  style: AppTheme.labelSmall.copyWith(
-                    fontSize: 10.5,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                    color: isSelected ? Colors.white : AppTheme.textMedium,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
+            child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 55),
+                child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          icon,
+                          color: isSelected ? Colors.white : AppTheme.textLight,
+                          size: 21,
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          label,
+                          style: AppTheme.labelSmall.copyWith(
+                            fontSize: 10.5,
+                            fontWeight:
+                                isSelected ? FontWeight.w700 : FontWeight.w600,
+                            color:
+                                isSelected ? Colors.white : AppTheme.textMedium,
+                          ),
+                        ),
+                      ],
+                    ))),
           ),
         ),
       ),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_theme.dart';
+import '../../data/mission_content_data.dart';
 
 /// Compact page heading used across the learner experience.
 class LearnerPageHeader extends StatelessWidget {
@@ -8,12 +9,14 @@ class LearnerPageHeader extends StatelessWidget {
   final String? subtitle;
   final Widget? trailing;
   final EdgeInsetsGeometry padding;
+  final bool showBackButton;
 
   const LearnerPageHeader({
     super.key,
     required this.title,
     this.subtitle,
     this.trailing,
+    this.showBackButton = false,
     this.padding = const EdgeInsets.fromLTRB(20, 18, 20, 14),
   });
 
@@ -23,6 +26,10 @@ class LearnerPageHeader extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
+            if (showBackButton) ...[
+              BackButton(onPressed: () => Navigator.maybePop(context)),
+              const SizedBox(width: 8),
+            ],
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -80,7 +87,12 @@ class LearnerSurface extends StatelessWidget {
     final decoration = BoxDecoration(
       color: color,
       borderRadius: AppTheme.radiusLg,
-      border: elevated ? null : Border.all(color: AppTheme.borderLight),
+      border: elevated
+          ? null
+          : Border.all(
+              color:
+                  onTap != null ? AppTheme.primaryBlue : AppTheme.borderLight,
+              width: onTap != null ? 1.3 : 1),
       boxShadow: elevated ? AppTheme.softShadow : const [],
     );
 
@@ -91,11 +103,13 @@ class LearnerSurface extends StatelessWidget {
     if (onTap != null) {
       content = Material(
         color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: AppTheme.radiusLg,
-          child: content,
-        ),
+        child: Ink(
+            decoration: decoration,
+            child: InkWell(
+              onTap: onTap,
+              borderRadius: AppTheme.radiusLg,
+              child: Padding(padding: padding, child: child),
+            )),
       );
     }
     if (semanticLabel != null) {
@@ -221,6 +235,8 @@ class _LearnerLoadingViewState extends State<LearnerLoadingView>
               physics: const NeverScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 120),
               children: [
+                Text(widget.label, style: AppTheme.bodySmall),
+                const SizedBox(height: 16),
                 _SkeletonBlock(widthFactor: .52, height: 26, color: tint),
                 const SizedBox(height: 9),
                 _SkeletonBlock(widthFactor: .72, height: 14, color: tint),
@@ -324,6 +340,13 @@ class LearnerStateView extends StatelessWidget {
                     icon: const Icon(Icons.refresh_rounded),
                     label: Text(actionLabel!),
                   ),
+                ],
+                if (Navigator.canPop(context)) ...[
+                  const SizedBox(height: 8),
+                  OutlinedButton.icon(
+                      onPressed: () => Navigator.maybePop(context),
+                      icon: const Icon(Icons.arrow_back_rounded),
+                      label: const Text(MissionContentData.backLabel)),
                 ],
               ],
             ),

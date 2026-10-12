@@ -19,55 +19,107 @@ class _PracticeProgressPanelState extends State<PracticeProgressPanel> {
   void _refresh() =>
       setState(() => _progress = PracticeProgressService().getProgress());
   @override
-  Widget build(BuildContext context) => FutureBuilder<
-          List<PracticeCocProgress>>(
-      future: _progress,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return ListTile(
-              title: const Text(MissionContentData.practiceProgressUnavailable),
-              trailing: IconButton(
-                  tooltip: MissionContentData.practiceQuizRetry,
-                  onPressed: _refresh,
-                  icon: const Icon(Icons.refresh)));
-        }
-        if (!snapshot.hasData) return const LinearProgressIndicator();
-        return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(MissionContentData.practiceProgressTitle,
-                  style: AppTheme.labelLarge),
-              for (final progress in snapshot.data!
-                  .where((p) => widget.coc == null || p.coc == widget.coc))
-                ListTile(
-                  leading: Icon(progress.completed
-                      ? Icons.check_circle_outline
-                      : progress.unlocked
-                          ? Icons.lock_open
-                          : Icons.lock_outline),
-                  title: Text(
-                      '${progress.coc.toUpperCase()} · ${progress.completedMissions.length}/5'),
-                  subtitle: Text(!progress.unlocked
-                      ? MissionContentData.practiceLockedMessage
-                      : progress.completed
-                          ? MissionContentData.practiceQuizPassed
-                          : MissionContentData.practiceQuizNotice),
-                  trailing: widget.coc != null && progress.quizAvailable
-                      ? IconButton(
-                          tooltip: MissionContentData.practiceQuizStart,
-                          onPressed: () async {
-                            await Navigator.of(context).push(
-                                MaterialPageRoute<void>(
-                                    builder: (_) =>
-                                        PracticeQuizScreen(coc: progress.coc)));
-                            if (mounted) {
-                              _refresh();
-                              await widget.onChanged?.call();
+  Widget build(BuildContext context) =>
+      FutureBuilder<List<PracticeCocProgress>>(
+          future: _progress,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(MissionContentData.practiceProgressUnavailable),
+                    OutlinedButton.icon(
+                        onPressed: _refresh,
+                        icon: const Icon(Icons.refresh),
+                        label:
+                            const Text(MissionContentData.practiceQuizRetry)),
+                  ]);
+            }
+            if (!snapshot.hasData) {
+              return const Column(children: [
+                LinearProgressIndicator(),
+                SizedBox(height: 8),
+                Text(MissionContentData.loadingPracticeProgressLabel),
+              ]);
+            }
+            return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (widget.coc == null)
+                    Text(MissionContentData.practiceProgressTitle,
+                        style: AppTheme.labelLarge),
+                  for (final progress in snapshot.data!
+                      .where((p) => widget.coc == null || p.coc == widget.coc))
+                    PracticeCocSummary(
+                      progress: progress,
+                      onOpenQuiz: widget.coc != null && progress.quizAvailable
+                          ? () async {
+                              await Navigator.of(context).push(
+                                  MaterialPageRoute<void>(
+                                      builder: (_) => PracticeQuizScreen(
+                                          coc: progress.coc)));
+                              if (mounted) {
+                                _refresh();
+                                await widget.onChanged?.call();
+                              }
                             }
-                          },
-                          icon: const Icon(Icons.quiz_outlined))
-                      : null,
-                ),
-            ]);
-      });
+                          : null,
+                    ),
+                ]);
+          });
+}
+
+/// Static COC status with an explicit quiz action when server access permits it.
+class PracticeCocSummary extends StatelessWidget {
+  const PracticeCocSummary(
+      {super.key, required this.progress, this.onOpenQuiz});
+  final PracticeCocProgress progress;
+  final VoidCallback? onOpenQuiz;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(children: [
+            Icon(
+                progress.completed
+                    ? Icons.check_circle_outline
+                    : progress.unlocked
+                        ? Icons.lock_open
+                        : Icons.lock_outline,
+                color: AppTheme.deepBlue),
+            const SizedBox(width: 10),
+            Expanded(
+                child: Text(progress.coc.toUpperCase(),
+                    style: AppTheme.titleMedium)),
+          ]),
+          const SizedBox(height: 8),
+          Text(
+              MissionContentData.practiceMissionCount(
+                  progress.completedMissions.length),
+              style: AppTheme.bodySmall),
+          const SizedBox(height: 6),
+          Text(
+              !progress.unlocked
+                  ? MissionContentData.practiceLockedMessage
+                  : progress.completed
+                      ? MissionContentData.practiceQuizPassed
+                      : progress.quizAvailable
+                          ? MissionContentData.practiceQuizReadyLabel
+                          : MissionContentData.practiceMissionsPendingLabel,
+              style: AppTheme.bodySmall),
+          if (onOpenQuiz != null && progress.quizAvailable) ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: onOpenQuiz,
+              icon: const Icon(Icons.quiz_outlined),
+              label: Text(progress.completed
+                  ? MissionContentData.practiceQuizReviewLabel
+                  : MissionContentData.practiceQuizStart),
+            ),
+          ],
+        ],
+      ));
 }

@@ -2,6 +2,26 @@
 
 > Read this file with `AGENTS.md`, `README.md`, and `bytequest.md` before changing the repository.
 
+## Current continuation - 2026-10-12 mobile UI/UX audit and validation complete
+
+This section supersedes earlier UI/build blockers. The explicit user-selected
+branch remains `new`, tracking `bytequest-project/new` in
+`vincee08/bytequest-project`. The scoped UX commit includes this handoff and
+`docs/MOBILE_UX_AUDIT_2026-10-11.md`; inspect Git for its current revision.
+
+- Audited all 45 screen sources, routes, shared controls and runtime. Implemented recognizable button/disabled/loading states, wrapping labels, visible Material ink, labeled Settings/Learning path/Quizzes and accessible Back controls. Removed nonfunctional avatar-camera/upload decorations; signup policy text now opens the real Terms/Privacy route.
+- The four main destinations retain state through an IndexedStack. Home selects the existing Learn destination, and Android Back follows visited destinations. Secondary routes preserve the Learn/Practice context. Existing routes/features remain.
+- All twenty runtime missions use a pinned Continue/Review/Confirm evidence action area. Learner-visible pending action counts explain disabled Continue without changing completion gates or leaking assessment targets. Phase titles, source/location captions, selected-source instructions, installed/connected indicators and numbered sequence controls clarify tasks. COC4 uses tap sequencing instructions. Large-text layouts scroll the scene/task panel together, preserving the primary action.
+- Practice access has loading/recovery states rather than temporary lock notices. COC summaries show verified mission counts and the next step; quizzes have an explicit labeled action when the existing server-backed access permits it. Existing unlock/evaluation rules are unchanged.
+- Reset/discard requires consequence confirmation. Edit Profile retains entries on failure, presents an inline recovery message and prevents duplicate saves. Mission errors show a guarded Retry; pending evidence is retried with its original action ID rather than repeating a phase transition. Disabled completed hotspots remain readable and screen-reader activation runs once.
+- Fixed and reran the three earlier failures: keep offscreen power-supply drag reachable by placing help after inventory; distinguish numbered sequence steps from keyed task labels and remove duplicate COC4 numbering; use Material/Ink for nested static-card controls such as FAQ expansion.
+- Final mandatory gates PASS: Flutter dependency resolution; ordinary Flutter analyzer **0 errors / 0 warnings / 206 infos**; **389/389 Flutter tests**; Android debug APK; dashboard TypeScript, lint and full production build. Previous SDK/process restrictions are no longer blocking. Existing analyzer infos and Kotlin/plugin migration notices remain tracked, non-blocking.
+- Automated coverage includes all twenty touch-control work orders, every real phase at 320x568, 640x360 and 800x360 with 2x text, offscreen drag/tap/orientation alternatives, retained navigation/forms, destructive guards, save failure/retry and screen-reader hotspot semantics. These are widget results, not twenty live learner completions.
+- Final Android API 35 smoke PASS: Home Continue/View all -> existing Learn, Progress -> system Back -> retained Practice, path/quizzes -> Back -> Learn, Settings/Profile Back, labeled Settings Back, Help FAQ expansion, M2 review/pinned confirmation and Save and Exit. Current-process Flutter logs contain no exception/overflow in these checks.
+- Built/installed `ByteQuest-Mobile-App/build/app/outputs/flutter-apk/app-debug.apk` with the hosted public practice endpoint. SHA-256 **2F378211EE3720D40F5BCA9689AD89982831CE35DBB52FB036C87E246703DCE2** matches the installed package. Reinstallation, force-stop/relaunch and M2 reentry preserve login, phase `coc1_m2_p5`, **8 placements, 2 connections, 47 accepted evidence IDs and 0 pending evidence**. The catalog reports the learner's existing COC1 **1/5** verified practice missions. No practice action, reset, submission, quiz score or completion was generated for UI smoke testing. Emulator remains open on M2 Review evidence.
+- Backend/API/auth/schema/RLS/assessment and instructor-release contracts remain unchanged; no hosted migration or Vercel API deployment is needed for this mobile UX change. Full TalkBack use, further physical-device coverage and independent first-time-user acceptance remain separate checks; do not infer these from source/widget/emulator results.
+- Preserve the user's untracked PDF and dashboard `package-lock.json`. APKs/build files/env files and local QA logs/snapshots remain ignored. Earlier copied tooling under `.tmp/` remains local; original SDK/emulator data were not removed. Future work should extend this validated implementation rather than redoing it.
+
 ## Current continuation - 2026-10-11 COC1 drag repair
 
 This section supersedes the APK and device-check status below. Continue on the

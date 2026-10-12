@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../core/config/supabase_config.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/learner_ui.dart';
+import '../../core/widgets/learner_navigation_shell.dart';
 import '../../core/widgets/supplementary_platform_notice.dart';
 import '../../models/assigned_activity_model.dart';
 import '../../models/profile_model.dart';
@@ -119,6 +120,11 @@ class _DashboardScreenState extends State<DashboardScreen>
   }
 
   void _openLearningHub() {
+    final navigation = LearnerNavigationScope.maybeOf(context);
+    if (navigation != null) {
+      navigation.selectDestination(1);
+      return;
+    }
     Navigator.push(
       context,
       MaterialPageRoute<void>(builder: (_) => const MissionsScreen()),

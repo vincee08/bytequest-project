@@ -76,6 +76,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       padding: const EdgeInsets.fromLTRB(20, 0, 20, 36),
                       children: [
                         LearnerPageHeader(
+                          showBackButton: Navigator.canPop(context),
                           title: 'Profile',
                           subtitle: 'Your ByteQuest learner identity',
                           padding: const EdgeInsets.fromLTRB(0, 18, 0, 16),

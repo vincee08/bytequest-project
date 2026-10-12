@@ -14,6 +14,7 @@ import '../../services/progress_resume_service.dart';
 import '../../services/practice_progress_service.dart';
 import 'components/equipment_operations.dart';
 import 'components/equipment_workspace.dart';
+import 'components/mission_task_status.dart';
 import 'interactions/mission_interactions.dart';
 import 'runtime/mission_evidence_gateway.dart';
 import 'runtime/mission_phase_completion_policy.dart';
@@ -86,6 +87,7 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
   String? _restoreFailure;
   String? _technicalFeedback;
   String? _workspaceFeedback;
+  final ScrollController _controlsScrollController = ScrollController();
 
   MissionRuntimeState get _state => _controller.state;
 
@@ -164,6 +166,23 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
   }
 
   Future<void> _resetSavedProgress() async {
+    final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+              title: const Text(MissionContentData.resetProgressTitle),
+              content: const Text(MissionContentData.resetProgressMessage),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(dialogContext, false),
+                    child: const Text(MissionContentData.cancelExitLabel)),
+                FilledButton(
+                    onPressed: () => Navigator.pop(dialogContext, true),
+                    style: FilledButton.styleFrom(
+                        backgroundColor: AppTheme.errorRed),
+                    child: const Text(MissionContentData.discardProgressLabel)),
+              ],
+            ));
+    if (confirmed != true || !mounted) return;
     setState(() => _restoring = true);
     try {
       if (!_accessVerified) {
@@ -210,6 +229,7 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
 
   @override
   void dispose() {
+    _controlsScrollController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     unawaited(widget.orientationCoordinator.restoreSupportedOrientations());
     super.dispose();
@@ -252,6 +272,10 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
 
     final phaseIndex = _phaseIndex;
     final phase = widget.definition.phases[phaseIndex];
+    final viewport = MediaQuery.sizeOf(context);
+    final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.4;
+    final wide = viewport.width >= 720 ||
+        (viewport.width >= 600 && viewport.width > viewport.height);
     final scene = EquipmentWorkspace(
       definition: widget.definition,
       phase: phase,
@@ -282,6 +306,7 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
             _MissionHeader(
               title: widget.definition.title,
               environment: widget.definition.environmentLabel,
+              phaseTitle: phase.title,
               phaseIndex: phaseIndex,
               phaseCount: widget.definition.phases.length,
               onBack: () => unawaited(_leave()),
@@ -289,24 +314,31 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
             Expanded(
               child: LayoutBuilder(
                 builder: (context, constraints) {
+                  if (largeText) {
+                    return _buildControls(phase, phaseIndex,
+                        leading: SizedBox(height: 400, child: scene));
+                  }
                   final controls = KeyedSubtree(
                     key: ValueKey('mission-controls-phase-${phase.id}'),
                     child: _buildControls(phase, phaseIndex),
                   );
-                  final usesCompactLandscape = constraints.maxWidth >= 600 &&
-                      constraints.maxWidth > constraints.maxHeight;
-                  if (constraints.maxWidth >= 720 || usesCompactLandscape) {
+                  if (wide) {
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         Expanded(flex: 3, child: scene),
                         const VerticalDivider(width: 1),
-                        Expanded(flex: 2, child: controls),
+                        Expanded(
+                            flex: 2,
+                            child: Column(children: [
+                              Expanded(child: controls),
+                              _buildActionBar(phase, phaseIndex),
+                            ])),
                       ],
                     );
                   }
-                  final sceneHeight = (constraints.maxHeight * .52)
-                      .clamp(0.0, 420.0)
+                  final sceneHeight = (constraints.maxHeight * .56)
+                      .clamp(constraints.maxHeight > 260 ? 210.0 : 0.0, 420.0)
                       .toDouble();
                   return Column(
                     children: [
@@ -318,121 +350,164 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
                 },
               ),
             ),
+            if (!wide || largeText) _buildActionBar(phase, phaseIndex),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildControls(MissionPhaseDefinition phase, int phaseIndex) {
-    return SingleChildScrollView(
-      key: const ValueKey('mission-controls-scroll'),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (phaseIndex == 0) ...[
-            Text(widget.definition.scenario, style: AppTheme.bodyMedium),
-            const SizedBox(height: 12),
-          ],
-          if (_state.mode == MissionRuntimeMode.practice)
-            ExpansionTile(
-                title: const Text(MissionContentData.practiceHintLabel),
-                children: [
-                  Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Text(widget.definition.practiceGuidance))
-                ]),
-          if (phaseIndex > 0)
-            PopupMenuButton<String>(
-              tooltip: MissionContentData.revisePhaseLabel,
-              enabled: !_writing && !_submitting && !_submitted,
-              onSelected: (id) => unawaited(_revisitPhase(id)),
-              itemBuilder: (_) => [
-                for (final previous
-                    in widget.definition.phases.take(phaseIndex))
-                  PopupMenuItem(value: previous.id, child: Text(previous.title))
+  Widget _buildControls(MissionPhaseDefinition phase, int phaseIndex,
+      {Widget? leading}) {
+    return Scrollbar(
+        controller: _controlsScrollController,
+        thumbVisibility: true,
+        child: SingleChildScrollView(
+          controller: _controlsScrollController,
+          key: const ValueKey('mission-controls-scroll'),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (leading != null) ...[leading, const SizedBox(height: 12)],
+              Text(MissionContentData.controlsScrollHint,
+                  style: AppTheme.caption),
+              const SizedBox(height: 8),
+              if (phaseIndex == 0) ...[
+                Text(widget.definition.scenario, style: AppTheme.bodyMedium),
+                const SizedBox(height: 12),
               ],
-              child: const ListTile(
-                  leading: Icon(Icons.history),
-                  title: Text(MissionContentData.revisePhaseLabel)),
-            ),
-          Text(phase.title, style: AppTheme.titleMedium),
-          const SizedBox(height: 6),
-          Text(phase.instruction, style: AppTheme.bodyMedium),
-          const SizedBox(height: 16),
-          MissionPhaseInteraction(
-            key: ValueKey('mission-interaction-${phase.id}'),
-            phase: phase,
-            state: _state,
-            enabled: !_writing && !_submitting,
-            onAction: (actionType, target, value) =>
-                _recordAction(phase, actionType, target, value),
-            onRuntimeTransition: (transition) {
-              _pendingInteractionTransition = transition;
-            },
-            completedPhaseTitles: widget.definition.phases
-                .where((item) => _state.completedPhaseIds.contains(item.id))
-                .map((item) => item.title)
-                .toList(growable: false),
-            authoritativeEvidenceCount: _state.acceptedEvidenceIds.length,
-            pendingEvidenceCount: _state.pendingEvidence.length,
-            failedEvidenceCount: _controller.failedPendingEvidence.length,
-            canSubmit: _controller.canSubmit &&
-                MissionEquipmentSimulator.readyForReview(
-                    widget.definition, _state) &&
-                !_submitting &&
-                !_submitted &&
-                !_retryingEvidence,
-            retryingPendingEvidence: _retryingEvidence,
-            returnLabel:
-                widget.definition.reviewMetadata['returnLabel'] as String? ??
-                    'Return to mission',
-            confirmLabel:
-                widget.definition.reviewMetadata['confirmLabel'] as String? ??
-                    'Confirm evidence',
-            onReturnFromReview: () => unawaited(_returnFromReview()),
-            onConfirmReview: () => unawaited(_confirmSubmission()),
-            onRetryPendingEvidence: () => unawaited(_retryPendingEvidence()),
-          ),
-          EquipmentOperations(
-              phase: phase,
-              state: _state,
-              enabled: !_writing && !_submitting && !_submitted,
-              onAction: (type, target, value) =>
-                  _recordAction(phase, type, target, value)),
-          if (_technicalFeedback case final feedback?) ...[
-            const SizedBox(height: 14),
-            Semantics(
-              liveRegion: true,
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppTheme.backgroundPaleBlue,
-                  borderRadius: AppTheme.radiusSm,
+              if (_state.mode == MissionRuntimeMode.practice)
+                ExpansionTile(
+                    title: const Text(MissionContentData.practiceHintLabel),
+                    children: [
+                      Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Text(widget.definition.practiceGuidance))
+                    ]),
+              if (phaseIndex > 0)
+                PopupMenuButton<String>(
+                  tooltip: MissionContentData.revisePhaseLabel,
+                  enabled: !_writing && !_submitting && !_submitted,
+                  onSelected: (id) => unawaited(_revisitPhase(id)),
+                  itemBuilder: (_) => [
+                    for (final previous
+                        in widget.definition.phases.take(phaseIndex))
+                      PopupMenuItem(
+                          value: previous.id, child: Text(previous.title))
+                  ],
+                  child: Container(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    decoration: BoxDecoration(
+                        border: Border.all(color: AppTheme.primaryBlue),
+                        borderRadius: AppTheme.radiusSm),
+                    child: const ListTile(
+                        leading: Icon(Icons.history),
+                        title: Text(MissionContentData.revisePhaseLabel),
+                        trailing: Icon(Icons.expand_more)),
+                  ),
                 ),
-                child: Text(feedback, style: AppTheme.bodySmall),
+              Text(phase.title, style: AppTheme.titleMedium),
+              const SizedBox(height: 6),
+              Text(phase.instruction, style: AppTheme.bodyMedium),
+              const SizedBox(height: 16),
+              MissionPhaseInteraction(
+                key: ValueKey('mission-interaction-${phase.id}'),
+                phase: phase,
+                state: _state,
+                enabled: !_writing && !_submitting && !_submitted,
+                onAction: (actionType, target, value) =>
+                    _recordAction(phase, actionType, target, value),
+                onRuntimeTransition: (transition) {
+                  _pendingInteractionTransition = transition;
+                },
+                completedPhaseTitles: widget.definition.phases
+                    .where((item) => _state.completedPhaseIds.contains(item.id))
+                    .map((item) => item.title)
+                    .toList(growable: false),
+                authoritativeEvidenceCount: _state.acceptedEvidenceIds.length,
+                pendingEvidenceCount: _state.pendingEvidence.length,
+                failedEvidenceCount: _controller.failedPendingEvidence.length,
+                canSubmit: _controller.canSubmit &&
+                    MissionEquipmentSimulator.readyForReview(
+                        widget.definition, _state) &&
+                    !_submitting &&
+                    !_submitted &&
+                    !_retryingEvidence,
+                retryingPendingEvidence: _retryingEvidence,
+                showReviewConfirmButton: false,
+                returnLabel: widget.definition.reviewMetadata['returnLabel']
+                        as String? ??
+                    'Return to mission',
+                confirmLabel: widget.definition.reviewMetadata['confirmLabel']
+                        as String? ??
+                    'Confirm evidence',
+                onReturnFromReview: () => unawaited(_returnFromReview()),
+                onConfirmReview: () => unawaited(_confirmSubmission()),
+                onRetryPendingEvidence: () =>
+                    unawaited(_retryPendingEvidence()),
               ),
-            ),
-          ],
-          if (phase.primaryInteraction != InteractionFamily.review) ...[
-            const SizedBox(height: 18),
-            FilledButton.icon(
-              key: const ValueKey('mission-next'),
-              onPressed: _writing ||
-                      !MissionPhaseCompletionPolicy.canAdvance(phase, _state)
-                  ? null
-                  : () => unawaited(_advance(phaseIndex)),
-              icon: const Icon(Icons.arrow_forward_rounded),
-              label: Text(
-                phaseIndex == widget.definition.phases.length - 2
-                    ? 'Review evidence'
-                    : 'Continue',
-              ),
-            ),
-          ],
-        ],
-      ),
+              EquipmentOperations(
+                  phase: phase,
+                  state: _state,
+                  enabled: !_writing && !_submitting && !_submitted,
+                  onAction: (type, target, value) =>
+                      _recordAction(phase, type, target, value)),
+              if (_technicalFeedback case final feedback?) ...[
+                const SizedBox(height: 14),
+                Semantics(
+                  liveRegion: true,
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.backgroundPaleBlue,
+                      borderRadius: AppTheme.radiusSm,
+                    ),
+                    child: Text(feedback, style: AppTheme.bodySmall),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ));
+  }
+
+  Widget _buildActionBar(MissionPhaseDefinition phase, int phaseIndex) {
+    if (phase.primaryInteraction == InteractionFamily.review) {
+      final equipmentReady =
+          MissionEquipmentSimulator.readyForReview(widget.definition, _state);
+      final canConfirm = _controller.canSubmit && equipmentReady && !_submitted;
+      return MissionActionBar(
+        status: _submitted
+            ? MissionContentData.reviewSavedLabel
+            : _state.pendingEvidence.isNotEmpty
+                ? MissionContentData.reviewPendingLabel
+                : equipmentReady
+                    ? MissionContentData.reviewReadyLabel
+                    : MissionContentData.phaseActionsPendingLabel,
+        label: widget.definition.reviewMetadata['confirmLabel'] as String? ??
+            MissionContentData.confirmEvidenceLabel,
+        saving: _writing || _submitting || _retryingEvidence,
+        complete: _submitted,
+        onContinue: canConfirm ? () => unawaited(_confirmSubmission()) : null,
+      );
+    }
+    final ready = MissionPhaseCompletionPolicy.canAdvance(phase, _state);
+    final pending = missionPendingTasks(phase, _state);
+    final status = ready
+        ? MissionContentData.readyToContinueLabel
+        : pending.isNotEmpty
+            ? pending.join('\n')
+            : MissionContentData.phaseActionsPendingLabel;
+    return MissionActionBar(
+      status: status,
+      saving: _writing,
+      label: phaseIndex == widget.definition.phases.length - 2
+          ? MissionContentData.reviewEvidenceLabel
+          : MissionContentData.continueLabel,
+      onContinue: ready && !_submitting && !_submitted
+          ? () => unawaited(_advance(phaseIndex))
+          : null,
     );
   }
 
@@ -536,8 +611,10 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
         _technicalFeedback = 'Technical evidence recorded.';
       }
     } catch (_) {
-      _technicalFeedback =
-          'Technical evidence could not be synchronized. Retry this action.';
+      _showActionError(MissionContentData.technicalEvidenceSyncFailed,
+          onRetry: _state.pendingEvidence.isNotEmpty
+              ? () => unawaited(_retryPendingEvidence())
+              : null);
     } finally {
       if (mounted) setState(() => _writing = false);
     }
@@ -587,9 +664,11 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
         ),
       );
       _technicalFeedback = null;
+      if (_controlsScrollController.hasClients)
+        _controlsScrollController.jumpTo(0);
     } catch (_) {
-      _technicalFeedback =
-          'The phase could not be saved. Retry before continuing.';
+      _showActionError(MissionContentData.phaseSaveFailed,
+          onRetry: () => unawaited(_advance(phaseIndex)));
     } finally {
       if (mounted) setState(() => _writing = false);
     }
@@ -610,8 +689,8 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
         transition: (state) => state.copyWith(currentPhaseId: previous.id),
       );
     } catch (_) {
-      _technicalFeedback =
-          'The review state could not be saved. Retry before returning.';
+      _showActionError(MissionContentData.reviewSaveFailed,
+          onRetry: () => unawaited(_returnFromReview()));
     } finally {
       if (mounted) setState(() => _writing = false);
     }
@@ -633,7 +712,8 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
           transition: (state) => state.copyWith(currentPhaseId: destination));
       _technicalFeedback = null;
     } catch (_) {
-      _technicalFeedback = MissionContentData.saveProgressFailedMessage;
+      _showActionError(MissionContentData.saveProgressFailedMessage,
+          onRetry: () => unawaited(_revisitPhase(destination)));
     } finally {
       if (mounted) setState(() => _writing = false);
     }
@@ -665,12 +745,42 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
           ? MissionContentData.practiceSavedMessage
           : 'Evidence submitted for authoritative evaluation and review.';
     } catch (_) {
-      _technicalFeedback = _state.mode == MissionRuntimeMode.practice
-          ? MissionContentData.practiceSubmitFailed
-          : MissionContentData.assessmentSubmitFailed;
+      _showActionError(
+          _state.mode == MissionRuntimeMode.practice
+              ? MissionContentData.practiceSubmitFailed
+              : MissionContentData.assessmentSubmitFailed,
+          onRetry: () => unawaited(_confirmSubmission()));
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
+  }
+
+  void _showActionError(String message, {VoidCallback? onRetry}) {
+    _technicalFeedback = message;
+    if (!mounted) return;
+    final phaseId = _state.currentPhaseId;
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    messenger?.hideCurrentSnackBar();
+    messenger?.showSnackBar(SnackBar(
+      content: Text(message),
+      action: onRetry == null
+          ? null
+          : SnackBarAction(
+              label: MissionContentData.retryActionLabel,
+              onPressed: () {
+                if (mounted &&
+                    !_writing &&
+                    !_submitting &&
+                    !_retryingEvidence &&
+                    _state.currentPhaseId == phaseId) {
+                  if (_state.pendingEvidence.isNotEmpty) {
+                    unawaited(_retryPendingEvidence());
+                  } else {
+                    onRetry();
+                  }
+                }
+              }),
+    ));
   }
 
   Future<void> _retryPendingEvidence() async {
@@ -758,6 +868,28 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
     }
 
     if (choice == _MissionExitChoice.discardProgress) {
+      final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+                title: const Text(MissionContentData.discardProgressTitle),
+                content: const Text(MissionContentData.discardProgressMessage),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialogContext, false),
+                      child: const Text(MissionContentData.cancelExitLabel)),
+                  FilledButton(
+                      onPressed: () => Navigator.pop(dialogContext, true),
+                      style: FilledButton.styleFrom(
+                          backgroundColor: AppTheme.errorRed),
+                      child:
+                          const Text(MissionContentData.discardProgressLabel)),
+                ],
+              ));
+      if (!mounted) return;
+      if (confirmed != true) {
+        setState(() => _leaving = false);
+        return;
+      }
       try {
         await _practiceEvidenceService?.markProgressDiscarded(
           phaseId: _state.currentPhaseId ?? widget.definition.phases.first.id,
@@ -806,6 +938,7 @@ class MissionPhaseInteraction extends StatelessWidget {
     this.failedEvidenceCount = 0,
     this.canSubmit = false,
     this.retryingPendingEvidence = false,
+    this.showReviewConfirmButton = true,
     this.returnLabel = 'Return',
     this.confirmLabel = 'Confirm submission',
     this.enabled = true,
@@ -824,6 +957,7 @@ class MissionPhaseInteraction extends StatelessWidget {
   final int failedEvidenceCount;
   final bool canSubmit;
   final bool retryingPendingEvidence;
+  final bool showReviewConfirmButton;
   final String returnLabel;
   final String confirmLabel;
   final bool enabled;
@@ -933,6 +1067,7 @@ class MissionPhaseInteraction extends StatelessWidget {
           onConfirm: onConfirmReview,
           onRetryPending: onRetryPendingEvidence,
           retryingPending: retryingPendingEvidence,
+          showConfirmButton: showReviewConfirmButton,
           returnLabel: returnLabel,
           confirmLabel: confirmLabel,
         ),
@@ -1074,6 +1209,7 @@ class _MissionHeader extends StatelessWidget {
   const _MissionHeader({
     required this.title,
     required this.environment,
+    required this.phaseTitle,
     required this.phaseIndex,
     required this.phaseCount,
     required this.onBack,
@@ -1081,6 +1217,7 @@ class _MissionHeader extends StatelessWidget {
 
   final String title;
   final String environment;
+  final String phaseTitle;
   final int phaseIndex;
   final int phaseCount;
   final VoidCallback onBack;
@@ -1110,8 +1247,9 @@ class _MissionHeader extends StatelessWidget {
                     style: AppTheme.titleSmall,
                   ),
                   Text(
-                    environment,
-                    maxLines: 1,
+                    MissionContentData.phasePosition(
+                        phaseIndex + 1, phaseCount, phaseTitle),
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: AppTheme.bodySmall,
                   ),

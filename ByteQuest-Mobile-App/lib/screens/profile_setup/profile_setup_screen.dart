@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../data/mission_content_data.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_button.dart';
 import '../../services/profile_service.dart';
@@ -242,29 +243,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                           color: AppTheme.primaryBlue,
                         ),
                       ),
-                      Positioned(
-                        bottom: 0,
-                        right: 0,
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: AppTheme.primaryBlue,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Icon(
-                            Icons.camera_alt,
-                            size: 16,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 8),
                 Center(
                   child: Text(
-                    'Upload Profile Picture',
+                    MissionContentData.profileAvatarLabel,
                     style: AppTheme.labelMedium.copyWith(
                       color: AppTheme.textMedium,
                     ),
@@ -282,6 +267,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   textCapitalization: TextCapitalization.words,
                   textInputAction: TextInputAction.next,
                   decoration: InputDecoration(
+                    labelText: MissionContentData.fullNameFieldLabel,
                     hintText: 'Enter your full name',
                     helperText: 'Carried over from sign up. You can edit it.',
                     prefixIcon: Icon(Icons.person, color: AppTheme.primaryBlue),
@@ -302,6 +288,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   controller: _studentIdController,
                   textInputAction: TextInputAction.next,
                   decoration: InputDecoration(
+                    labelText: MissionContentData.studentIdFieldLabel,
                     hintText: 'Enter your student ID',
                     prefixIcon: Icon(Icons.badge, color: AppTheme.primaryBlue),
                   ),
@@ -316,6 +303,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   textCapitalization: TextCapitalization.words,
                   textInputAction: TextInputAction.next,
                   decoration: InputDecoration(
+                    labelText: MissionContentData.optionalSchoolLabel,
                     hintText: 'Enter your school or institution',
                     prefixIcon: Icon(Icons.school, color: AppTheme.primaryBlue),
                   ),
@@ -332,6 +320,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   textInputAction: TextInputAction.next,
                   maxLength: 80,
                   decoration: InputDecoration(
+                    labelText: MissionContentData.sectionFieldLabel,
                     hintText: 'Enter your section or set',
                     helperText: 'Example: CSS NC II – Section A or Set 1',
                     counterText: '',
@@ -348,6 +337,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                   value: _selectedGoal,
                   isExpanded: true,
                   decoration: InputDecoration(
+                    labelText: MissionContentData.goalFieldLabel,
                     hintText: 'Select your learning goal or track',
                     prefixIcon: Icon(Icons.flag, color: AppTheme.primaryBlue),
                   ),

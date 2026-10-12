@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../data/mission_content_data.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_button.dart';
@@ -115,19 +116,21 @@ class _LoginScreenState extends State<LoginScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    SizedBox(
+                    Flexible(
+                        child: SizedBox(
                       width: 28,
                       height: 28,
                       child: Image.asset('assets/images/ByteQuest Logo.png'),
-                    ),
+                    )),
                     const SizedBox(width: 8),
-                    Text(
+                    Flexible(
+                        child: Text(
                       'ByteQuest',
                       style: AppTheme.titleLarge.copyWith(
                         color: AppTheme.navy,
                         fontWeight: FontWeight.w800,
                       ),
-                    ),
+                    )),
                   ],
                 ),
                 const SizedBox(height: 28),
@@ -181,6 +184,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   decoration: InputDecoration(
+                    labelText: MissionContentData.emailFieldLabel,
                     hintText: 'Enter your email',
                     prefixIcon:
                         Icon(Icons.email_outlined, color: AppTheme.primaryBlue),
@@ -209,10 +213,14 @@ class _LoginScreenState extends State<LoginScreen> {
                   controller: _passwordController,
                   obscureText: !_isPasswordVisible,
                   decoration: InputDecoration(
+                    labelText: MissionContentData.passwordFieldLabel,
                     hintText: 'Enter your password',
                     prefixIcon:
                         Icon(Icons.lock_outline, color: AppTheme.primaryBlue),
                     suffixIcon: IconButton(
+                      tooltip: _isPasswordVisible
+                          ? MissionContentData.hidePasswordLabel
+                          : MissionContentData.showPasswordLabel,
                       icon: Icon(
                         _isPasswordVisible
                             ? Icons.visibility_outlined
@@ -258,8 +266,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 40),
 
                 // Sign Up Link
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(
                       "Don't have an account? ",

@@ -74,6 +74,10 @@ class _SequencingInteractionState extends State<SequencingInteraction> {
   Widget build(BuildContext context) => Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Text(widget.state.missionId.startsWith('coc4')
+              ? MissionContentData.sequenceTapHelp
+              : MissionContentData.sequenceHelp),
+          const SizedBox(height: 8),
           ReorderableListView.builder(
             buildDefaultDragHandles: false,
             shrinkWrap: true,
@@ -89,6 +93,10 @@ class _SequencingInteractionState extends State<SequencingInteraction> {
                 key: ValueKey('sequence-item-$id'),
                 child: Row(
                   children: [
+                    Padding(
+                        padding: const EdgeInsets.all(8),
+                        child:
+                            Text('${index + 1}', style: AppTheme.labelLarge)),
                     if (!widget.state.missionId.startsWith('coc4'))
                       ReorderableDragStartListener(
                         index: index,
@@ -98,21 +106,22 @@ class _SequencingInteractionState extends State<SequencingInteraction> {
                           child: Icon(Icons.drag_handle_rounded),
                         ),
                       ),
-                    if (widget.state.missionId.startsWith('coc4'))
-                      Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Text('${index + 1}'),
-                      ),
-                    Expanded(child: Text(label)),
+                    Expanded(
+                      child: Text(label, key: ValueKey('sequence-label-$id')),
+                    ),
                     IconButton(
-                      tooltip: 'Move $label up',
+                      tooltip: MissionContentData.moveStep(label, 'up'),
+                      style: IconButton.styleFrom(
+                          backgroundColor: AppTheme.surfaceMuted),
                       onPressed: widget.enabled && index > 0
                           ? () => _move(index, index - 1, 'button')
                           : null,
                       icon: const Icon(Icons.arrow_upward_rounded),
                     ),
                     IconButton(
-                      tooltip: 'Move $label down',
+                      tooltip: MissionContentData.moveStep(label, 'down'),
+                      style: IconButton.styleFrom(
+                          backgroundColor: AppTheme.surfaceMuted),
                       onPressed: widget.enabled && index < _order.length - 1
                           ? () => _move(index, index + 1, 'button')
                           : null,
@@ -123,10 +132,11 @@ class _SequencingInteractionState extends State<SequencingInteraction> {
               );
             },
           ),
-          FilledButton(
+          FilledButton.icon(
               key: ValueKey('sequence-confirm-${widget.phase.id}'),
               onPressed: widget.enabled ? () => _record('button') : null,
-              child: const Text(MissionContentData.confirmSequenceLabel)),
+              icon: const Icon(Icons.playlist_add_check_rounded),
+              label: const Text(MissionContentData.confirmSequenceLabel)),
         ],
       );
 

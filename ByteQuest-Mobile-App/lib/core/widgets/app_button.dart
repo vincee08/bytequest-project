@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
+import '../../data/mission_content_data.dart';
 
-/// Modern floating button component with soft card-based design
+/// Accessible action control with wrapping labels and explicit busy states.
 /// Supports: Primary, Secondary, Outline, Danger, and Icon variants
 class AppButton extends StatelessWidget {
   final String? label;
@@ -139,7 +140,7 @@ class AppButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectivelyDisabled = isDisabled || onPressed == null;
+    final effectivelyDisabled = isDisabled || onPressed == null || isLoading;
     // Handle text button variant
     if (variant == AppButtonVariant.text) {
       return TextButton(
@@ -152,7 +153,7 @@ class AppButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(borderRadius ?? 12),
           ),
         ),
-        child: _buildTextButtonContent(),
+        child: _buildTextButtonContent(disabled: effectivelyDisabled),
       );
     }
 
@@ -170,8 +171,8 @@ class AppButton extends StatelessWidget {
         onTap: canActivate ? onPressed : null,
         excludeSemantics: true,
         child: Container(
-          width: width ?? buttonSize.iconSize,
-          height: height ?? buttonSize.iconSize,
+          width: (width ?? buttonSize.iconSize).clamp(48, double.infinity),
+          height: (height ?? buttonSize.iconSize).clamp(48, double.infinity),
           decoration: BoxDecoration(
             color: effectivelyDisabled
                 ? config.disabledBackgroundColor
@@ -179,7 +180,11 @@ class AppButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(
                 borderRadius ?? buttonSize.iconBorderRadius),
             border: config.borderColor != null
-                ? Border.all(color: config.borderColor!, width: 2)
+                ? Border.all(
+                    color: effectivelyDisabled
+                        ? AppTheme.borderMedium
+                        : config.borderColor!,
+                    width: 1.5)
                 : null,
             boxShadow: effectivelyDisabled ? null : config.shadow,
           ),
@@ -219,11 +224,15 @@ class AppButton extends StatelessWidget {
       button: true,
       enabled: canActivate,
       label: semanticsLabel ?? label!,
+      value: isLoading ? MissionContentData.loadingLabel : null,
+      liveRegion: isLoading,
       onTap: canActivate ? onPressed : null,
       excludeSemantics: true,
       child: Container(
         width: width,
-        height: height ?? buttonSize.height,
+        constraints: BoxConstraints(
+            minHeight:
+                (height ?? buttonSize.height).clamp(48, double.infinity)),
         decoration: BoxDecoration(
           color: effectivelyDisabled
               ? config.disabledBackgroundColor
@@ -231,7 +240,11 @@ class AppButton extends StatelessWidget {
           borderRadius:
               BorderRadius.circular(borderRadius ?? buttonSize.borderRadius),
           border: config.borderColor != null
-              ? Border.all(color: config.borderColor!, width: 2)
+              ? Border.all(
+                  color: effectivelyDisabled
+                      ? AppTheme.borderMedium
+                      : config.borderColor!,
+                  width: 1.5)
               : null,
           boxShadow: effectivelyDisabled ? null : config.shadow,
         ),
@@ -260,24 +273,18 @@ class AppButton extends StatelessWidget {
     _ButtonSize buttonSize, {
     required bool disabled,
   }) {
-    if (isLoading) {
-      return Center(
-        child: SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(
-            color: config.textColor,
-            strokeWidth: 2,
-          ),
-        ),
-      );
-    }
-
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
       children: [
-        if (icon != null) ...[
+        if (isLoading) ...[
+          SizedBox.square(
+            dimension: 20,
+            child: CircularProgressIndicator(
+                color: config.disabledTextColor, strokeWidth: 2),
+          ),
+          SizedBox(width: buttonSize.iconSpacing),
+        ] else if (icon != null) ...[
           Icon(
             icon,
             color: disabled ? config.disabledTextColor : config.textColor,
@@ -293,10 +300,9 @@ class AppButton extends StatelessWidget {
                 color: disabled ? config.disabledTextColor : config.textColor,
               ),
               textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
-        if (suffixIcon != null) ...[
+        if (suffixIcon != null && !isLoading) ...[
           SizedBox(width: buttonSize.iconSpacing),
           Icon(
             suffixIcon,
@@ -308,24 +314,26 @@ class AppButton extends StatelessWidget {
     );
   }
 
-  Widget _buildTextButtonContent() {
+  Widget _buildTextButtonContent({required bool disabled}) {
+    final color = disabled ? AppTheme.textLight : AppTheme.primaryBlue;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         if (icon != null) ...[
-          Icon(icon, color: AppTheme.primaryBlue, size: 16),
+          Icon(icon, color: color, size: 16),
           const SizedBox(width: 6),
         ],
-        Text(
+        Flexible(
+            child: Text(
           label!,
           style: AppTheme.labelLarge.copyWith(
-            color: AppTheme.primaryBlue,
+            color: color,
             fontWeight: FontWeight.w600,
           ),
-        ),
+        )),
         if (suffixIcon != null) ...[
           const SizedBox(width: 6),
-          Icon(suffixIcon, color: AppTheme.primaryBlue, size: 16),
+          Icon(suffixIcon, color: color, size: 16),
         ],
       ],
     );
@@ -339,16 +347,17 @@ class AppButton extends StatelessWidget {
           textColor: Colors.white,
           disabledBackgroundColor: AppTheme.textLight.withValues(alpha: 0.2),
           disabledTextColor: AppTheme.textLight,
-          shadow: AppTheme.elevatedShadow,
+          shadow: [],
         );
 
       case AppButtonVariant.secondary:
         return _ButtonConfig(
           backgroundColor: AppTheme.cardWhite,
           textColor: AppTheme.textDark,
+          borderColor: AppTheme.borderMedium,
           disabledBackgroundColor: AppTheme.textLight.withValues(alpha: 0.1),
           disabledTextColor: AppTheme.textLight,
-          shadow: AppTheme.softShadow,
+          shadow: [],
         );
 
       case AppButtonVariant.outline:
@@ -367,13 +376,7 @@ class AppButton extends StatelessWidget {
           textColor: Colors.white,
           disabledBackgroundColor: AppTheme.textLight.withValues(alpha: 0.2),
           disabledTextColor: AppTheme.textLight,
-          shadow: [
-            BoxShadow(
-              color: AppTheme.errorRed.withValues(alpha: 0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
+          shadow: [],
         );
 
       case AppButtonVariant.text:
@@ -444,7 +447,7 @@ class AppButton extends StatelessWidget {
 
 /// Button style variants
 enum AppButtonVariant {
-  primary, // Blue gradient background, white text
+  primary, // Blue background, white text
   secondary, // White background, dark text
   outline, // Transparent with border
   danger, // Red background, white text
@@ -453,7 +456,7 @@ enum AppButtonVariant {
 
 /// Button size options
 enum AppButtonSize {
-  small, // Height: 40px
+  small, // Minimum height: 48px
   medium, // Height: 48px
   large, // Height: 56px (default)
   extraLarge, // Height: 64px

@@ -15,6 +15,7 @@ class EvidenceReviewPanel extends StatelessWidget {
     required this.onConfirm,
     this.onRetryPending,
     this.retryingPending = false,
+    this.showConfirmButton = true,
     this.returnLabel = 'Return',
     this.confirmLabel = 'Confirm submission',
   });
@@ -28,6 +29,7 @@ class EvidenceReviewPanel extends StatelessWidget {
   final VoidCallback onConfirm;
   final VoidCallback? onRetryPending;
   final bool retryingPending;
+  final bool showConfirmButton;
   final String returnLabel;
   final String confirmLabel;
 
@@ -88,10 +90,11 @@ class EvidenceReviewPanel extends StatelessWidget {
             ),
           ],
           const SizedBox(height: 14),
-          FilledButton(
-            onPressed: canSubmit && synchronized ? onConfirm : null,
-            child: Text(confirmLabel),
-          ),
+          if (showConfirmButton)
+            FilledButton(
+              onPressed: canSubmit && synchronized ? onConfirm : null,
+              child: Text(confirmLabel),
+            ),
           const SizedBox(height: 8),
           OutlinedButton(
             onPressed: onReturn,

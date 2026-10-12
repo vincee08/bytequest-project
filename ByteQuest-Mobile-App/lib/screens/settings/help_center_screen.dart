@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/soft_card.dart';
+import '../../data/mission_content_data.dart';
 
 class HelpCenterScreen extends StatefulWidget {
   const HelpCenterScreen({super.key});
@@ -48,6 +49,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
+          tooltip: MissionContentData.backLabel,
           icon: const Icon(Icons.arrow_back, color: AppTheme.textDark),
           onPressed: () => Navigator.pop(context),
         ),
@@ -68,6 +70,7 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
               TextField(
                 onChanged: (value) => setState(() => _query = value.trim()),
                 decoration: InputDecoration(
+                  labelText: MissionContentData.searchHelpLabel,
                   hintText: 'Search for help...',
                   prefixIcon: Icon(Icons.search, color: AppTheme.textMedium),
                   filled: true,

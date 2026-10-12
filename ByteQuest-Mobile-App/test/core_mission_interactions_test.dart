@@ -924,7 +924,12 @@ List<String> _sequenceLabels(WidgetTester tester) => tester
     .widgetList<Text>(
       find.descendant(
         of: find.byType(ReorderableListView),
-        matching: find.byType(Text),
+        matching: find.byWidgetPredicate((widget) =>
+            widget is Text &&
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>)
+                .value
+                .startsWith('sequence-label-')),
       ),
     )
     .map((widget) => widget.data)

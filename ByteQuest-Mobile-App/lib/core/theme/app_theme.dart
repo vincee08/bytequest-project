@@ -42,9 +42,9 @@ class AppTheme {
   // Accent Colors - Modern Palette
   static const Color accentOrange = Color(0xFFB54708);
   static const Color accentPurple = Color(0xFF7C3AED);
-  static const Color accentGreen = Color(0xFF168A5B);
+  static const Color accentGreen = Color(0xFF08764B);
   static const Color accentYellow = Color(0xFFE7A511);
-  static const Color accentRed = Color(0xFFD83B4C);
+  static const Color accentRed = Color(0xFFB42336);
 
   // Background Colors - Soft & Light
   static const Color backgroundLight = Color(0xFFF4F7FC);
@@ -435,10 +435,16 @@ class AppTheme {
           foregroundColor: primaryBlue,
           minimumSize: const Size(48, 50),
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          side: const BorderSide(color: borderMedium),
+          side: const BorderSide(color: primaryBlue, width: 1.3),
           shape: RoundedRectangleBorder(borderRadius: buttonRadius),
           textStyle: labelLarge,
-        ),
+        ).copyWith(
+            side: WidgetStateProperty.resolveWith((states) => BorderSide(
+                  color: states.contains(WidgetState.disabled)
+                      ? borderMedium
+                      : primaryBlue,
+                  width: 1.3,
+                ))),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
@@ -470,14 +476,16 @@ class AppTheme {
         space: 1,
       ),
       chipTheme: ChipThemeData(
-        backgroundColor: softBlueAccent,
+        backgroundColor: cardWhite,
+        selectedColor: softBlueAccent,
+        disabledColor: surfaceMuted,
         labelStyle: _sans(
           fontSize: 13,
           fontWeight: FontWeight.w600,
           color: primaryBlue,
         ),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        side: BorderSide.none,
+        side: const BorderSide(color: borderMedium),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
       progressIndicatorTheme: const ProgressIndicatorThemeData(

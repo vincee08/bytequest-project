@@ -48,18 +48,13 @@ class SoftCard extends StatelessWidget {
       borderRadius: BorderRadius.circular(borderRadius ?? 16),
       border: border ??
           ((elevation == null || elevation == 0)
-              ? Border.all(color: AppTheme.borderLight)
+              ? Border.all(
+                  color: onTap != null
+                      ? AppTheme.primaryBlue
+                      : AppTheme.borderLight,
+                  width: onTap != null ? 1.3 : 1)
               : null),
       boxShadow: shadows,
-    );
-
-    final Widget card = Container(
-      margin: margin ?? EdgeInsets.zero,
-      decoration: decoration,
-      child: Padding(
-        padding: padding ?? const EdgeInsets.all(16),
-        child: child,
-      ),
     );
 
     if (onTap != null) {
@@ -67,15 +62,33 @@ class SoftCard extends StatelessWidget {
         button: true,
         child: Material(
           color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(borderRadius ?? 16),
-            child: card,
-          ),
+          child: Padding(
+              padding: margin ?? EdgeInsets.zero,
+              child: Ink(
+                  decoration: decoration,
+                  child: InkWell(
+                    onTap: onTap,
+                    borderRadius: BorderRadius.circular(borderRadius ?? 16),
+                    child: Padding(
+                        padding: padding ?? const EdgeInsets.all(16),
+                        child: child),
+                  ))),
         ),
       );
     }
 
-    return card;
+    return Material(
+      color: Colors.transparent,
+      child: Padding(
+        padding: margin ?? EdgeInsets.zero,
+        child: Ink(
+          decoration: decoration,
+          child: Padding(
+            padding: padding ?? const EdgeInsets.all(16),
+            child: child,
+          ),
+        ),
+      ),
+    );
   }
 }

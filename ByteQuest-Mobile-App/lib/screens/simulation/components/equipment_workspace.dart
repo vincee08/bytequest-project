@@ -47,6 +47,7 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
   _WorkspaceMode? _mode;
   String? _selected;
   bool _choosingOrientation = false;
+  String? _selectionHint;
 
   Map<String, dynamic> get _equipment =>
       MissionEquipmentSimulator.map(widget.phase.presentation['equipment']);
@@ -68,6 +69,7 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
     if (oldWidget.phase.id != widget.phase.id) {
       _mode = null;
       _selected = null;
+      _selectionHint = null;
     }
   }
 
@@ -92,183 +94,248 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
     final scene = mode == _WorkspaceMode.inspect
         ? widget.definition.scene
         : _workScene(mode, sources, destinations);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (modes.length > 1)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final option in modes)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 4),
-                      child: Semantics(
-                        button: true,
-                        selected: mode == option,
-                        liveRegion: widget.saving && mode == option,
-                        label: widget.saving && mode == option
-                            ? MissionContentData.workspaceSavingLabel
-                            : _label(option),
-                        child: ChoiceChip(
-                          key: ValueKey('workspace-mode-${option.name}'),
-                          materialTapTargetSize: MaterialTapTargetSize.padded,
-                          selected: mode == option,
-                          label: Text(widget.saving && mode == option
-                              ? MissionContentData.workspaceSavingLabel
-                              : _label(option)),
-                          onSelected: widget.enabled
-                              ? (_) => setState(() {
-                                    _mode = option;
-                                    _selected = null;
-                                  })
-                              : null,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
-        Expanded(
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              SimulationScene(
-                scene: scene,
-                compactToolbar: mode != _WorkspaceMode.inspect,
-                panEnabled: widget.enabled && mode == _WorkspaceMode.inspect,
-                initialCameraScale: widget.state.cameraScale,
-                initialCameraOffset: Offset(
-                    widget.state.cameraOffsetX, widget.state.cameraOffsetY),
-                onCameraChanged: widget.onCameraChanged,
-                interactionHint: switch (mode) {
-                  _WorkspaceMode.place => MissionContentData.workspaceBuildHint,
-                  _WorkspaceMode.connect =>
-                    MissionContentData.workspaceConnectHint,
-                  _WorkspaceMode.inspect =>
-                    MissionContentData.workspaceInspectHint,
-                },
-                hotspotStates: {
-                  ...widget.hotspotStates,
-                  if (mode != _WorkspaceMode.inspect)
-                    for (final destination in destinations)
-                      if (widget.hotspotStates[destination['id']] != null)
-                        'destination:${destination['id']}':
-                            widget.hotspotStates[destination['id']]!,
-                  if (_selected != null)
-                    _selected!: HotspotVisualState.selected,
-                },
-                connectedNodePairs: mode == _WorkspaceMode.inspect
-                    ? widget.state.connectedNodePairs
-                    : mode == _WorkspaceMode.connect
-                        ? {
-                            for (final pair in widget.state.connectedNodePairs)
-                              '${pair.split('>').first}>destination:${pair.split('>').last}',
-                          }
-                        : const {},
-                enabled: widget.enabled && !_choosingOrientation,
-                onObjectSelected: (id) {
-                  if (mode == _WorkspaceMode.inspect) {
-                    unawaited(widget.onAction('object_inspected', id,
-                        const {'input_method': 'scene'}));
-                  } else if (id.startsWith('destination:')) {
-                    if (_selected != null) {
-                      unawaited(_apply(mode, _selected!,
-                          id.substring('destination:'.length), sources, 'tap'));
-                    }
-                  } else if (sources.any((source) => source['id'] == id)) {
-                    setState(() => _selected = id);
-                  }
-                },
-                objectBuilder: mode == _WorkspaceMode.inspect
-                    ? null
-                    : (object, hotspot) {
-                        final equipmentId =
-                            object.metadata['equipmentId'] as String;
-                        if (object.metadata['destination'] != true) {
-                          return Semantics(
-                            label: MissionContentData.workspaceDragLabel(
-                                object.label),
-                            child: Draggable<String>(
-                              key: ValueKey('workspace-source-$equipmentId'),
-                              data: equipmentId,
-                              maxSimultaneousDrags:
-                                  widget.enabled && !_choosingOrientation
-                                      ? 1
-                                      : 0,
-                              feedback: Material(
-                                elevation: 2,
-                                borderRadius: AppTheme.radiusSm,
-                                child: Padding(
-                                  padding: const EdgeInsets.all(12),
-                                  child: Text(object.label,
-                                      style: AppTheme.labelLarge),
-                                ),
+    return LayoutBuilder(
+        builder: (context, constraints) => Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (modes.length > 1)
+                  Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Wrap(
+                      spacing: 4,
+                      runSpacing: 4,
+                      children: [
+                        for (final option in modes)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 4),
+                            child: Semantics(
+                              button: true,
+                              selected: mode == option,
+                              liveRegion: widget.saving && mode == option,
+                              label: widget.saving && mode == option
+                                  ? MissionContentData.workspaceSavingLabel
+                                  : _label(option),
+                              child: ChoiceChip(
+                                key: ValueKey('workspace-mode-${option.name}'),
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.padded,
+                                selected: mode == option,
+                                avatar: Icon(
+                                    switch (option) {
+                                      _WorkspaceMode.place =>
+                                        Icons.open_with_rounded,
+                                      _WorkspaceMode.connect =>
+                                        Icons.cable_rounded,
+                                      _WorkspaceMode.inspect =>
+                                        Icons.search_rounded,
+                                    },
+                                    size: 18),
+                                label: Text(widget.saving && mode == option
+                                    ? MissionContentData.workspaceSavingLabel
+                                    : _label(option)),
+                                onSelected: widget.enabled
+                                    ? (_) => setState(() {
+                                          _mode = option;
+                                          _selected = null;
+                                          _selectionHint = null;
+                                        })
+                                    : null,
                               ),
-                              childWhenDragging:
-                                  Opacity(opacity: .35, child: hotspot),
-                              child: hotspot,
-                            ),
-                          );
-                        }
-                        return Semantics(
-                          label: MissionContentData.workspaceDropLabel(
-                              object.label),
-                          child: DragTarget<String>(
-                            key: ValueKey('workspace-destination-$equipmentId'),
-                            onWillAcceptWithDetails: (details) =>
-                                widget.enabled &&
-                                !_choosingOrientation &&
-                                sources.any(
-                                    (source) => source['id'] == details.data),
-                            onAcceptWithDetails: (details) => unawaited(_apply(
-                                mode,
-                                details.data,
-                                equipmentId,
-                                sources,
-                                'drag')),
-                            builder: (_, candidates, __) => DecoratedBox(
-                              decoration: BoxDecoration(
-                                border: candidates.isEmpty
-                                    ? null
-                                    : Border.all(
-                                        color: AppTheme.primaryBlue, width: 3),
-                                borderRadius: AppTheme.radiusSm,
-                              ),
-                              child: hotspot,
                             ),
                           ),
-                        );
-                      },
-              ),
-              if (widget.feedback != null)
-                Positioned(
-                  left: 8,
-                  right: 8,
-                  top: 56,
-                  child: IgnorePointer(
-                    child: Semantics(
-                      liveRegion: true,
-                      label: widget.feedback,
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        color: AppTheme.softBlueAccent,
-                        child: Text(widget.feedback!,
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTheme.bodySmall),
-                      ),
+                      ],
                     ),
                   ),
+                if (modes.length > 1 &&
+                    constraints.maxHeight >= 300 &&
+                    MediaQuery.textScalerOf(context).scale(1) <= 1.4)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+                    child: Semantics(
+                        liveRegion: _selectionHint != null,
+                        child: Text(
+                          _selectionHint ??
+                              switch (mode) {
+                                _WorkspaceMode.place =>
+                                  MissionContentData.workspaceBuildHint,
+                                _WorkspaceMode.connect =>
+                                  MissionContentData.workspaceConnectHint,
+                                _WorkspaceMode.inspect =>
+                                  MissionContentData.workspaceInspectHint,
+                              },
+                          style: AppTheme.caption,
+                          maxLines: 3,
+                          overflow: TextOverflow.ellipsis,
+                        )),
+                  ),
+                Expanded(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      SimulationScene(
+                        scene: scene,
+                        compactToolbar: mode != _WorkspaceMode.inspect,
+                        panEnabled:
+                            widget.enabled && mode == _WorkspaceMode.inspect,
+                        initialCameraScale: widget.state.cameraScale,
+                        initialCameraOffset: Offset(widget.state.cameraOffsetX,
+                            widget.state.cameraOffsetY),
+                        onCameraChanged: widget.onCameraChanged,
+                        interactionHint: switch (mode) {
+                          _WorkspaceMode.place =>
+                            MissionContentData.workspaceBuildHint,
+                          _WorkspaceMode.connect =>
+                            MissionContentData.workspaceConnectHint,
+                          _WorkspaceMode.inspect =>
+                            MissionContentData.workspaceInspectHint,
+                        },
+                        hotspotStates: {
+                          ...widget.hotspotStates,
+                          if (mode == _WorkspaceMode.connect)
+                            for (final source in sources)
+                              if (widget.state.connectedNodePairs.any((pair) =>
+                                  pair.startsWith('${source['id']}>')))
+                                source['id'] as String:
+                                    HotspotVisualState.completed,
+                          if (mode == _WorkspaceMode.connect)
+                            for (final destination in destinations)
+                              if (widget.state.connectedNodePairs.any((pair) =>
+                                  pair.endsWith('>${destination['id']}')))
+                                'destination:${destination['id']}':
+                                    HotspotVisualState.completed,
+                          if (mode != _WorkspaceMode.inspect)
+                            for (final destination in destinations)
+                              if (widget.hotspotStates[destination['id']] !=
+                                  null)
+                                'destination:${destination['id']}':
+                                    widget.hotspotStates[destination['id']]!,
+                          if (_selected != null)
+                            _selected!: HotspotVisualState.selected,
+                        },
+                        connectedNodePairs: mode == _WorkspaceMode.inspect
+                            ? widget.state.connectedNodePairs
+                            : mode == _WorkspaceMode.connect
+                                ? {
+                                    for (final pair
+                                        in widget.state.connectedNodePairs)
+                                      '${pair.split('>').first}>destination:${pair.split('>').last}',
+                                  }
+                                : const {},
+                        enabled: widget.enabled && !_choosingOrientation,
+                        onObjectSelected: (id) {
+                          if (mode == _WorkspaceMode.inspect) {
+                            unawaited(widget.onAction('object_inspected', id,
+                                const {'input_method': 'scene'}));
+                          } else if (id.startsWith('destination:')) {
+                            if (_selected != null) {
+                              unawaited(_apply(
+                                  mode,
+                                  _selected!,
+                                  id.substring('destination:'.length),
+                                  sources,
+                                  'tap'));
+                            } else {
+                              setState(() => _selectionHint = MissionContentData
+                                  .workspaceSelectSourceFirst);
+                            }
+                          } else if (sources
+                              .any((source) => source['id'] == id)) {
+                            setState(() {
+                              _selected = id;
+                              _selectionHint =
+                                  MissionContentData.workspaceSelectDestination;
+                            });
+                          }
+                        },
+                        objectBuilder: mode == _WorkspaceMode.inspect
+                            ? null
+                            : (object, hotspot) {
+                                final equipmentId =
+                                    object.metadata['equipmentId'] as String;
+                                if (object.metadata['destination'] != true) {
+                                  return Semantics(
+                                    label:
+                                        MissionContentData.workspaceDragLabel(
+                                            object.label),
+                                    child: Draggable<String>(
+                                      key: ValueKey(
+                                          'workspace-source-$equipmentId'),
+                                      data: equipmentId,
+                                      maxSimultaneousDrags: widget.enabled &&
+                                              !_choosingOrientation
+                                          ? 1
+                                          : 0,
+                                      feedback: Material(
+                                        elevation: 2,
+                                        borderRadius: AppTheme.radiusSm,
+                                        child: Padding(
+                                          padding: const EdgeInsets.all(12),
+                                          child: Text(object.label,
+                                              style: AppTheme.labelLarge),
+                                        ),
+                                      ),
+                                      childWhenDragging:
+                                          Opacity(opacity: .35, child: hotspot),
+                                      child: hotspot,
+                                    ),
+                                  );
+                                }
+                                return Semantics(
+                                  label: MissionContentData.workspaceDropLabel(
+                                      object.label),
+                                  child: DragTarget<String>(
+                                    key: ValueKey(
+                                        'workspace-destination-$equipmentId'),
+                                    onWillAcceptWithDetails: (details) =>
+                                        widget.enabled &&
+                                        !_choosingOrientation &&
+                                        sources.any((source) =>
+                                            source['id'] == details.data),
+                                    onAcceptWithDetails: (details) => unawaited(
+                                        _apply(mode, details.data, equipmentId,
+                                            sources, 'drag')),
+                                    builder: (_, candidates, __) =>
+                                        DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        border: candidates.isEmpty
+                                            ? null
+                                            : Border.all(
+                                                color: AppTheme.primaryBlue,
+                                                width: 3),
+                                        borderRadius: AppTheme.radiusSm,
+                                      ),
+                                      child: hotspot,
+                                    ),
+                                  ),
+                                );
+                              },
+                      ),
+                      if (widget.feedback != null)
+                        Positioned(
+                          left: 8,
+                          right: 8,
+                          top: 56,
+                          child: IgnorePointer(
+                            child: Semantics(
+                              liveRegion: true,
+                              label: widget.feedback,
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                color: AppTheme.softBlueAccent,
+                                child: Text(widget.feedback!,
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: AppTheme.bodySmall),
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
-            ],
-          ),
-        ),
-      ],
-    );
+              ],
+            ));
   }
 
   SimulationSceneDefinition _workScene(
@@ -306,6 +373,12 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
         metadata: {
           'equipmentId': id,
           'destination': destination,
+          'actionLabel': destination
+              ? MissionContentData.workspaceDestinationAction
+              : MissionContentData.workspaceSourceAction,
+          'completedLabel': mode == _WorkspaceMode.place
+              ? MissionContentData.workspaceInstalledLabel
+              : MissionContentData.workspaceConnectedLabel,
           'imageAsset': installed?['imageAsset'] ?? data['imageAsset'],
         },
       );
@@ -347,7 +420,10 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
       }
     }
     if (!mounted || widget.phase.id != phaseId || !widget.enabled) return;
-    setState(() => _selected = null);
+    setState(() {
+      _selected = null;
+      _selectionHint = null;
+    });
     await widget.onAction(
       mode == _WorkspaceMode.place
           ? 'placement_attempted'

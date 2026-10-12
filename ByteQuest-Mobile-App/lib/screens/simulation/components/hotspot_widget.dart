@@ -32,6 +32,9 @@ class HotspotWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = _colorsFor(state);
+    final foreground = enabled ? colors.foreground : AppTheme.textLight;
+    final actionLabel = object.metadata['actionLabel'] as String?;
+    final completedLabel = object.metadata['completedLabel'] as String?;
     final imageAsset = object.metadata['imageAsset'];
     final imagePath =
         imageAsset is String && imageAsset.isNotEmpty ? imageAsset : null;
@@ -45,26 +48,34 @@ class HotspotWidget extends StatelessWidget {
       selected: state == HotspotVisualState.selected ||
           state == HotspotVisualState.completed,
       label: '${object.label}, ${state.name}',
+      onTap: enabled ? onPressed : null,
       excludeSemantics: true,
       child: Tooltip(
         message: '${object.label}, ${state.name}',
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: enabled ? onPressed : null,
+        child: AnimatedContainer(
+          duration: transitionDuration,
+          constraints: const BoxConstraints(
+            minWidth: minimumTapExtent,
+            minHeight: minimumTapExtent,
+          ),
+          decoration: BoxDecoration(
+            color: enabled
+                ? (state == HotspotVisualState.neutral &&
+                        object.metadata['destination'] == false
+                    ? AppTheme.backgroundPaleBlue
+                    : colors.background)
+                : AppTheme.surfaceMuted,
             borderRadius: BorderRadius.circular(12),
-            child: AnimatedContainer(
-              duration: transitionDuration,
-              constraints: const BoxConstraints(
-                minWidth: minimumTapExtent,
-                minHeight: minimumTapExtent,
-              ),
-              decoration: BoxDecoration(
-                color: colors.background,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: colors.foreground, width: 2),
-              ),
-              alignment: Alignment.center,
+            border: Border.all(
+                color: enabled ? colors.foreground : AppTheme.borderMedium,
+                width: 2),
+          ),
+          alignment: Alignment.center,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: enabled ? onPressed : null,
+              borderRadius: BorderRadius.circular(12),
               child: Stack(
                 fit: StackFit.expand,
                 alignment: Alignment.center,
@@ -112,7 +123,7 @@ class HotspotWidget extends StatelessWidget {
                                 _stateIcon(state,
                                     icon ?? _iconFor(object.hotspotType)),
                                 key: ValueKey(state),
-                                color: colors.foreground,
+                                color: foreground,
                                 size: 24 * visualScale,
                               ),
                             ),
@@ -132,10 +143,23 @@ class HotspotWidget extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                     fontSize: 12 * visualScale,
-                                    color: colors.foreground,
+                                    color: foreground,
                                     height: 1.15),
                               )),
                         ],
+                        if (actionLabel != null &&
+                            MediaQuery.textScalerOf(context).scale(1) <= 1.4)
+                          Flexible(
+                              child: Text(
+                                  state == HotspotVisualState.completed
+                                      ? completedLabel ?? actionLabel
+                                      : actionLabel,
+                                  style: TextStyle(
+                                      fontSize: 10 * visualScale,
+                                      color: foreground),
+                                  textAlign: TextAlign.center,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis)),
                       ],
                     ),
                   ),
@@ -185,5 +209,5 @@ IconData _iconFor(String type) {
   if (normalized.contains('tool')) return Icons.handyman_outlined;
   if (normalized.contains('server')) return Icons.dns_outlined;
   if (normalized.contains('device')) return Icons.memory_outlined;
-  return Icons.add_rounded;
+  return Icons.search_rounded;
 }

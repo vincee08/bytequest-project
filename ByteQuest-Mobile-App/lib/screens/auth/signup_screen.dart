@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../data/mission_content_data.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_button.dart';
@@ -258,6 +259,7 @@ class _SignupScreenState extends State<SignupScreen> {
                 TextFormField(
                   controller: _fullNameController,
                   decoration: InputDecoration(
+                    labelText: MissionContentData.fullNameFieldLabel,
                     hintText: 'Enter your full name',
                     prefixIcon:
                         Icon(Icons.person_outline, color: AppTheme.primaryBlue),
@@ -278,6 +280,7 @@ class _SignupScreenState extends State<SignupScreen> {
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   decoration: InputDecoration(
+                    labelText: MissionContentData.emailFieldLabel,
                     hintText: 'Enter your email',
                     prefixIcon:
                         Icon(Icons.email_outlined, color: AppTheme.primaryBlue),
@@ -301,10 +304,14 @@ class _SignupScreenState extends State<SignupScreen> {
                   controller: _passwordController,
                   obscureText: !_isPasswordVisible,
                   decoration: InputDecoration(
+                    labelText: MissionContentData.passwordFieldLabel,
                     hintText: 'Create a password (min. 6 characters)',
                     prefixIcon:
                         Icon(Icons.lock_outline, color: AppTheme.primaryBlue),
                     suffixIcon: IconButton(
+                      tooltip: _isPasswordVisible
+                          ? MissionContentData.hidePasswordLabel
+                          : MissionContentData.showPasswordLabel,
                       icon: Icon(
                         _isPasswordVisible
                             ? Icons.visibility_outlined
@@ -337,10 +344,14 @@ class _SignupScreenState extends State<SignupScreen> {
                   controller: _confirmPasswordController,
                   obscureText: !_isConfirmPasswordVisible,
                   decoration: InputDecoration(
+                    labelText: MissionContentData.confirmPasswordFieldLabel,
                     hintText: 'Re-enter your password',
                     prefixIcon:
                         Icon(Icons.lock_outline, color: AppTheme.primaryBlue),
                     suffixIcon: IconButton(
+                      tooltip: _isConfirmPasswordVisible
+                          ? MissionContentData.hidePasswordLabel
+                          : MissionContentData.showPasswordLabel,
                       icon: Icon(
                         _isConfirmPasswordVisible
                             ? Icons.visibility_outlined
@@ -388,44 +399,27 @@ class _SignupScreenState extends State<SignupScreen> {
                           });
                         },
                         activeColor: AppTheme.primaryBlue,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        materialTapTargetSize: MaterialTapTargetSize.padded,
                       ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Padding(
                           padding: const EdgeInsets.only(top: 2),
-                          child: RichText(
-                            text: TextSpan(
-                              style: AppTheme.bodySmall.copyWith(
-                                height: 1.5,
-                              ),
-                              children: [
-                                const TextSpan(text: 'I agree to the '),
-                                TextSpan(
-                                  text: 'Terms of Service',
-                                  style: TextStyle(
-                                    color: AppTheme.primaryBlue,
-                                    fontWeight: FontWeight.w600,
-                                    decoration: TextDecoration.underline,
-                                  ),
-                                ),
-                                const TextSpan(text: ' and '),
-                                TextSpan(
-                                  text: 'Privacy Policy',
-                                  style: TextStyle(
-                                    color: AppTheme.primaryBlue,
-                                    fontWeight: FontWeight.w600,
-                                    decoration: TextDecoration.underline,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                          child: Text(MissionContentData.termsAgreementLabel,
+                              style: AppTheme.bodySmall),
                         ),
                       ),
                     ],
                   ),
                 ),
+                Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () =>
+                          Navigator.pushNamed(context, '/terms-privacy'),
+                      icon: const Icon(Icons.open_in_new_rounded, size: 18),
+                      label: const Text(MissionContentData.termsLinkLabel),
+                    )),
                 const SizedBox(height: 24),
 
                 // Create Account Button
@@ -439,8 +433,9 @@ class _SignupScreenState extends State<SignupScreen> {
                 const SizedBox(height: 24),
 
                 // Login Link
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  alignment: WrapAlignment.center,
                   children: [
                     Text(
                       'Already have an account? ',
@@ -448,8 +443,8 @@ class _SignupScreenState extends State<SignupScreen> {
                         color: AppTheme.textMedium,
                       ),
                     ),
-                    GestureDetector(
-                      onTap: () {
+                    TextButton(
+                      onPressed: () {
                         Navigator.of(context).pushReplacementNamed('/login');
                       },
                       child: Text(
