@@ -132,7 +132,18 @@ void main() {
     await tester.pumpWidget(app(textScale: 1.8));
     await tester.pump();
     expect(tester.takeException(), isNull);
-    expect(find.byType(SingleChildScrollView), findsOneWidget);
+    final review =
+        find.widgetWithText(FilledButton, 'Review before submission');
+    expect(
+      find.ancestor(of: review, matching: find.byType(SingleChildScrollView)),
+      findsOneWidget,
+    );
+    await tester.ensureVisible(review);
+    await tester.pumpAndSettle();
+    final reviewRect = tester.getRect(review);
+    expect(reviewRect.top, greaterThanOrEqualTo(0));
+    expect(reviewRect.bottom, lessThanOrEqualTo(568));
+    expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
   });

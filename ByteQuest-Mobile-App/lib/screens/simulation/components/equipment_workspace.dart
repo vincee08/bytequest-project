@@ -8,6 +8,7 @@ import '../runtime/mission_equipment_simulator.dart';
 import '../runtime/mission_runtime_models.dart';
 import 'component_orientation_dialog.dart';
 import 'simulation_scene.dart';
+import 'scrollable_equipment_draggable.dart';
 import 'tool_tray.dart';
 
 enum _WorkspaceMode { place, connect, inspect }
@@ -148,7 +149,7 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                     ),
                   ),
                 if (modes.length > 1 &&
-                    constraints.maxHeight >= 300 &&
+                    constraints.maxHeight >= 420 &&
                     MediaQuery.textScalerOf(context).scale(1) <= 1.4)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
@@ -174,10 +175,13 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                     fit: StackFit.expand,
                     children: [
                       SimulationScene(
+                        key: ValueKey(
+                            'workspace-scene-${mode.name}-${widget.phase.id}'),
                         scene: scene,
                         compactToolbar: mode != _WorkspaceMode.inspect,
                         panEnabled:
                             widget.enabled && mode == _WorkspaceMode.inspect,
+                        scrollEnabled: !widget.saving,
                         initialCameraScale: widget.state.cameraScale,
                         initialCameraOffset: Offset(widget.state.cameraOffsetX,
                             widget.state.cameraOffsetY),
@@ -192,6 +196,12 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                         },
                         hotspotStates: {
                           ...widget.hotspotStates,
+                          if (mode == _WorkspaceMode.place)
+                            for (final source in sources)
+                              source['id'] as String: widget.state.placements
+                                      .containsKey(source['id'])
+                                  ? HotspotVisualState.completed
+                                  : HotspotVisualState.neutral,
                           if (mode == _WorkspaceMode.connect)
                             for (final source in sources)
                               if (widget.state.connectedNodePairs.any((pair) =>
@@ -258,14 +268,12 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                                     label:
                                         MissionContentData.workspaceDragLabel(
                                             object.label),
-                                    child: Draggable<String>(
+                                    child: ScrollableEquipmentDraggable(
                                       key: ValueKey(
                                           'workspace-source-$equipmentId'),
                                       data: equipmentId,
-                                      maxSimultaneousDrags: widget.enabled &&
-                                              !_choosingOrientation
-                                          ? 1
-                                          : 0,
+                                      enabled: widget.enabled &&
+                                          !_choosingOrientation,
                                       feedback: Material(
                                         elevation: 2,
                                         borderRadius: AppTheme.radiusSm,
@@ -356,6 +364,9 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
               .where((source) => widget.state.placements[source['id']] == id)
           : const Iterable<Map<String, dynamic>>.empty();
       final installed = placed.isEmpty ? null : placed.first;
+      final alreadyInstalled = mode == _WorkspaceMode.place &&
+          !destination &&
+          widget.state.placements.containsKey(id);
       return SceneObjectDefinition(
         id: destination ? 'destination:$id' : id,
         label: installed == null
@@ -379,7 +390,9 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
           'completedLabel': mode == _WorkspaceMode.place
               ? MissionContentData.workspaceInstalledLabel
               : MissionContentData.workspaceConnectedLabel,
-          'imageAsset': installed?['imageAsset'] ?? data['imageAsset'],
+          'imageAsset': alreadyInstalled
+              ? null
+              : installed?['imageAsset'] ?? data['imageAsset'],
         },
       );
     }

@@ -170,3 +170,56 @@ practice unlock rules retain their existing contracts. No hosted migration or
 Vercel API redeployment is required for these Flutter presentation changes.
 The `vercel:verification` user-story checks were scoped to existing mobile
 navigation and persistence.
+
+## Workspace overlap follow-up - 2026-10-12
+
+The user reported overlapping or duplicated computer parts. Android reproduced
+labels painting over cable icons, and source inspection identified crowded
+catalog coordinates being clamped to the bottom of the scene. Enlarging targets
+to the minimum accessible size could also make neighboring objects overlap.
+Installed parts repeated the same image at both source and destination.
+
+The shared scene engine now detects coordinate overflow and intersecting
+targets, preserves separated columns where possible, and otherwise lays out a
+grid on a vertically scrollable canvas. Connection endpoints use the resolved
+target positions. Objects retain their IDs, evidence payloads and 48 dp minimum
+targets. Fit resets both the camera and scene scroll; mode and phase changes
+start at the first row. Canvas drags use the existing edge-scrolling component,
+with edge zones that remain distinct in very short viewports.
+
+The shared hotspot separates artwork, the name and an optional action hint.
+Labels remain visible with photos; the status marker stays inside the artwork
+area. Accepted installation shows the part photo once at the destination while
+keeping a selectable Installed source for repositioning. Placement controls
+reflect placements rather than inspection state. Existing compact transitions
+and reduced-motion behavior remain.
+
+Affected views are the shared workspaces throughout COC1-COC4 and retained
+assessment scenes; drag and installed-photo changes apply to COC1-COC3 practice
+workspaces. No mission definition, model, service, API, schema, evaluator or
+instructor-release rule was changed.
+
+Validation: **68 focused tests and the full 394/394 Flutter suite PASS**, covering every catalog
+scene at compact portrait/landscape sizes, unique non-overlapping targets,
+scroll access, installed-photo uniqueness, offscreen dragging, orientation,
+connections, reduced motion and large text. The assessment large-text check
+now verifies its review action can be scrolled into view, allowing the scene
+to have its own independent scroll view. The full suite includes all twenty
+touch-driven work orders and every real phase with doubled text. Dependency
+resolution, analyzer (**0 errors / 0 warnings / 206 existing infos**), debug
+APK, dashboard TypeScript, lint and production build all PASS. Existing SDK
+and Kotlin plugin migration notices remain non-blocking.
+
+The rebuilt debug APK uses the existing hosted public practice endpoint and
+has SHA-256 `EC90F03BAF3913EE5659613EE48F764FE0CAB222875A57137E3B4A951A1D1277`.
+Android API 35 shows separate readable connection targets and distinct part
+images/names. Vertical navigation reaches the last inspection row. The saved
+run for this follow-up starts at phase `coc1_m2_p3`, with **8 placements,
+0 connections, 20 accepted evidence IDs and 0 pending evidence**; the older
+Phase 5 snapshot above is historical. QA does not complete or reset a practice.
+The installed package hash matches the rebuilt APK. Replacement and M2 reentry
+retain login and recorded work. After Fit and return to Connect ports, phase,
+placements, connections, accepted evidence IDs, configuration and camera match
+the pre-install snapshot exactly. No current-process Flutter exception or
+overflow was found in these checks. Full TalkBack, further physical devices
+and independent learner acceptance are still outside this validation.

@@ -1,20 +1,23 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-/// Keeps offscreen destinations reachable while dragging inside mission controls.
+/// Keeps offscreen destinations reachable in the workspace and mission controls.
 class ScrollableEquipmentDraggable extends StatefulWidget {
   const ScrollableEquipmentDraggable({
     super.key,
     required this.data,
     required this.feedback,
     required this.child,
+    this.childWhenDragging,
     this.enabled = true,
   });
 
   final String data;
   final Widget feedback;
   final Widget child;
+  final Widget? childWhenDragging;
   final bool enabled;
 
   @override
@@ -65,7 +68,8 @@ class _ScrollableEquipmentDraggableState
     }
     final local = viewport.globalToLocal(_dragPosition!);
     if (local.dx < 0 || local.dx > viewport.size.width) return;
-    const edge = 48.0;
+    final edge = math.min(48.0, viewport.size.height / 3);
+    if (edge <= 0) return;
     final velocity = local.dy < edge
         ? -((edge - local.dy) / edge).clamp(0.0, 1.0)
         : local.dy > viewport.size.height - edge
@@ -85,5 +89,6 @@ class _ScrollableEquipmentDraggableState
         onDragUpdate: _updateDrag,
         onDragEnd: (_) => _stopScrolling(),
         child: widget.child,
+        childWhenDragging: widget.childWhenDragging,
       );
 }

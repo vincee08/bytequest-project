@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
@@ -53,6 +55,7 @@ class HotspotWidget extends StatelessWidget {
       child: Tooltip(
         message: '${object.label}, ${state.name}',
         child: AnimatedContainer(
+          clipBehavior: Clip.antiAlias,
           duration: transitionDuration,
           constraints: const BoxConstraints(
             minWidth: minimumTapExtent,
@@ -80,88 +83,116 @@ class HotspotWidget extends StatelessWidget {
                 fit: StackFit.expand,
                 alignment: Alignment.center,
                 children: [
-                  if (imagePath != null)
-                    Positioned.fill(
-                      child: Padding(
-                        padding: const EdgeInsets.all(6),
-                        child: Image.asset(
-                          imagePath,
-                          fit: BoxFit.contain,
-                          errorBuilder: (context, error, stackTrace) =>
-                              ColoredBox(
-                            color: AppTheme.errorRed,
-                            child: Tooltip(
-                              message: 'Image failed: $imagePath',
-                              child: Icon(
-                                Icons.broken_image_outlined,
-                                color: Colors.white,
-                                size: 24,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
                   Padding(
                     padding: EdgeInsets.all(4 * visualScale),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (imagePath != null ||
-                            MediaQuery.textScalerOf(context).scale(1) <= 1.4)
-                          Flexible(
-                              child: AnimatedScale(
-                            duration: transitionDuration,
-                            curve: Curves.easeOutCubic,
-                            scale:
-                                state == HotspotVisualState.neutral ? .92 : 1,
-                            child: AnimatedSwitcher(
-                              duration: transitionDuration,
-                              switchInCurve: Curves.easeOutCubic,
-                              switchOutCurve: Curves.easeInCubic,
-                              child: Icon(
-                                _stateIcon(state,
-                                    icon ?? _iconFor(object.hotspotType)),
-                                key: ValueKey(state),
-                                color: foreground,
-                                size: 24 * visualScale,
-                              ),
-                            ),
-                          )),
-                        if (imagePath == null) ...[
-                          SizedBox(height: 3 * visualScale),
-                          Flexible(
-                              flex: 2,
-                              child: Text(
-                                object.label,
-                                textAlign: TextAlign.center,
-                                maxLines:
-                                    MediaQuery.textScalerOf(context).scale(1) >
-                                            1.4
-                                        ? 1
-                                        : 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                    fontSize: 12 * visualScale,
-                                    color: foreground,
-                                    height: 1.15),
-                              )),
+                    child: LayoutBuilder(builder: (context, constraints) {
+                      final textScaler = MediaQuery.textScalerOf(context);
+                      final lineHeight =
+                          textScaler.scale(12 * visualScale) * 1.15;
+                      final lines = (constraints.maxHeight / lineHeight)
+                          .floor()
+                          .clamp(1, 2);
+                      final labelHeight =
+                          math.min(constraints.maxHeight, lineHeight * lines);
+                      final gap = 4 * visualScale;
+                      final artworkHeight = 24 * visualScale;
+                      final showArtwork = !(imagePath == null &&
+                              completedLabel != null &&
+                              state == HotspotVisualState.completed) &&
+                          constraints.maxHeight >=
+                              labelHeight + gap + artworkHeight;
+                      final hintHeight =
+                          textScaler.scale(10 * visualScale) * 1.15;
+                      final showHint = actionLabel != null &&
+                          constraints.maxHeight >=
+                              labelHeight +
+                                  gap +
+                                  (showArtwork ? artworkHeight + gap : 0) +
+                                  hintHeight;
+                      return Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          if (showArtwork) ...[
+                            Expanded(
+                                child: imagePath != null
+                                    ? Stack(fit: StackFit.expand, children: [
+                                        Image.asset(imagePath,
+                                            key: ValueKey(
+                                                'hotspot-image-${object.id}'),
+                                            fit: BoxFit.contain,
+                                            errorBuilder: (_, __, ___) => Icon(
+                                                Icons.broken_image_outlined,
+                                                color: AppTheme.errorRed,
+                                                size: artworkHeight)),
+                                        if (state != HotspotVisualState.neutral)
+                                          Positioned(
+                                              top: 0,
+                                              right: 0,
+                                              child: Icon(
+                                                  _stateIcon(state,
+                                                      Icons.check_rounded),
+                                                  color: foreground,
+                                                  size: 16 * visualScale)),
+                                      ])
+                                    : Center(
+                                        child: AnimatedScale(
+                                        duration: transitionDuration,
+                                        curve: Curves.easeOutCubic,
+                                        scale:
+                                            state == HotspotVisualState.neutral
+                                                ? .92
+                                                : 1,
+                                        child: AnimatedSwitcher(
+                                          duration: transitionDuration,
+                                          switchInCurve: Curves.easeOutCubic,
+                                          switchOutCurve: Curves.easeInCubic,
+                                          child: Icon(
+                                            _stateIcon(
+                                                state,
+                                                icon ??
+                                                    _iconFor(
+                                                        object.hotspotType)),
+                                            key: ValueKey(state),
+                                            color: foreground,
+                                            size: artworkHeight,
+                                          ),
+                                        ),
+                                      ))),
+                            SizedBox(height: gap),
+                          ],
+                          SizedBox(
+                            height: labelHeight,
+                            child: Center(
+                                child: Text(
+                              object.label,
+                              textAlign: TextAlign.center,
+                              maxLines: lines,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 12 * visualScale,
+                                  color: foreground,
+                                  height: 1.15),
+                            )),
+                          ),
+                          if (showHint) ...[
+                            SizedBox(height: gap),
+                            SizedBox(
+                                height: hintHeight,
+                                child: Text(
+                                    state == HotspotVisualState.completed
+                                        ? completedLabel ?? actionLabel
+                                        : actionLabel,
+                                    style: TextStyle(
+                                        fontSize: 10 * visualScale,
+                                        color: foreground,
+                                        height: 1.15),
+                                    textAlign: TextAlign.center,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis)),
+                          ],
                         ],
-                        if (actionLabel != null &&
-                            MediaQuery.textScalerOf(context).scale(1) <= 1.4)
-                          Flexible(
-                              child: Text(
-                                  state == HotspotVisualState.completed
-                                      ? completedLabel ?? actionLabel
-                                      : actionLabel,
-                                  style: TextStyle(
-                                      fontSize: 10 * visualScale,
-                                      color: foreground),
-                                  textAlign: TextAlign.center,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis)),
-                      ],
-                    ),
+                      );
+                    }),
                   ),
                 ],
               ),

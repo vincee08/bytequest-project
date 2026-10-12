@@ -10,6 +10,60 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  for (final viewport in const [Size(320, 300), Size(640, 210)]) {
+    testWidgets('catalog objects render once without overlaps at $viewport',
+        (tester) async {
+      for (final definition in MissionSimulationDefinitions.all) {
+        await tester.pumpWidget(MaterialApp(
+            home: Scaffold(
+                body: SizedBox(
+                    width: viewport.width,
+                    height: viewport.height,
+                    child: SimulationScene(
+                        scene: definition.scene, onObjectSelected: (_) {})))));
+        await tester.pump();
+        final bounds = <String, Rect>{};
+        for (final object in definition.scene.objects) {
+          final target = find.byKey(ValueKey('hotspot-${object.id}'));
+          expect(target, findsOneWidget,
+              reason: '${definition.id}/${object.id}');
+          final rect = tester.getRect(target);
+          expect(rect.width, greaterThanOrEqualTo(48));
+          expect(rect.height, greaterThanOrEqualTo(48));
+          for (final previous in bounds.entries) {
+            expect(rect.overlaps(previous.value), false,
+                reason:
+                    '${definition.id}: ${object.id} overlaps ${previous.key}');
+          }
+          bounds[object.id] = rect;
+        }
+        expect(tester.takeException(), isNull, reason: definition.id);
+      }
+    });
+  }
+
+  testWidgets('crowded inspection can scroll to the last distinct object',
+      (tester) async {
+    final definition = MissionSimulationDefinitions.byId('coc1_m2');
+    final selected = <String>[];
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: SizedBox(
+                width: 320,
+                height: 300,
+                child: SimulationScene(
+                    scene: definition.scene,
+                    onObjectSelected: selected.add)))));
+    final target =
+        find.byKey(ValueKey('hotspot-${definition.scene.objects.last.id}'));
+    await tester.ensureVisible(target);
+    await tester.pumpAndSettle();
+    await tester.tap(target);
+    await tester.pump();
+    expect(selected, [definition.scene.objects.last.id]);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
       'hotspot screen-reader tap activates once and is disabled during saving',
       (tester) async {

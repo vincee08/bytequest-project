@@ -25,6 +25,7 @@ class SimulationScene extends StatefulWidget {
   final Set<String> connectedNodePairs;
   final bool enabled;
   final bool panEnabled;
+  final bool scrollEnabled;
   final ValueChanged<String> onObjectSelected;
   final Widget? backgroundRenderer;
   final List<Widget> statusOverlays;
@@ -45,6 +46,7 @@ class SimulationScene extends StatefulWidget {
     this.connectedNodePairs = const {},
     this.enabled = true,
     this.panEnabled = true,
+    this.scrollEnabled = true,
     required this.onObjectSelected,
     this.backgroundRenderer,
     this.statusOverlays = const [],
@@ -66,6 +68,7 @@ class SimulationScene extends StatefulWidget {
 class _SimulationSceneState extends State<SimulationScene> {
   final TransformationController _transformationController =
       TransformationController();
+  final ScrollController _workspaceScrollController = ScrollController();
 
   @override
   void initState() {
@@ -86,6 +89,7 @@ class _SimulationSceneState extends State<SimulationScene> {
   @override
   void dispose() {
     _transformationController.dispose();
+    _workspaceScrollController.dispose();
     super.dispose();
   }
 
@@ -93,6 +97,9 @@ class _SimulationSceneState extends State<SimulationScene> {
     // The logical workspace is fitted into the viewport before camera
     // transforms are applied, so identity is the fit-to-screen transform.
     _transformationController.value = Matrix4.identity();
+    if (_workspaceScrollController.hasClients) {
+      _workspaceScrollController.jumpTo(0);
+    }
     _publishCamera();
     unawaited(HapticFeedback.selectionClick());
   }
@@ -141,6 +148,8 @@ class _SimulationSceneState extends State<SimulationScene> {
               connectedNodePairs: widget.connectedNodePairs,
               enabled: widget.enabled,
               panEnabled: widget.panEnabled,
+              scrollEnabled: widget.scrollEnabled,
+              scrollController: _workspaceScrollController,
               onObjectSelected: _selectObject,
               backgroundRenderer: widget.backgroundRenderer,
               statusOverlays: widget.statusOverlays,
@@ -328,6 +337,8 @@ class _SceneViewport extends StatelessWidget {
   final Set<String> connectedNodePairs;
   final bool enabled;
   final bool panEnabled;
+  final bool scrollEnabled;
+  final ScrollController scrollController;
   final ValueChanged<String> onObjectSelected;
   final Widget? backgroundRenderer;
   final List<Widget> statusOverlays;
@@ -343,6 +354,8 @@ class _SceneViewport extends StatelessWidget {
     required this.connectedNodePairs,
     required this.enabled,
     required this.panEnabled,
+    required this.scrollEnabled,
+    required this.scrollController,
     required this.onObjectSelected,
     required this.backgroundRenderer,
     required this.statusOverlays,
@@ -354,23 +367,17 @@ class _SceneViewport extends StatelessWidget {
         child: LayoutBuilder(
           builder: (context, constraints) {
             final viewport = Size(constraints.maxWidth, constraints.maxHeight);
-            const logicalWorkspace = SimulationScene.logicalCanvasSize;
+            const baseWorkspace = SimulationScene.logicalCanvasSize;
             final workspaceScale = math.max(
               .0001,
-              math.min(
-                viewport.width / logicalWorkspace.width,
-                viewport.height / logicalWorkspace.height,
-              ),
+              viewport.width / baseWorkspace.width,
             );
-            final mappedObjects = {
-              for (final object in resolved.definition.objects)
-                object.id: _mappedRect(
-                  object,
-                  logicalWorkspace,
-                  minimumTapExtent:
-                      HotspotWidget.minimumTapExtent / workspaceScale,
-                ),
-            };
+            final layout = _layoutObjects(resolved.definition.objects,
+                workspaceScale, MediaQuery.textScalerOf(context));
+            final logicalWorkspace = layout.workspace;
+            final mappedObjects = layout.objects;
+            final contentHeight = math.max(
+                viewport.height, logicalWorkspace.height * workspaceScale);
             final connections = _connectionsFor(
               resolved.definition.objects,
               mappedObjects,
@@ -378,7 +385,7 @@ class _SceneViewport extends StatelessWidget {
               hotspotStates,
             );
             final reducedMotion = MediaQuery.disableAnimationsOf(context);
-            return InteractiveViewer(
+            final canvas = InteractiveViewer(
               onInteractionEnd: (_) => onCameraInteractionEnd(),
               transformationController: transformationController,
               minScale: 1,
@@ -387,7 +394,7 @@ class _SceneViewport extends StatelessWidget {
               panEnabled: panEnabled,
               scaleEnabled: enabled,
               child: SizedBox.fromSize(
-                size: viewport,
+                size: Size(viewport.width, contentHeight),
                 child: FittedBox(
                   fit: BoxFit.contain,
                   child: SizedBox(
@@ -442,6 +449,18 @@ class _SceneViewport extends StatelessWidget {
                     ),
                   ),
                 ),
+              ),
+            );
+            return Scrollbar(
+              controller: scrollController,
+              thumbVisibility: contentHeight > viewport.height,
+              child: SingleChildScrollView(
+                key: const ValueKey('simulation-workspace-scroll'),
+                controller: scrollController,
+                physics: scrollEnabled
+                    ? const ClampingScrollPhysics()
+                    : const NeverScrollableScrollPhysics(),
+                child: canvas,
               ),
             );
           },
@@ -604,6 +623,7 @@ Rect _mappedRect(
   SceneObjectDefinition object,
   Size viewport, {
   double minimumTapExtent = HotspotWidget.minimumTapExtent,
+  double? minimumHeight,
 }) {
   final logicalRect = Rect.fromLTWH(
     object.x * viewport.width,
@@ -615,7 +635,8 @@ Rect _mappedRect(
       .clamp(math.min(minimumTapExtent, viewport.width), viewport.width)
       .toDouble();
   final height = logicalRect.height
-      .clamp(math.min(minimumTapExtent, viewport.height), viewport.height)
+      .clamp(math.min(minimumHeight ?? minimumTapExtent, viewport.height),
+          viewport.height)
       .toDouble();
   final left = (logicalRect.center.dx - width / 2).clamp(
     0.0,
@@ -626,6 +647,73 @@ Rect _mappedRect(
     (viewport.height - height).clamp(0.0, viewport.height),
   );
   return Rect.fromLTWH(left, top, width, height);
+}
+
+/// Reflows crowded targets without altering mission objects or evidence IDs.
+/// Existing separated scene coordinates remain intact. A larger canvas scrolls
+/// vertically instead of shrinking touch targets or stacking them at an edge.
+({Size workspace, Map<String, Rect> objects}) _layoutObjects(
+    List<SceneObjectDefinition> objects, double scale, TextScaler textScaler) {
+  const base = SimulationScene.logicalCanvasSize;
+  final minimumWidth = HotspotWidget.minimumTapExtent / scale;
+  final minimumHeight = math.max(72, textScaler.scale(12) * 2.3 + 36) / scale;
+  final mapped = {
+    for (final object in objects)
+      object.id: _mappedRect(object, base,
+          minimumTapExtent: minimumWidth, minimumHeight: minimumHeight),
+  };
+  final rects = mapped.values.toList();
+  var crowded = objects.any((object) =>
+      object.x < 0 ||
+      object.y < 0 ||
+      object.x + object.width > 1 ||
+      object.y + object.height > 1);
+  for (var i = 0; !crowded && i < rects.length; i++) {
+    crowded = rects.skip(i + 1).any(rects[i].overlaps);
+  }
+  if (!crowded) return (workspace: base, objects: mapped);
+
+  final gap = 8 / scale;
+  final columns = <double, List<SceneObjectDefinition>>{};
+  for (final object in objects) {
+    columns.putIfAbsent(mapped[object.id]!.left, () => []).add(object);
+  }
+  final lefts = columns.keys.toList()..sort();
+  var preserveColumns = true;
+  for (var i = 0; i < lefts.length - 1; i++) {
+    final right = columns[lefts[i]]!
+        .map((object) => mapped[object.id]!.right)
+        .reduce(math.max);
+    if (right + gap > lefts[i + 1]) preserveColumns = false;
+  }
+  final placed = <String, Rect>{};
+  var bottom = 0.0;
+  if (preserveColumns) {
+    for (final left in lefts) {
+      final column = columns[left]!..sort((a, b) => a.y.compareTo(b.y));
+      for (var row = 0; row < column.length; row++) {
+        final object = column[row];
+        final rect = Rect.fromLTWH(left, gap + row * (minimumHeight + gap),
+            mapped[object.id]!.width, minimumHeight);
+        placed[object.id] = rect;
+        bottom = math.max(bottom, rect.bottom + gap);
+      }
+    }
+  } else {
+    final count =
+        math.max(1, ((base.width - gap) / (minimumWidth + gap)).floor());
+    final width = (base.width - gap * (count + 1)) / count;
+    for (var index = 0; index < objects.length; index++) {
+      final rect = Rect.fromLTWH(gap + (index % count) * (width + gap),
+          gap + (index ~/ count) * (minimumHeight + gap), width, minimumHeight);
+      placed[objects[index].id] = rect;
+      bottom = math.max(bottom, rect.bottom + gap);
+    }
+  }
+  return (
+    workspace: Size(base.width, math.max(base.height, bottom)),
+    objects: placed
+  );
 }
 
 List<SceneConnectionSegment> _connectionsFor(

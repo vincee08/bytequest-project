@@ -13,6 +13,74 @@ import 'package:flutter_test/flutter_test.dart';
 import 'support/equipment_practice_driver.dart';
 
 void main() {
+  testWidgets('canvas drag scrolls to an offscreen destination',
+      (tester) async {
+    tester.view.physicalSize = const Size(412, 915);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final definition = MissionSimulationDefinitions.byId('coc1_m2');
+    final driver = EquipmentPracticeDriver(definition);
+    driver.complete(definition.phases.first);
+    final phase = definition.phases[1];
+    final initialActions = driver.actions.length;
+    await tester.pumpWidget(_host(driver, phase, height: 220));
+    final source = find.byKey(const ValueKey('workspace-source-motherboard'));
+    final target = find.byKey(const ValueKey('workspace-destination-psu_bay'));
+    await tester.ensureVisible(source);
+    await tester.pumpAndSettle();
+    final viewport = tester
+        .getRect(find.byKey(const ValueKey('simulation-workspace-scroll')));
+    expect(tester.getCenter(target).dy, greaterThan(viewport.bottom));
+    final gesture = await tester.startGesture(tester.getCenter(source));
+    await gesture.moveBy(const Offset(20, 0));
+    await tester.pump();
+    await gesture.moveTo(Offset(viewport.center.dx, viewport.bottom - 2));
+    for (var i = 0;
+        i < 8 && tester.getCenter(target).dy > viewport.bottom - 12;
+        i++) {
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+    expect(tester.getCenter(target).dy, lessThan(viewport.bottom));
+    await gesture.moveTo(tester.getCenter(target));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    await tester
+        .tap(find.byKey(const ValueKey('workspace-orientation-aligned')));
+    await tester.pumpAndSettle();
+    expect(driver.actions.length - initialActions, 1);
+    expect(driver.actions.last.value['destination_id'], 'psu_bay');
+    expect(driver.actions.last.value['input_method'], 'drag');
+    expect(driver.state.placements.containsKey('motherboard'), false);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('an installed part image renders only at its destination',
+      (tester) async {
+    final definition = MissionSimulationDefinitions.byId('coc1_m2');
+    final driver = EquipmentPracticeDriver(definition);
+    driver.complete(definition.phases.first);
+    final phase = definition.phases[1];
+    await tester.pumpWidget(_host(driver, phase));
+    await _drag(tester, 'motherboard', 'motherboard_area');
+    await tester
+        .tap(find.byKey(const ValueKey('workspace-orientation-aligned')));
+    await tester.pumpAndSettle();
+    final source = tester.widget<HotspotWidget>(find.descendant(
+        of: find.byKey(const ValueKey('workspace-source-motherboard')),
+        matching: find.byType(HotspotWidget)));
+    expect(source.object.metadata['imageAsset'], isNull);
+    expect(source.state, HotspotVisualState.completed);
+    expect(
+        find.byKey(const ValueKey('hotspot-image-motherboard')), findsNothing);
+    expect(
+        find.byKey(
+            const ValueKey('hotspot-image-destination:motherboard_area')),
+        findsOneWidget);
+    expect(driver.state.placements['motherboard'], 'motherboard_area');
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('a drag while saving cannot move the equipment out of reach',
       (tester) async {
     final driver =
@@ -243,6 +311,10 @@ void main() {
 
 Future<void> _drag(
     WidgetTester tester, String source, String destination) async {
+  await tester.ensureVisible(find.byKey(ValueKey('workspace-source-$source')));
+  await tester.ensureVisible(
+      find.byKey(ValueKey('workspace-destination-$destination')));
+  await tester.pumpAndSettle();
   final start =
       tester.getCenter(find.byKey(ValueKey('workspace-source-$source')));
   final end = tester

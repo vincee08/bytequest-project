@@ -2,6 +2,23 @@
 
 > Read this file with `AGENTS.md`, `README.md`, and `bytequest.md` before changing the repository.
 
+## Current continuation - 2026-10-12 workspace overlap repair
+
+This follow-up supersedes the previous APK and device snapshot. Continue on the
+explicitly selected `new` branch, tracking `bytequest-project/new` in
+`vincee08/bytequest-project`.
+
+- Reproduced overlapping cable labels on Android and parts clamped onto the same lower scene coordinates. The catalog can supply more rows than the old normalized canvas accommodates; minimum tap-target expansion also caused collisions. Fixed the shared presentation engine, preserving mission definitions, object IDs and evidence contracts.
+- Crowded scenes now reflow into distinct rows on a vertically scrollable canvas. Separated existing columns are retained where they fit; narrow layouts use a grid. Connection lines use the same resolved object coordinates. Fit returns to the first row; changing mode/phase resets the scene scroll. Every object retains at least a 48 dp target.
+- Hotspot artwork, labels and optional action hints have separate measured space. Photos render once with a corner status indicator. An installed source keeps its selectable Installed status; its part photo appears at its destination. Placement status follows actual placements rather than earlier inspection alone. Reduced-motion and compact completion transitions remain.
+- Canvas drags use the existing reusable edge-scrolling control, including an adaptive edge zone for very short viewports. Saving still freezes mission interactions. Tap placement, keyed orientation, connection evidence and backend evaluation are unchanged.
+- Focused validation PASS: **68 tests**, including all twenty scene definitions at compact portrait/landscape widths, unique non-overlapping 48 dp objects, scroll/tap access, one installed-part image, offscreen canvas drag, placement/connection/orientation paths, accessibility and reduced motion. The legacy assessment large-text check now verifies the review action is reachable through its owning scroll view rather than assuming only one scroll view exists.
+- Final mandatory gates PASS: dependency resolution; analyzer **0 errors / 0 warnings / 206 existing infos**; **394/394 Flutter tests**; Android debug APK; dashboard TypeScript, lint and production build. This includes all real mission phases with doubled text and all twenty touch-control work orders. Existing SDK/Kotlin plugin notices remain non-blocking.
+- Current saved learner run before installation: phase `coc1_m2_p3`, **8 placements, 0 connections, 20 accepted evidence IDs and 0 pending evidence**. No mission action, reset, submission or completion is generated for presentation QA. The previous Phase 5 snapshot is historical, not this session's current state.
+- APK rebuilt at `ByteQuest-Mobile-App/build/app/outputs/flutter-apk/app-debug.apk`, installed with replacement preserving data. SHA-256: **EC90F03BAF3913EE5659613EE48F764FE0CAB222875A57137E3B4A951A1D1277**. Scope and validation are recorded in the overlap follow-up of `docs/MOBILE_UX_AUDIT_2026-10-11.md`.
+- Android API 35 smoke PASS: recognizable connection targets, separately rendered photos/names/status, vertical navigation to the last distinct inspection row and Fit returning to the start. APK replacement and M2 reentry preserve login, phase, placements, connections, accepted evidence IDs and configuration. After Fit/return to Connect ports, the saved runtime matches the pre-install snapshot exactly. No current-process Flutter exception or overflow was found. These are presentation/resume checks, not live mission completions.
+- Preserve the user's untracked PDF and dashboard `package-lock.json`. Build artifacts, client environment, device snapshots and local logs remain ignored. Further physical-device, complete TalkBack and independent learner acceptance remain separate checks.
+
 ## Current continuation - 2026-10-12 mobile UI/UX audit and validation complete
 
 This section supersedes earlier UI/build blockers. The explicit user-selected
