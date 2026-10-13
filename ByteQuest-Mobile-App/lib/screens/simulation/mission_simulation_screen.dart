@@ -579,9 +579,11 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
                 actionValue['compatible'] == false));
     setState(() {
       _writing = true;
-      _workspaceFeedback = actionValue['simulation_valid'] == false
-          ? actionValue['simulation_feedback'] as String?
-          : null;
+      _workspaceFeedback =
+          !wrongSlot && actionValue['simulation_valid'] == false
+              ? actionValue['simulation_feedback'] as String?
+              : null;
+      if (wrongSlot) _technicalFeedback = null;
     });
     if (wrongSlot) {
       final equipment =
@@ -629,7 +631,9 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
           );
         },
       );
-      if (actionValue['simulation_feedback'] is String) {
+      if (wrongSlot) {
+        _technicalFeedback = null;
+      } else if (actionValue['simulation_feedback'] is String) {
         _technicalFeedback = actionValue['simulation_feedback'] as String;
       } else if (phase.feedbackIds.isNotEmpty) {
         _technicalFeedback =

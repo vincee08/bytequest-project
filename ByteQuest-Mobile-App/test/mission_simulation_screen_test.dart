@@ -644,6 +644,9 @@ void main() {
       expect(find.byKey(const ValueKey('incorrect-placement-dialog')),
           findsOneWidget);
       expect(find.textContaining('Memory module → CPU socket'), findsOneWidget);
+      expect(
+          find.textContaining(MissionContentData.incompatiblePlacementFeedback),
+          findsOneWidget);
       expect(controller.state.placements, isEmpty);
       expect(
         find.byKey(const ValueKey('placement-state-memory')),
@@ -655,6 +658,9 @@ void main() {
       await tester.pump(const Duration(seconds: 5));
       expect(find.byType(MissionSimulationScreen), findsOneWidget);
       expect(find.byKey(const ValueKey('incorrect-placement-dialog')),
+          findsNothing);
+      expect(
+          find.textContaining(MissionContentData.incompatiblePlacementFeedback),
           findsNothing);
     });
 
@@ -688,6 +694,9 @@ void main() {
               matching: find.textContaining(
                   MissionContentData.incompatiblePlacementFeedback)),
           findsOneWidget);
+      expect(
+          find.textContaining(MissionContentData.incompatiblePlacementFeedback),
+          findsOneWidget);
       expect(controller.state.placements, isEmpty);
       expect(controller.state.acceptedEvidenceIds, hasLength(1));
       await tester.pump(const Duration(seconds: 4));
@@ -696,6 +705,9 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('incorrect-placement-dialog')),
+          findsNothing);
+      expect(
+          find.textContaining(MissionContentData.incompatiblePlacementFeedback),
           findsNothing);
       expect(find.byType(MissionSimulationScreen), findsOneWidget);
       expect(controller.state.acceptedEvidenceIds, hasLength(1));

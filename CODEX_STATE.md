@@ -2,6 +2,30 @@
 
 > Read this file with `AGENTS.md`, `README.md`, and `bytequest.md` before changing the repository.
 
+## Current continuation - 2026-10-13 duplicate placement feedback removed
+
+Continue on the user-selected `new` branch. In practice, an incompatible
+component/destination now clears the previous workspace and task-panel feedback
+and shows only the five-second incorrect-placement modal. Both canvas drag/tap
+and lower controlled-placement actions use this path. Other placement failures
+retain their distinct technical feedback; evidence handling and assessment
+rules are unchanged.
+
+The canvas regression test first reproduced three copies of the same reason
+(workspace, task panel, modal). The updated tests pass for both placement paths
+and confirm the old reason does not reappear after manual or timed dismissal.
+Mandatory gates PASS: `flutter pub get`, analyzer (0 errors, 0 warnings, 206
+existing infos), **395/395 Flutter tests**, debug APK build, dashboard
+TypeScript/lint/production build. The APK was built with the existing hosted
+practice API URL and installed on Android emulator `emulator-5554`; local and
+installed SHA-256 match:
+`E40BC314479EC5F9B83A00A14CC62DF4684324F2216AA592B20EAFCD52CEC867`.
+App process launch had no Flutter exception or overflow. Replacement preserved
+the existing COC1 M2 Phase 1 snapshot exactly: 1 placement, 0 connections,
+4 accepted evidence IDs, 0 pending. No live incorrect placement was generated
+against the learner's account; modal behavior is verified by widget tests.
+Preserve the user's untracked PDF and dashboard `package-lock.json`.
+
 ## Current continuation - 2026-10-13 incorrect placement notification
 
 Continue on the user-selected `new` branch. A practice attempt to install a
