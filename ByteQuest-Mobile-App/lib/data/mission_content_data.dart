@@ -171,6 +171,14 @@ class MissionContentData {
       'These interfaces cannot establish the requested link. Inspect their connector and signal types.';
   static const incompatiblePlacementFeedback =
       'The component interface does not fit this destination. Inspect the socket or slot specification.';
+  static const incorrectPlacementTitle = 'Component does not fit here';
+  static const incorrectPlacementCloseLabel = 'Close';
+  static String incorrectPlacementMessage(
+      String reason, String? component, String? destination) {
+    if (component == null || destination == null) return reason;
+    return '$component → $destination\n\n$reason';
+  }
+
   static const orientationFeedback =
       'The keyed connector is not aligned. Inspect the notch before seating the component.';
   static const placementPrerequisiteFeedback =

@@ -641,11 +641,63 @@ void main() {
       await tester.tap(place);
       await tester.pumpAndSettle();
 
+      expect(find.byKey(const ValueKey('incorrect-placement-dialog')),
+          findsOneWidget);
+      expect(find.textContaining('Memory module → CPU socket'), findsOneWidget);
       expect(controller.state.placements, isEmpty);
       expect(
         find.byKey(const ValueKey('placement-state-memory')),
         findsNothing,
       );
+      expect(controller.state.acceptedEvidenceIds, hasLength(1));
+      await tester.tap(find.byKey(const ValueKey('incorrect-placement-close')));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 5));
+      expect(find.byType(MissionSimulationScreen), findsOneWidget);
+      expect(find.byKey(const ValueKey('incorrect-placement-dialog')),
+          findsNothing);
+    });
+
+    testWidgets('wrong canvas slot explains the mismatch for five seconds',
+        (tester) async {
+      tester.view.physicalSize = const Size(412, 915);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final definition = MissionSimulationDefinitions.byId('coc1_m1');
+      final controller = _controller(definition);
+      await tester.pumpWidget(_host(definition, controller: controller));
+      await tester.pumpAndSettle();
+      final source = find.byKey(const ValueKey('workspace-source-motherboard'));
+      final wrongSlot =
+          find.byKey(const ValueKey('workspace-destination-cpu_position'));
+      await tester.ensureVisible(source);
+      await tester.ensureVisible(wrongSlot);
+      await tester.pumpAndSettle();
+      await tester.dragFrom(tester.getCenter(source),
+          tester.getCenter(wrongSlot) - tester.getCenter(source));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('incorrect-placement-dialog')),
+          findsOneWidget);
+      expect(find.textContaining('Motherboard → Processor inspection tray'),
+          findsOneWidget);
+      expect(
+          find.descendant(
+              of: find.byKey(const ValueKey('incorrect-placement-dialog')),
+              matching: find.textContaining(
+                  MissionContentData.incompatiblePlacementFeedback)),
+          findsOneWidget);
+      expect(controller.state.placements, isEmpty);
+      expect(controller.state.acceptedEvidenceIds, hasLength(1));
+      await tester.pump(const Duration(seconds: 4));
+      expect(find.byKey(const ValueKey('incorrect-placement-dialog')),
+          findsOneWidget);
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('incorrect-placement-dialog')),
+          findsNothing);
+      expect(find.byType(MissionSimulationScreen), findsOneWidget);
       expect(controller.state.acceptedEvidenceIds, hasLength(1));
     });
 

@@ -14,6 +14,7 @@ import '../../services/progress_resume_service.dart';
 import '../../services/practice_progress_service.dart';
 import 'components/equipment_operations.dart';
 import 'components/equipment_workspace.dart';
+import 'components/incorrect_placement_dialog.dart';
 import 'components/mission_task_status.dart';
 import 'interactions/mission_interactions.dart';
 import 'runtime/mission_evidence_gateway.dart';
@@ -569,12 +570,38 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
       target: target,
       value: value,
     );
+    final wrongSlot = _state.mode == MissionRuntimeMode.practice &&
+        emittedActionType == 'placement_attempted' &&
+        ((actionValue['simulation_valid'] == false &&
+                actionValue['simulation_feedback'] ==
+                    MissionContentData.incompatiblePlacementFeedback) ||
+            (actionValue['simulation_valid'] == null &&
+                actionValue['compatible'] == false));
     setState(() {
       _writing = true;
       _workspaceFeedback = actionValue['simulation_valid'] == false
           ? actionValue['simulation_feedback'] as String?
           : null;
     });
+    if (wrongSlot) {
+      final equipment =
+          MissionEquipmentSimulator.map(phase.presentation['equipment']);
+      final placement = MissionEquipmentSimulator.map(equipment['placement']);
+      final part = MissionEquipmentSimulator.item(
+          placement['items'] ?? phase.presentation['items'], value['item_id']);
+      final slot = MissionEquipmentSimulator.item(
+          placement['destinations'] ?? phase.presentation['destinations'],
+          value['destination_id']);
+      unawaited(showIncorrectPlacementDialog(
+        context,
+        message: MissionContentData.incorrectPlacementMessage(
+          actionValue['simulation_feedback'] as String? ??
+              MissionContentData.incompatiblePlacementFeedback,
+          part['label'] as String?,
+          slot['label'] as String?,
+        ),
+      ));
+    }
     try {
       await _controller.dispatch(
         phaseId: phase.id,

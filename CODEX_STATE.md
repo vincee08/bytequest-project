@@ -2,6 +2,38 @@
 
 > Read this file with `AGENTS.md`, `README.md`, and `bytequest.md` before changing the repository.
 
+## Current continuation - 2026-10-13 incorrect placement notification
+
+Continue on the user-selected `new` branch. A practice attempt to install a
+component in an incompatible slot now opens a compact modal with the tried
+component, destination and technical reason. It closes after five seconds or
+when the learner taps the labeled 48 dp Close button. This covers the shared
+canvas drag/tap path and the retained controlled-placement controls. The
+modal timer cancels when dismissed or the route is disposed; assessment
+correctness remains private. Incorrect attempts still record evidence and do
+not install a part. Other placement failures retain their distinct technical
+feedback. Text is in `mission_content_data.dart`.
+
+Focused widget tests pass for wrong canvas placement, five-second expiry,
+manual dismissal without leaving the mission, and rejected evidence without
+an installed part. Final mandatory gates PASS: Flutter dependency resolution,
+analyzer **0 errors / 0 warnings / 206 existing infos**, **395/395 tests**,
+debug APK build, and dashboard TypeScript/lint/production build. Existing
+SDK/Kotlin plugin migration notices remain non-blocking.
+
+The rebuilt APK was installed on the Android API 35 emulator with the existing
+hosted public practice endpoint. APK SHA-256
+`9E78E66E8E557C156DEC6873FC8A5C166E41D6CD9D28ABFA890B99E288995B88`
+matches the installed package. App launch reports no current-process Flutter
+exception or overflow. APK replacement preserved the learner's current COC1
+M2 Phase 1 run exactly: **1 placement, 0 connections, 3 accepted evidence IDs,
+0 pending evidence**. Mission reentry shows the Phase 1 placement workspace
+with the existing chassis, and the saved runtime remains identical. No
+practice action or completion was generated for QA.
+This is emulator and widget validation; physical-device/TalkBack acceptance
+remains separate. Preserve the user's untracked PDF and dashboard
+`package-lock.json`.
+
 ## Current continuation - 2026-10-12 workspace overlap repair
 
 This follow-up supersedes the previous APK and device snapshot. Continue on the
