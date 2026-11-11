@@ -1,358 +1,238 @@
-# Hosted Android testing gate — 2026-11-11
+# Hosted Android testing — completed backend synchronization
 
-**BLOCKED — ACTION REQUIRED**
+**READY FOR HOSTED MOBILE TESTING**
 
-Focused read-only checks on `vince-branch`, application source commit
-`5ae4dd6ba520685b40217847daf0b4d333634aa2`. The approved Flutter UI is preserved.
-No hosted database write, login, registration, migration, API deployment,
-environment modification, Git push, installation, or data clear was performed.
-This report adds current connectivity evidence to the existing
-[synchronization audit](LOCAL_HOSTED_SUPABASE_SYNC_AUDIT_2026-11-11.md) and
-[v3 preflight/rehearsal](HOSTED_COC1_M1_V3_PREFLIGHT_2026-11-11.md).
+Evidence date: **2026-11-11 UTC / 2026-11-12 Manila**. Owner-led physical
+testing has **not** passed or been completed. The owner will download/install
+the APK; USB connection and agent installation were declined. Approved Flutter
+UI/UX and all dashboard product source files remain unchanged on `vince-branch`.
 
-## Connection evidence
+## Download and owner action
 
-Live checks ran at **2026-11-11 14:24–14:32 UTC (22:24–22:32 Manila)**.
-Only GETs and explicitly read-only management requests were sent to hosted services.
+- [Hosted testing APK](../ByteQuest-Mobile-App/build/app/outputs/flutter-apk/ByteQuest-hosted-testing-20261112-debug.apk)
+- [Non-secret build record](../ByteQuest-Mobile-App/build/app/outputs/flutter-apk/ByteQuest-hosted-testing-20261112-debug.json)
+- QA email: `bytequest.mobile.qa.20261112@bytequest.invalid`. Use the new password
+  entered in the hidden local prompt. It is absent from chat, Git and the APK.
+- If ByteQuest is already installed, sign out before updating and keep its data.
+  Do not uninstall or clear data to resolve an installation conflict. The owner
+  controls Android's installation/update prompt; no agent replacement occurred.
+- Sign in with this fresh hosted QA identity, start COC1 M1, then test the 20
+  missions and four quizzes in order. Record actual phone behavior/results.
 
-| Item | Current evidence | Limit |
+## Verified hosted connectivity
+
+| Item | Verified result | Scope / limit |
 |---|---|---|
-| Supabase project | **Verified:** `rslmteqipxqfifwftugk`; CLI identifies **ByteQuest · production** | Database catalog access still denied |
-| Supabase URL | `https://rslmteqipxqfifwftugk.supabase.co` | Matches mobile default, dashboard default and cached Vercel environment files; cached files do not attest the live deployment |
-| Production Auth | `/auth/v1/health` and `/auth/v1/settings`: **HTTP 200** with the mobile publishable key | Password login/registration not attempted; their source paths are `/auth/v1/token?grant_type=password` and `/auth/v1/signup` |
-| Auth settings | Email enabled, signup enabled, `mailer_autoconfirm=true` | Observation only; no setting changed |
-| Production Practice API | `https://bytequest-alpha.vercel.app/api/learner/practice`: **HTTP 401**, `Active Learner access is required.` | An unsigned GET returns before the route constructs its database client. It does not prove a functioning database binding or authenticated verification |
-| Vercel request trace | `sin1::iad1::fqfwj-1794407077407-7b6ff0961ac9` | This is a request ID, **not a deployment revision** |
-| Production deployment ID / Git SHA | **Unverified** | Vercel CLI has no credential; its login prompt was canceled. No deployment was initiated |
-| Production API database binding | **Unverified** | Requires evidence for the deployment currently serving the production alias |
-| Hosted SQL / migration history | **HTTP 403** from `db query --read-only --remote=rslmteqipxqfifwftugk` | No catalog/history reconciliation possible with this account |
-| Hosted backups / recovery | **HTTP 403** from `backups list --remote=rslmteqipxqfifwftugk` | No recoverable backup or tested restoration established |
-| Android runtime destination | **Unverified** | `adb devices -l` is empty; no physical device or emulator is attached |
+| Supabase project | **ByteQuest**, `rslmteqipxqfifwftugk`, ACTIVE_HEALTHY | Authorized project, not a local or isolated QA database |
+| Supabase account/access | Correct account has organization **Owner** role | Earlier 403 was account access; authorized read-only SQL and backup listing now succeed |
+| Supabase / Auth | `https://rslmteqipxqfifwftugk.supabase.co`; `/auth/v1/signup`, `/auth/v1/token?grant_type=password` | Genuine hosted signup, password sign-in and server user confirmation passed for the approved QA identity |
+| Practice API | `https://bytequest-alpha.vercel.app/api/learner/practice` | Authenticated GET for a random nonexistent quiz UUID returned expected **404 Quiz not found** after learner/profile authorization and database lookup |
+| Vercel team/project | `vincee08s-projects` / `bytequest`; `prj_vUXjALnNCLQWzzdScvwXMfYvppga` | Official CLI sign-in completed; no deployment performed |
+| Production deployment | `dpl_CM8Kh72voepkXTVm8zWSKJZ2rZhS`, READY/production | Created 2026-10-13 08:08:45.400 UTC; production alias `bytequest-alpha.vercel.app` |
+| Production Git revision | `dff80603087522c7c0a0a070464696b9237580f7` | Practice route, practice libraries and server client match the approved current source; no API update was required |
+| Production binding | Expected Supabase URL confirmed through authorized Vercel environment inspection; URL record predates deployment | Runtime API accepted a newly created learner/profile existing only in the correct hosted project; this is stronger than unsigned 401 or current environment inspection alone |
+| Authenticated request trace | `sin1::iad1::fw7jg-1794413794353-6dc6c216a363`, 2026-11-11 16:16 UTC | Workstation API check, **not a physical-phone request** |
+| Android runtime backend | Explicit hosted build prepared; **phone runtime unverified** | Requires owner installation, actual requests and project/deployment log correlation |
 
-The mobile publishable key received HTTP 401 / SQLSTATE `42501` when reading
-`practice_mission_contracts`; that table is private by design. Contract and
-OpenAPI metadata were therefore read on this workstation with the existing
-project-specific dashboard server credential, using GET only against the
-expected HTTPS project. No learner records or quiz answer keys were retrieved.
-That credential never entered Flutter, command arguments, output, or this report.
+The owner explicitly approved the dedicated hosted test plan. Only normal Auth
+signup/sign-in/session/profile provisioning and authenticated reads ran so far.
+Automated checks submitted **zero practice actions, completions or quizzes**.
+The learning-path RPC returned four COC rows. No fake JWT, fabricated progress
+or direct completion/result manipulation was used.
 
-The six shared relation definitions are exposed with the required columns:
-`profiles`, `practice_mission_actions`, `practice_mission_contracts`,
-`practice_mission_completions`, `practice_quiz_attempts`, `practice_coc_progress`.
-OpenAPI also exposes the six expected RPC names: `practice_verify_mission`,
-`practice_begin_quiz`, `practice_submit_quiz`, `get_practice_learning_path`,
-`practice_coc_unlocked`, `practice_conditions_met`. Exposure proves neither
-function implementation nor effective privileges, RLS, constraints or execution.
+## Backup and tested recovery
 
-The October activation report identifies historical deployment
-`dpl_5rWf1YtWUC7DDVsy9stu9UZ6bY7a`, source
-`ccb3aef4d8e70c27e934a66f12d38fa40df38216`. These are **not verified current values**.
-The practice route, practice library and admin client have no tracked source
-difference between that historical commit and current application source.
-An API code change has not been shown necessary for v3.
+Managed backup inspection succeeded: `backups=[]`, PITR disabled. The owner did
+not know the existing database password. No password reset occurred. After
+explicit approval, the official project-scoped temporary login endpoint issued
+`cli_login_supabase_read_only_user` for **300 seconds**. Its NOINHERIT membership
+allows SET ROLE to `supabase_read_only_user`; no new grants were added manually.
+TLS hostname/certificate verification used the official Supabase production CAs.
+See the [temporary login API](https://supabase.com/docs/reference/api/v1-create-login-role)
+and [PSQL certificate guidance](https://supabase.com/docs/guides/database/psql).
 
-## Android configuration and artifact inspection
+- One consistent READ ONLY snapshot exported all database schemas/data, Auth,
+  migration history and hosted-only objects; roles/grants were exported without
+  PostgreSQL role passwords. Auth learner password hashes are retained in Auth data.
+- AES-256-GCM archives and a Windows DPAPI CurrentUser-protected key reside in
+  `%LOCALAPPDATA%/ByteQuest/Recovery/rslmteqipxqfifwftugk-20261111`.
+  Directory inheritance is disabled; only the Windows account and SYSTEM have access.
+  No plaintext database dump or credential was written to Git or disk.
+- Database archive: **2,116,946 encrypted bytes**, SHA-256
+  `13fb80319663c62d83dab89f45a0ef26a7550b31f76ad12ddfdc9be4cee4ee3c`.
+  GCM authentication and checksums passed for the database, roles and row digests.
+- Full restore on pinned PostgreSQL 17.6/Supabase image passed: **116 relations,
+  5,453 rows**, all row counts/content hashes equal to the source snapshot.
+- Target was a new, guarded container with **network none, zero published ports,
+  non-root user, read-only root filesystem and tmpfs database storage**. It was
+  stopped after verification, removing the plaintext restored copy. Existing
+  populated local Supabase and isolated QA stacks were preserved.
+- Tested procedure initializes the original `supabase_admin` bootstrap role,
+  replays original role attributes/grantors, loads Supautils, restores database
+  ownership/ACLs with `pg_restore --create`, and restores event triggers as
+  their original owners. Earlier failed recovery attempts are retained privately;
+  success evidence is `restore-verification-attempt8.json`.
+- Storage objects and Vault secrets were **zero** in the consistent snapshot.
+  Storage configuration/metadata are backed up. If future objects appear, their
+  actual bytes need a separate encrypted export; database dumps do not contain
+  them. See [Supabase backup scope](https://supabase.com/docs/guides/platform/backups).
+- Immediately before production modification, a read-only check again matched
+  all 116 relations to this backup. Recovery is tied to this Windows DPAPI account;
+  retain its profile and protected key. No production restore was performed.
 
-`SupabaseConfig.initialize()` loads the bundled `.env`, then gives precedence
-to compile-time `BQ_SUPABASE_URL` and `BQ_SUPABASE_ANON_KEY`.
-`PracticeProgressService` independently prefers `BQ_PRACTICE_API_URL` over
-the bundled `PRACTICE_API_URL`. These `String.fromEnvironment` values are build
-inputs, not Android settings that can be inferred from the current source `.env`.
-Process and invocation overrides must be recorded for the particular build.
+## Exact approved production changes
 
-The existing debug APK inspected before validation:
+The [approved SQL batch](../scripts/hosted-mobile-compatibility-20261111.sql),
+SHA-256 `412420f9ef8d742bb02ced545e3b71d4b5eadb64ac8bd09486e053fc85b86ab4`,
+was explicitly approved and applied once at **2026-11-11 16:06 UTC**. Its original
+pre-approval header remains immutable so the approved byte hash stays verifiable.
+The single DO statement is atomic and guards history, function bodies/ACLs,
+protected data and the 19 unaffected mission definitions.
 
-| Field | Observed value |
+It reuses exactly these existing migration bodies:
+
+1. `20260908120000_harden_authoritative_action_idempotency.sql`, SHA-256
+   `1b8cfd6fc6b70ef1706a9152f86debff5baa67220f391bfbafedb54390863385`.
+   This additional dependency was **demonstrated on the restored hosted copy**:
+   the unchanged foundation test failed CLIENT_ACTION_ID_IDEMPOTENCY_FAILED.
+   Hosted lacked the client-action unique index and its assessment append RPC
+   only deduplicated sequence numbers. A read-only duplicate-key preflight found
+   zero conflicts. The existing fix adds that index and updates the existing
+   SECURITY DEFINER append function, preserving role checks and learner evidence.
+2. `20261109120000_coc1_m1_identification_contract.sql`, SHA-256
+   `95d60bdc4ecc09a728814c3a31156e170b8be7ebc1873e30ca580abaf81e9a3f`.
+   Changes M1 v2 to v3 identification and replaces two SECURITY INVOKER quiz
+   functions so verified historical v1/v2 M1 completions continue to count.
+   Quiz functions remain server-only; no client verification grant was introduced.
+
+Exact batch execution and existing v2 evidence/restart, v3 identification,
+historical quiz-gate and instructor finalization/release rollback tests passed
+on the restored copy. All protected rows remained unchanged after rehearsal.
+
+Hosted history was **49**, including remapped and hosted-only entries; it is now
+**50**. All 49 entries remain unchanged. New actual batch entry:
+`20261111160000 / hosted_mobile_v3_and_action_idempotency`, containing the two
+executed SQL bodies. Source versions were not falsely marked as previously
+applied. No history repair, database reset or replay of all 52 files occurred.
+Future automatic `db push` remains inappropriate for this divergent history.
+
+Post-write read-only verification found only the intended contract/history
+tables changed. All other **114 relation** row counts/content hashes were
+identical to backup. Before/after the SQL batch, before approved QA signup:
+
+| Preserved records | Before | After |
+|---|---:|---:|
+| Profiles / Auth users | 37 / 37 | 37 / 37 |
+| Practice evidence / COC1 M1 evidence | 595 / 297 | 595 / 297 |
+| Practice completions / COC progress / quizzes | 1 / 0 / 0 | 1 / 0 / 0 |
+| Assessment attempts | 45 | 45 |
+| Score revisions / result releases | 64 / 22 | 64 / 22 |
+
+Hosted-only TeacherDesk objects/data were retained. Seven shared practice /
+assessment RPC bodies now match the approved local source, with appropriate
+SECURITY INVOKER/DEFINER and effective grants verified read-only. Realtime
+publication includes practice completions and COC progress; phone event delivery
+still needs owner verification.
+
+Unfinished v2 sessions retain all historical evidence. Partial old work must not
+automatically earn v3 completion. Use the existing learner-confirmed **Discard
+progress** restart only with the affected learner's informed choice. No real
+learner's progress was discarded or rewritten during synchronization.
+
+If further verification fails, stop and inspect; do not repeat the batch. Its
+guards intentionally reject reapplication. Prefer a reviewed forward correction.
+A production restore/cutover requires separate approval and reconciliation of
+writes after the backup, including the subsequently approved QA account.
+
+## All 20 mission compatibility results
+
+Fresh read-only comparison after synchronization found **20/20 exact definition
+matches**, including M1 v3, using the existing approved Flutter export. Each
+definition covers phases, required evidence, verification and completion rules.
+The shared evidence table, verifier, learning-path and quiz/progression contracts
+were checked; hosted **authenticated mission submission and phone execution**
+remain untested. Earlier all-20 local QA results keep their local-only scope.
+
+| Mission | Mission name | Hosted / approved Flutter definition | Physical completion / persistence |
+|---|---|---|---|
+| COC1 M1 | Identify Computer Parts and Tools | Exact match | Pending owner |
+| COC1 M2 | Install Internal Components | Exact match | Pending owner |
+| COC1 M3 | Install and Configure a Workstation OS | Exact match | Pending owner |
+| COC1 M4 | Connect and Configure Peripheral Devices | Exact match | Pending owner |
+| COC1 M5 | Install Drivers and Test the System | Exact match | Pending owner |
+| COC2 M1 | Identify Network Devices and Tools | Exact match | Pending owner |
+| COC2 M2 | Create Network Cables | Exact match | Pending owner |
+| COC2 M3 | Construct and Verify a Network Topology | Exact match | Pending owner |
+| COC2 M4 | Configure Network Devices | Exact match | Pending owner |
+| COC2 M5 | Troubleshoot Network Connectivity | Exact match | Pending owner |
+| COC3 M1 | Prepare Server Setup Requirements | Exact match | Pending owner |
+| COC3 M2 | Install and Configure Server OS | Exact match | Pending owner |
+| COC3 M3 | Manage Users, Groups, and Permissions | Exact match | Pending owner |
+| COC3 M4 | Configure and Test Server Services | Exact match | Pending owner |
+| COC3 M5 | Test Client Access and Document Setup | Exact match | Pending owner |
+| COC4 M1 | Identify System and Network Problems | Exact match | Pending owner |
+| COC4 M2 | Diagnose and Repair Hardware Faults | Exact match | Pending owner |
+| COC4 M3 | Diagnose Hardware and Software Faults | Exact match | Pending owner |
+| COC4 M4 | Replace and Reconfigure a Component | Exact match | Pending owner |
+| COC4 M5 | Apply Repair Action and Create Report | Exact match | Pending owner |
+
+The earlier audit's 20 official activity packages and 98 rubric criteria were
+not re-audited. No definition migration was created for the other 19 missions.
+
+## APK provenance and limits
+
+| Field | Result |
 |---|---|
-| Path | `ByteQuest-Mobile-App/build/app/outputs/flutter-apk/app-debug.apk` |
-| APK modified time | 2026-11-11 13:52:38 UTC |
-| SHA-256 | `75A8E67CB1A167E7A4DB2DAD1D1A181E842485D8BE4E437EE2CED335086B478E` |
-| Build variant / package | `debug` / `com.example.bytequest` |
-| Version metadata | versionCode `1`, versionName `1.0` |
-| Bundled environment | Only `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `PRACTICE_API_URL`; defaults are the hosted endpoints above |
-| Source attestation | No artifact-to-commit provenance record; current checkout alone cannot certify its build source |
-| Installed identity / runtime | Unverified; no device attached |
+| Build checkout | `73257c1b4b71af15c3d8e71e81f799a4b9635fd4` |
+| Approved app implementation | `5ae4dd6ba520685b40217847daf0b4d333634aa2`; no Flutter source diff |
+| Flutter / variant | 3.47.7 / **debug** |
+| Package / version | `com.example.bytequest` / 1.0 (1) |
+| Android / ABIs | min API 24, target 36; arm64-v8a, armeabi-v7a, x86_64 |
+| Size | 211997300 bytes |
+| APK SHA-256 | `63c336d3938487c85b26e4acce02ce6430306e919b1f09e937e29a6df777bfc0` |
+| Android Debug signer SHA-256 | `a4d01056c847034cf2fdc199d4a5dbfa203af5e716d715f560f6db9755bd1d37` |
+| Build inputs | Explicit hosted BQ_SUPABASE_URL, BQ_SUPABASE_ANON_KEY (verified public client key), BQ_PRACTICE_API_URL |
+| Credential/config inspection | 600 nonempty decompressed entries checked; no configured server secret match; bundled environment contains only three public client settings; no explicit local backend override URL in compiled Dart |
+| Installation / actual phone backend | **Pending owner**; no install, replacement, uninstall or data clear performed |
 
-A binary string scan found no specific local Supabase or local Practice API
-URL in that APK's Dart kernel. SDK strings for `localhost:8080` and
-`localhost:9999` were present; their presence does not establish the app's
-active backend. Static inspection is not a runtime request trace.
-The latest recorded **installed emulator build** used local loopback endpoints;
-that is historical handoff evidence, not a fresh device observation.
+This is a debug-signed owner testing artifact, not a store distribution release.
+No release-signing bypass, debug authentication bypass or synthetic completion
+switch was enabled. Runtime hosts on a phone cannot be attested from static
+APK inspection alone. The old local emulator build is not this artifact.
 
-Production code uses real Supabase Auth, learner-owned evidence upserts, and a
-Bearer-authenticated Practice API request. No synthetic completion or fake-auth
-switch was found in these production paths. Test constructors/harnesses are
-not the normal app route. The release variant requires private signing material;
-`BYTEQUEST_ALLOW_DEBUG_SIGNING=true` is an explicit local smoke-build override.
-No release-signing override was enabled for this work.
+## Owner testing and remaining acceptance dependencies
 
-**No APK is approved for hosted testing at this gate.** A local validation build
-does not satisfy compatibility, deployment, runtime or physical-device checks.
+Use only the approved QA account. Test login, Learn Page, instructions,
+identification/tap/drag interactions, timer, submission, server verification,
+completion, sequential quizzes/unlocks, backgrounding, restart/resume and
+persistence for all 20 missions. Record actual device model/Android version and
+observed outcomes. Registration and login passed through hosted Auth from the
+workstation; registration UI on a phone remains unverified. Another QA identity
+for a successful phone registration test requires a bounded additional approval.
 
-## All 20 missions
+After the owner performs real work, correlate its timestamps/QA identity with
+the expected Supabase rows/logs and Vercel deployment requests. Do not record
+tokens, cookies or evidence request bodies in shared logs. Retain test evidence;
+deletion/cleanup was not approved.
 
-Fresh GETs found **20 hosted contracts**. Canonical JSON comparison against
-definitions exported directly from the current Flutter catalog found **19 exact
-matches and one mismatch**. This includes every phase, action requirement,
-equipment constraint and completion condition stored in each definition.
-The result also agrees with the current repository migration definitions.
+**Instructor practice visibility remains a specific acceptance gap.** The checked
+deployed source's progress and instructor dashboard views read official
+assessment attempts/score revisions, not practice completions/COC progress.
+Practice completion therefore must not be promised as visible in those views.
+No dashboard feature revision was started. A related minimal integration, if
+required after phone testing, needs scoped implementation and separate deployment
+approval. Official assessments/results remain instructor-finalized and released.
+Optional QA class/enrollment/assigned assessments were not created or approved.
 
-`v1` = `css-sag-20261009-v1`; `v2` = `css-sag-20261011-v2`;
-`v3` = `css-sag-20261109-v3`.
+## Validation and next action
 
-| Mission | Mission name | Flutter / hosted | Definition result | Hosted evidence, API verification, progress and device completion |
-|---|---|---|---|---|
-| COC1 M1 | Identify Computer Parts and Tools | v3 / v2 | **Incompatible** | Blocked by contract mismatch; other dependencies unverified |
-| COC1 M2 | Install Internal Components | v2 / v2 | Exact match | Unverified |
-| COC1 M3 | Install and Configure a Workstation OS | v2 / v2 | Exact match | Unverified |
-| COC1 M4 | Connect and Configure Peripheral Devices | v2 / v2 | Exact match | Unverified |
-| COC1 M5 | Install Drivers and Test the System | v2 / v2 | Exact match | Unverified |
-| COC2 M1 | Identify Network Devices and Tools | v2 / v2 | Exact match | Unverified |
-| COC2 M2 | Create Network Cables | v2 / v2 | Exact match | Unverified |
-| COC2 M3 | Construct and Verify a Network Topology | v2 / v2 | Exact match | Unverified |
-| COC2 M4 | Configure Network Devices | v2 / v2 | Exact match | Unverified |
-| COC2 M5 | Troubleshoot Network Connectivity | v2 / v2 | Exact match | Unverified |
-| COC3 M1 | Prepare Server Setup Requirements | v2 / v2 | Exact match | Unverified |
-| COC3 M2 | Install and Configure Server OS | v2 / v2 | Exact match | Unverified |
-| COC3 M3 | Manage Users, Groups, and Permissions | v2 / v2 | Exact match | Unverified |
-| COC3 M4 | Configure and Test Server Services | v2 / v2 | Exact match | Unverified |
-| COC3 M5 | Test Client Access and Document Setup | v2 / v2 | Exact match | Unverified |
-| COC4 M1 | Identify System and Network Problems | v1 / v1 | Exact match | Unverified |
-| COC4 M2 | Diagnose and Repair Hardware Faults | v1 / v1 | Exact match | Unverified |
-| COC4 M3 | Diagnose Hardware and Software Faults | v1 / v1 | Exact match | Unverified |
-| COC4 M4 | Replace and Reconfigure a Component | v1 / v1 | Exact match | Unverified |
-| COC4 M5 | Apply Repair Action and Create Report | v1 / v1 | Exact match | Unverified |
+The hosted build, certificate verification, 20-definition comparison, authenticated
+Auth/API reads, exact hosted-copy recovery/rehearsal and production post-checks
+passed. Existing 436-test local QA remains valid for the unchanged application.
+Fresh required local gates passed: Flutter dependency resolution, analyzer (0 errors / 0 warnings / 217 infos), **436/436 tests**, explicit hosted debug APK build, dashboard TypeScript/lint/build, and Git whitespace checks. No application source changed.
 
-All missions share the same checked source contract: authenticated evidence to
-`practice_mission_actions` with a stable `client_action_id`; learner-scoped
-read/reconciliation; API `POST {action:"verify",mission:"cocN_mN"}`; server
-`practice_verify_mission(uuid,text)`; verified completion projection through
-`get_practice_learning_path()`. None of those mutating operations ran on hosted.
-Hosted evaluator bodies, grants, append-only/unique constraints and RLS must
-still be compared to the source before declaring production compatibility.
-The mobile Realtime coordinator subscribes to the QA learner's practice
-completion/COC progress rows and refetches trusted projections. Hosted publication
-membership and actual event delivery remain unverified; the evidence query
-collects publication metadata for that check.
-
-Source progression requires five verified missions and a server-graded
-five-question practice quiz with an 80% learning threshold before the next COC
-unlocks. Each earlier COC must be completed. No unlock/progress bypass is proposed.
-The local 60-minute COC timer is checkpointed convenience state, not an attested
-server deadline. Physical-device persistence/expiry remains to be tested.
-
-The previous isolated QA run passed 138 API checks across all 20 missions plus
-four quizzes, raw PostgreSQL replay, and instructor release tests. Those results
-are retained with their [local-only scope](practice_all_missions_qa_2026-11-11.md).
-The earlier hosted audit also matched all 20 official activity packages and 98
-rubric criteria; that comparison was not repeated here. Official assessment
-and instructor release remain a separate workflow from practice completion.
-**No new migration is indicated for the other 19 missions.**
-
-### Instructor visibility dependency
-
-The checked source's `/progress`, `/progress/learners/[userId]`, and
-`/instructor/dashboard` query assessment `attempts` and `score_revisions`.
-They do not read `practice_mission_completions` or `practice_coc_progress`.
-A search of dashboard source found those practice completion/progress tables
-only in the Practice API type layer. Consequently, practice verification cannot
-be assumed to appear in the existing instructor UI. The live dashboard revision
-is unknown, so no live UI failure is claimed. Record this as a specific remaining
-acceptance dependency; no dashboard feature revision was started.
-
-## Smallest synchronization change and approval gate
-
-The sole confirmed database candidate remains the **existing, now tracked**
-`supabase/migrations/20261109120000_coc1_m1_identification_contract.sql`, SHA-256
-`95D60BDC4ECC09A728814C3A31156E170B8BE7EBC1873E30CA580ABAF81E9A3F`.
-It changes one active COC1 M1 definition to v3 and replaces two SECURITY INVOKER
-quiz-gate functions to continue recognizing historical v1/v2 M1 completions.
-It preserves evidence, completions, accounts, official attempts, scores and
-instructor releases. It does not replace the generic verifier. Its v2 row guard
-still matches the observed hosted version and four first-phase placement items.
-
-The [existing preflight](HOSTED_COC1_M1_V3_PREFLIGHT_2026-11-11.md) records the
-successful isolated, rollback-only rehearsal of that exact SQL, unfinished v2
-evidence rejection, explicit-discard recovery, historical quiz-gate compatibility,
-all-20 replay and instructor lifecycle checks. Repeating it against unchanged
-local fixtures adds no hosted assurance. Rehearse again on a secured isolated
-target if the newly obtained hosted catalog or data shapes differ.
-
-Before requesting migration approval:
-
-1. Obtain authorized read-only hosted history/catalog evidence and current Vercel
-   deployment evidence. Reconcile all 52 repository versions with hosted history,
-   including the five historical timestamp remaps in the earlier reports and
-   known local source/history drift. Verify the v3 migration's hosted history
-   status and effective absence. Preserve hosted-only `td_*` objects.
-2. Establish a completed backup/PITR point, retention window, preservation scope
-   and a **tested restore on a separate secured target**. Include Auth/application
-   data, migration history, official results and hosted-only objects. Database
-   backup metadata alone is insufficient; Storage object bytes need separate
-   coverage. See [Supabase backups](https://supabase.com/docs/guides/platform/backups).
-3. Freeze reviewed SQL/hash and history mapping, pre-change aggregate baselines,
-   maintenance window, API revision/binding evidence and unfinished-session plan.
-4. **STOP for explicit owner approval** of that exact hosted migration. Any API
-   deployment, environment change or backup restore is also a separate approved
-   operation. Do not run `db push`, repair history, replay all 52 files, or reset.
-5. After an approved change, read back v3 and its two function bodies/grants;
-   compare the 19 unaffected contracts, official packages, catalog protections and
-   preserved records/hosted-only objects. Account for legitimate concurrent writes.
-   Obtain separate hosted test-data approval before authenticated smoke tests.
-
-For unfinished v2 sessions, preserve existing actions. Partial v2 evidence must
-not automatically earn v3 completion. Use the existing learner-confirmed
-**Discard progress** path only with the affected learner's informed choice; it
-appends a discard marker and starts a fresh v3 timeline without deleting history.
-Do not discard or rewrite anyone's progress during synchronization. Already
-verified v1/v2 M1 completions continue to count for the quiz gate.
-
-On failure, stop rollout and preserve evidence. Prefer a reviewed forward fix.
-A full production restore requires a tested procedure, owner approval, an agreed
-data-loss window for writes after the backup, and reconciliation of those writes.
-Do not roll back by deleting learner evidence or resetting the contract blindly.
-
-## Evidence the authorized project owner/admin can retrieve
-
-The owner replied **“i cant”** to the request to retrieve dashboard evidence.
-No such evidence has been supplied. Supabase and Vercel plugins were found
-available and suggested; **neither is confirmed installed or connected**.
-An authorized account holder can install/connect those integrations to allow
-direct read-only inspection. A connector cannot elevate an account's permissions.
-Keep all keys, tokens, passwords and connection strings out of chat.
-
-If another authorized administrator handles the evidence, these are the exact tasks:
-
-1. Open [the expected Supabase project](https://supabase.com/dashboard/project/rslmteqipxqfifwftugk).
-   Confirm the project reference in the URL and General settings. In SQL Editor,
-   run [the SELECT-only evidence file](../scripts/hosted-mobile-readonly-evidence.sql)
-   as written. Export the `hosted_mobile_evidence` result privately. It includes
-   migration versions/recorded-SQL hashes, practice function bodies, catalog/RLS/
-   ACL metadata, hosted-only object inventory and aggregate preservation counts;
-   it contains no learner row payloads. If a permission/missing-object error occurs,
-   return the error; do not grant privileges or create objects to make it pass.
-2. In Database → Backups, record type, completion time, status and recoverable
-   window. Supply the existing isolated restore-test record and its recovery
-   procedure, or record that none exists. Do not trigger a restore or paid feature
-   change merely to gather evidence. An approved restore rehearsal is then required.
-3. Open Vercel team `vincee08s-projects`, project `bytequest`
-   (`prj_vUXjALnNCLQWzzdScvwXMfYvppga`). Find the deployment currently serving
-   `bytequest-alpha.vercel.app`; record deployment ID, exact URL, Ready status,
-   production target, build time, source Git SHA and root directory.
-4. For **that deployment**, confirm the effective Supabase URL/reference and that
-   its server credential belongs to the same project, without disclosing the
-   credential. The current Project Settings environment alone is insufficient:
-   [Vercel environment changes affect new deployments](https://vercel.com/docs/environment-variables).
-   With an already authorized CLI session, `vercel inspect bytequest-alpha.vercel.app
-   --format=json --scope vincee08s-projects` retrieves deployment metadata
-   ([reference](https://vercel.com/docs/cli/inspect)). No redeploy is requested.
-
-The evidence SQL was executed successfully **only on the existing local database**
-in a read-only transaction: `transaction_read_only=on`, 52 migration entries,
-20 contracts, and practice verifier definitions returned. The transaction rolled
-back. This validates the collection query, not hosted access or hosted parity.
-
-## Hosted build and owner test plan — pending prerequisites and approval
-
-After synchronization and API binding are verified:
-
-1. Build the approved application source with explicit hosted `BQ_SUPABASE_URL`
-   and `BQ_PRACTICE_API_URL` values above, using only the publishable client key.
-   Record Git SHA, Flutter version, exact non-secret defines, build variant,
-   package/version, signing-certificate fingerprint and final APK SHA-256.
-   Inspect bundled environment/assets for server credentials and local overrides.
-   Never put a server secret or service-role key in the app.
-2. Connect the owner's physical Android device with USB debugging. Record device
-   model/Android version and inspect the existing package first. If ByteQuest is
-   installed, **stop for permission before replacement**. Never uninstall, clear
-   data, use `install -r`, or discard saved work without approval. Use a separate
-   device/Android profile if needed to preserve an existing local installation.
-3. Use a **new hosted QA learner**, distinct from local identities and real
-   learners. Local runtime cache keys use learner/mission/mode rather than project
-   reference; reusing an identity with pending local evidence risks reconciling
-   that evidence to the newly selected backend. Do not use the owner's old local
-   session for this hosted test.
-4. Obtain explicit approval for the bounded operations below **before login,
-   registration or any test write**, including automatic session/profile writes.
-   Owner credentials stay on the device. No harness will synthesize work or write
-   completions directly.
-
-| Proposed operation requiring approval | Intended hosted effect |
-|---|---|
-| Register one dedicated QA learner; complete normal profile setup | Auth identity/profile and ordinary provisioning/settings records; possible confirmation email |
-| Sign in/out and restart/resume | Auth sessions/refreshes and normal app activity/settings updates |
-| Operate all 20 missions through the real UI | QA learner's append-only evidence; legitimate verifier-produced completions only |
-| Complete four quizzes normally | QA quiz attempts/answers and server-issued COC progression |
-| Retry verification and resume after background/process restart | Idempotent evidence reconciliation and persisted state, no fabricated actions |
-| Optional dedicated QA class/enrollment/assigned attempt | Only if separately approved and needed for instructor scope; existing instructor reviews and releases the QA assessment explicitly |
-| Finish testing | Retain evidence; no account/record deletion or cleanup writes without separate approval |
-
-For **each** matrix row, the owner records launch/instructions, identification or
-placement/tap/drag as applicable, technical feedback, review, evidence submission,
-server verification, completion projection, exit/reentry, restart/resume and
-duplicate-evidence results. Verify the Learn Page and all four sequential COCs,
-quiz locks/unlocks, timer countdown/background/expiry, and physical screen behavior.
-All manual results are currently **PENDING**.
-
-Prove the active backend with correlated runtime evidence from this particular
-APK and QA session: actual resolved Auth/REST request hosts on the device, and
-matching timestamp/path/status records in the expected Supabase project's logs;
-matching Practice API request in Vercel runtime logs for the **identified production
-deployment**; the same QA learner's evidence/completion in the expected project.
-The owner performs genuine interactions after approval. Redact tokens, cookies,
-emails and request/response bodies. A `.env`, successful initialization message,
-DNS/TCP probe or unsigned 401 alone does not pass this runtime gate.
-
-Verify instructor visibility in the real hosted UI and record the page and data
-source used. The source gap above prevents promising practice-progress visibility
-today. For an approved assigned assessment, separately demonstrate learner submit
-→ instructor review/finalize/release → learner released result, with no automatic
-result release. Practice completions must not be represented as official results.
-
-## Local verification and final handoff
-
-Fresh hosted checks confirmed the project, Auth availability, unsigned API
-availability, 20 stored definitions, and expected table/RPC exposure. They did not
-perform hosted end-to-end tests. The evidence SQL passed locally read-only.
-
-Repository-required local checks all passed:
-
-| Check | Result |
-|---|---|
-| `flutter pub get` | PASS; existing dependency lock retained |
-| `flutter analyze --no-fatal-infos` | PASS; 0 errors, 0 warnings, 217 informational notices |
-| `flutter test` | PASS; **436/436** |
-| `flutter build apk --debug` | PASS; validation artifact only, not installed |
-| Dashboard `pnpm exec tsc --noEmit`, `pnpm lint`, `pnpm build` | PASS; local build only, no deployment |
-| Evidence SQL | PASS on existing local database in read-only transaction, then rollback |
-| `git diff --check` | PASS |
-
-Flutter **3.47.7** reproduced the inspected APK exactly: 211,997,300 bytes,
-SHA-256 `75A8E67CB1A167E7A4DB2DAD1D1A181E842485D8BE4E437EE2CED335086B478E`.
-This validation invocation used `flutter build apk --debug` with no `BQ_*`
-defines and the inspected hosted-only three-key client environment. Application
-source is the commit above; only this report, the read-only query and handoff
-were changed. Package/variant remain `com.example.bytequest` / `debug`;
-ABIs are `arm64-v8a`, `armeabi-v7a`, `x86_64`.
-`apksigner verify --print-certs` passed with the Android Debug certificate,
-SHA-256 `A4D01056C847034CF2FDC199D4A5DBFA203AF5E716D715F560F6DB9755BD1D37`.
-This is not a production distribution signature.
-
-All **601 decompressed APK entries** were checked for the currently configured
-Supabase server secret, OpenRouter credential and Vercel identity token; none
-matched. The only bundled environment asset contains the public URL,
-publishable client key and Practice API URL. No explicit local backend URL for
-ports 57321/57322/29453/3000/3001 was found in the app's compiled Dart payload.
-These static checks do not replace the pending runtime request attestation.
-
-The initial dependency command encountered desktop-plugin symlink requirements.
-The successful Android-only validation used process-local `FLUTTER_WINDOWS=false`,
-`FLUTTER_LINUX=false` and `FLUTTER_MACOS=false`; global Flutter settings and Windows
-Developer Mode were not changed. Existing SDK/Kotlin migration warnings remain
-non-blocking. Build artifacts and private local evidence are ignored by Git.
-
-**Next action:** an account holder with access to the actual Supabase project and
-Vercel team must connect the relevant integrations or perform the evidence tasks
-above. Access/evidence comes first; this is not a request to approve a migration
-with incomplete safeguards. APK installation and physical testing remain pending.
+**Owner next action:** download/install the linked APK, sign in with the dedicated
+QA account/password entered locally, test COC1 M1 and then all 20 missions, and
+report actual phone results. USB is not required. **Do not label physical testing
+passed until the owner has completed and approved it.** No Git push, API
+deployment or production environment modification occurred.

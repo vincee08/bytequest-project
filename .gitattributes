@@ -1,0 +1,2 @@
+# Preserve the approved SQL bytes and recognize its original CRLF line endings.
+scripts/hosted-mobile-compatibility-20261111.sql -text whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
