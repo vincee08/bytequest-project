@@ -4,6 +4,10 @@ import { spawnSync } from 'node:child_process';
 // Local Docker only, rollback-only. Generate raw work-order fixtures with:
 // cd ByteQuest-Mobile-App; dart run tool/export_practice_test_evidence.dart <temp.json>
 const fixtures=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));
+const qaContainer=process.env.BQ_PRACTICE_QA_DB_CONTAINER;
+if (!/^supabase-ByteQuest_Backend_QA_[\w-]+-database-[\w-]+$/.test(qaContainer??'')) {
+  throw new Error('Set BQ_PRACTICE_QA_DB_CONTAINER to an isolated ByteQuest QA database container.');
+}
 const literal=value=>`'${JSON.stringify(value).replaceAll("'","''")}'::jsonb`;
 const rows=[];
 for(const [mission,actions] of Object.entries(fixtures)) for(const a of actions) {
@@ -13,8 +17,14 @@ for(const [mission,actions] of Object.entries(fixtures)) for(const a of actions)
 }
 const sql=String.raw`\set ON_ERROR_STOP on
 begin;
-create temp table ctx as select (select user_id from public.profiles where role='learner' and status='active' order by user_id limit 1) learner,
- (select user_id from public.profiles where role='learner' and status='active' order by user_id offset 1 limit 1) other;
+create temp table ctx as select gen_random_uuid() learner, gen_random_uuid() other;
+insert into auth.users (id, instance_id, aud, role, email, encrypted_password,
+  email_confirmed_at, created_at, updated_at, raw_app_meta_data, raw_user_meta_data)
+select id, '00000000-0000-0000-0000-000000000000'::uuid, 'authenticated', 'authenticated',
+  'qa-'||id||'@bytequest.invalid', crypt(gen_random_uuid()::text, gen_salt('bf')),
+  now(), now(), now(), '{"provider":"email","providers":["email"]}'::jsonb,
+  '{"full_name":"Synthetic QA learner"}'::jsonb
+from (select learner id from ctx union all select other id from ctx) users;
 grant select on ctx to authenticated;
 select set_config('request.jwt.claim.sub',(select learner::text from ctx),true);
 set local role authenticated;
@@ -33,14 +43,21 @@ do $$ begin
 end $$;
 insert into public.practice_mission_actions(learner_id,client_action_id,mission_id,phase_id,action_type,target,value,client_occurred_at) values
 ${rows.join(',\n')};
-savepoint placement_gate;
+savepoint identification_gate;
 delete from public.practice_mission_actions
  where learner_id=(select learner from ctx) and mission_id='coc1_m1'
- and action_type='placement_attempted';
+ and action_type='selection_confirmed' and value->>'selection_group'='processing';
 do $$ begin
- begin perform public.practice_verify_mission((select learner from ctx),'coc1_m1'); raise exception 'WORKSPACE_PLACEMENT_BYPASS'; exception when invalid_parameter_value then null; end;
+ begin perform public.practice_verify_mission((select learner from ctx),'coc1_m1'); raise exception 'IDENTIFICATION_ROLE_BYPASS'; exception when invalid_parameter_value then null; end;
 end $$;
-rollback to savepoint placement_gate;
+rollback to savepoint identification_gate;
+do $$ begin
+ if exists(select 1 from public.practice_mission_actions
+   where learner_id=(select learner from ctx) and mission_id='coc1_m1'
+   and action_type='placement_attempted') then
+   raise exception 'IDENTIFICATION_MISSION_REQUIRES_PLACEMENT';
+ end if;
+end $$;
 do $$ declare learner uuid:=(select learner from ctx); coc text; mission text; a public.practice_quiz_attempts; b public.practice_quiz_attempts;
  questions jsonb:=(select jsonb_agg(jsonb_build_object('id','q'||n,'question','Test question '||n,'choices',jsonb_build_array('A','B','C','D'),'answer',0,'explanation','Verified bank fact','page',1)) from generate_series(1,5) n);
  answers jsonb:='{"q1":0,"q2":0,"q3":0,"q4":0,"q5":0}';
@@ -77,5 +94,5 @@ reset role;
 rollback;
 \echo PASS: 20 mission replays, four sequential COCs, quiz resume, failure, grading, idempotency, RLS and tampering
 `;
-const result=spawnSync('docker',['exec','-i','supabase_db_ByteQuest','psql','-U','postgres','-d','postgres','-v','ON_ERROR_STOP=1'],{input:sql,encoding:'utf8',maxBuffer:2_000_000});
+const result=spawnSync('docker',['exec','-i',qaContainer,'psql','-U','postgres','-d','postgres','-v','ON_ERROR_STOP=1'],{input:sql,encoding:'utf8',maxBuffer:2_000_000});
 console.log(result.stdout); if(result.stderr) console.error(result.stderr); process.exit(result.status??1);

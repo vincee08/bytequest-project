@@ -71,6 +71,7 @@ abstract final class MissionLauncher {
       mission: mission,
       definition: definition,
       learnerPayload: learnerPayload,
+      timedPractice: learnerPayload.isEmpty,
     );
   }
 

@@ -130,6 +130,12 @@ _PhaseSpec _equipmentPhase(String missionId, int number, _PhaseSpec original,
 
   switch (missionId) {
     case 'coc1_m1':
+      if (number == 1) {
+        equipment['completion'] = [
+          for (final part in (p['objects'] as List).whereType<Map>())
+            _eq('inspected.${part['id']}', true),
+        ];
+      }
       if (number == 2) {
         p['options'] = [
           {'id': 'esd_protection', 'label': 'Wrist strap — ESD protection'},
@@ -148,6 +154,7 @@ _PhaseSpec _equipmentPhase(String missionId, int number, _PhaseSpec original,
             {
               'id': group.key,
               'label': group.value,
+              'single_choice_on_tap': true,
               'options': [
                 {'id': 'cpu', 'label': 'Processor'},
                 {'id': 'ram', 'label': 'Memory module'},
@@ -1140,6 +1147,7 @@ _PhaseSpec _equipmentPhase(String missionId, int number, _PhaseSpec original,
   // Operations change equipment state and are verified by the measured test.
   if (number == 1 &&
       !missionId.startsWith('coc4') &&
+      missionId != 'coc1_m1' &&
       missionId != 'coc2_m3' &&
       missionId != 'coc3_m1') {
     final placement = _practiceWorkspacePanel(missionId);
@@ -1407,7 +1415,7 @@ _PhaseSpec _equipmentPhase(String missionId, int number, _PhaseSpec original,
     ]);
   }
   if (missionId.startsWith('coc4')) p['allow_drag'] = false;
-  if (number == 1 && !missionId.startsWith('coc4')) {
+  if (number == 1 && !missionId.startsWith('coc4') && missionId != 'coc1_m1') {
     instruction = '${MissionContentData.workspacePreparationHint} $instruction';
   }
 

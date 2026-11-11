@@ -2,21 +2,244 @@ import 'dart:async';
 
 import 'package:bytequest/data/mission_simulation_definitions.dart';
 import 'package:bytequest/data/mission_content_data.dart';
+import 'package:bytequest/data/mission_phase_guidance.dart';
 import 'package:bytequest/models/mission_model.dart';
 import 'package:bytequest/screens/simulation/components/simulation_scene.dart';
+import 'package:bytequest/screens/simulation/components/mission_tutorial_panel.dart';
 import 'package:bytequest/screens/simulation/interactions/mission_interactions.dart';
 import 'package:bytequest/screens/simulation/mission_simulation_screen.dart';
 import 'package:bytequest/screens/simulation/runtime/mission_evidence_gateway.dart';
 import 'package:bytequest/screens/simulation/runtime/mission_runtime_controller.dart';
 import 'package:bytequest/screens/simulation/runtime/mission_runtime_models.dart';
 import 'package:bytequest/services/progress_resume_service.dart';
+import 'package:bytequest/services/practice_coc_session_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'support/equipment_practice_driver.dart';
 import 'support/equipment_widget_driver.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('timed practice starts explicitly and restores the same deadline',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final definition = MissionSimulationDefinitions.byId('coc4_m1');
+    final controller = _controller(definition);
+    await tester.pumpWidget(_host(definition,
+        controller: controller,
+        timedPractice: true,
+        practiceUserId: 'timer-learner'));
+    await tester.pumpAndSettle();
+    expect(find.text(MissionContentData.practiceTimerStart), findsOneWidget);
+    expect(find.byKey(const ValueKey('mission-next')), findsNothing);
+    await tester.tap(find.text(MissionContentData.practiceTimerStart));
+    await tester.pumpAndSettle();
+    expect(
+        find.byKey(const ValueKey('practice-coc-time-label')), findsOneWidget);
+    final first =
+        await const PracticeCocSessionService().load('timer-learner', 'coc4');
+    expect(first, isNotNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(_host(definition,
+        controller: _controller(definition),
+        timedPractice: true,
+        practiceUserId: 'timer-learner'));
+    await tester.pumpAndSettle();
+    final restored =
+        await const PracticeCocSessionService().load('timer-learner', 'coc4');
+    expect(restored!.deadlineUtc, first!.deadlineUtc);
+    expect(
+        find.byKey(const ValueKey('practice-coc-time-label')), findsOneWidget);
+  });
+
+  testWidgets('expired COC session blocks controls but preserves evidence',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final definition = MissionSimulationDefinitions.byId('coc4_m1');
+    final controller = _controller(definition);
+    await const PracticeCocSessionService().start('expired-learner', 'coc4',
+        now: DateTime.now().toUtc().subtract(const Duration(minutes: 61)));
+    await tester.pumpWidget(_host(definition,
+        controller: controller,
+        timedPractice: true,
+        practiceUserId: 'expired-learner'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining(MissionContentData.practiceTimerExpired),
+        findsWidgets);
+    expect(find.byKey(const ValueKey('mission-next')), findsNothing);
+    expect(controller.state.pendingEvidence, isEmpty);
+    expect(controller.state.placements, isEmpty);
+  });
+
+  testWidgets('Show me where scrolls to the actual off-screen scene object',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'bq_mission_tutorial_seen_locator-learner': true,
+    });
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final definition = MissionSimulationDefinitions.byId('coc1_m1');
+    final phase = definition.phases.first;
+    final objects = (phase.presentation['objects'] as List)
+        .whereType<Map>()
+        .map((item) => item['id'] as String)
+        .toList();
+    final last = objects.last;
+    final state = MissionRuntimeState.initial(definition.id).copyWith(
+      currentPhaseId: phase.id,
+      hotspotStates: {
+        for (final id in objects.take(objects.length - 1))
+          id: HotspotVisualState.completed,
+      },
+    );
+    final controller = _controller(definition, initialState: state);
+    await tester.pumpWidget(_host(definition,
+        controller: controller, practiceUserId: 'locator-learner'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(
+        find.textContaining(
+            'Cannot continue yet: ${objects.length - 1} of ${objects.length} '
+            'required actions complete'),
+        findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('mission-show-me-how')));
+    await tester.pumpAndSettle();
+    expect(find.byType(SimulationScene), findsOneWidget);
+    expect(
+        tester
+            .widget<SimulationScene>(find.byType(SimulationScene))
+            .highlightObjectId,
+        last);
+    final workspaceScroll =
+        find.byKey(const ValueKey('simulation-workspace-scroll'));
+    expect(
+        tester
+            .state<ScrollableState>(find
+                .descendant(
+                    of: workspaceScroll, matching: find.byType(Scrollable))
+                .first)
+            .position
+            .pixels,
+        greaterThan(0));
+    expect(controller.state.acceptedEvidenceIds, isEmpty);
+    await tester.ensureVisible(find.byKey(ValueKey('inspect-target-$last')));
+    await tester.tap(find.byKey(ValueKey('inspect-target-$last')));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<FilledButton>(find.byKey(const ValueKey('mission-next')))
+            .onPressed,
+        isNotNull);
+    expect(find.text(MissionContentData.guideReadyToContinue), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Show me where outlines selection controls without blocking taps',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({
+      'bq_mission_tutorial_seen-selection-learner': true,
+    });
+    final definition = MissionSimulationDefinitions.byId('coc1_m1');
+    final phase = definition.phases[1];
+    final controller = _controller(definition,
+        initialState: MissionRuntimeState.initial(definition.id)
+            .copyWith(currentPhaseId: phase.id));
+    await tester.pumpWidget(_host(definition,
+        controller: controller, practiceUserId: 'selection-learner'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('mission-show-me-how')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('mission-guide-outline')), findsOneWidget);
+    final controlsScroll =
+        find.byKey(const ValueKey('mission-controls-scroll'));
+    expect(
+        tester
+            .state<ScrollableState>(find
+                .descendant(
+                    of: controlsScroll, matching: find.byType(Scrollable))
+                .first)
+            .position
+            .pixels,
+        greaterThan(0));
+    final firstOption = (phase.presentation['options'] as List).first as Map;
+    final option = find.byKey(ValueKey('multi-select-${firstOption['id']}'));
+    await tester.ensureVisible(option);
+    await tester.tap(option);
+    await tester.pump();
+    expect(tester.widget<MissionSelectableActionCard>(option).selected, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('first-use tutorial can be skipped, persisted, and replayed',
+      (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final definition = MissionSimulationDefinitions.byId('coc4_m1');
+    final first = _controller(definition);
+    await tester.pumpWidget(
+        _host(definition, controller: first, practiceUserId: 'tour-learner'));
+    await tester.pumpAndSettle();
+    expect(find.byType(MissionTutorialPanel), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('mission-tutorial-skip')));
+    await tester.pumpAndSettle();
+    expect(find.byType(MissionTutorialPanel), findsNothing);
+    expect(await ProgressResumeService.missionTutorialSeen('tour-learner'),
+        isTrue);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(_host(definition,
+        controller: _controller(definition), practiceUserId: 'tour-learner'));
+    await tester.pumpAndSettle();
+    expect(find.byType(MissionTutorialPanel), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('mission-replay-tutorial')));
+    await tester.pumpAndSettle();
+    expect(find.byType(MissionTutorialPanel), findsOneWidget);
+    final tutorial =
+        tester.widget<MissionTutorialPanel>(find.byType(MissionTutorialPanel));
+    expect(tutorial.steps, contains(MissionContentData.tutorialWorkspace));
+    expect(
+        tutorial.steps, isNot(contains(MissionContentData.tutorialPlacement)));
+    expect(first.state.acceptedEvidenceIds, isEmpty);
+    for (var step = 0; step < tutorial.steps.length; step++) {
+      await tester.tap(find.byKey(const ValueKey('mission-tutorial-next')));
+      await tester.pumpAndSettle();
+    }
+    expect(find.byType(MissionTutorialPanel), findsNothing);
+  });
+
+  for (final size in const [Size(320, 568), Size(800, 360)]) {
+    testWidgets(
+        'first-use tutorial keeps workspace and Continue usable at $size',
+        (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      final definition = MissionSimulationDefinitions.byId('coc1_m1');
+      await tester.pumpWidget(_host(definition,
+          controller: _controller(definition),
+          practiceUserId: 'compact-tour-${size.width}',
+          textScale: 2));
+      await tester.pumpAndSettle();
+      expect(find.byType(MissionTutorialPanel), findsOneWidget);
+      expect(find.byType(SimulationScene), findsOneWidget);
+      expect(find.byKey(const ValueKey('mission-next')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester
+          .ensureVisible(find.byKey(const ValueKey('mission-tutorial-start')));
+      await tester.tap(find.byKey(const ValueKey('mission-tutorial-start')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      await tester
+          .ensureVisible(find.byKey(const ValueKey('mission-tutorial-skip')));
+      await tester.tap(find.byKey(const ValueKey('mission-tutorial-skip')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   for (final size in const [
     Size(320, 568),
@@ -124,16 +347,7 @@ void main() {
         await tester.pumpAndSettle();
       }
 
-      expect(tester.widget<FilledButton>(nextFinder).onPressed, isNull,
-          reason: 'Inspection alone must not complete workspace preparation');
-      final plan = EquipmentPracticeDriver(definition)
-        ..complete(definition.phases.first);
-      for (final action in plan.actions
-          .where((action) => action.actionType == 'placement_attempted')) {
-        await performEquipmentAction(
-            tester, definition.phases.first, action, controller);
-      }
-
+      expect(controller.state.placements, isEmpty);
       final after = tester.widget<FilledButton>(nextFinder);
       expect(after.onPressed, isNotNull);
       await tester.ensureVisible(nextFinder);
@@ -643,7 +857,8 @@ void main() {
 
       expect(find.byKey(const ValueKey('incorrect-placement-dialog')),
           findsOneWidget);
-      expect(find.textContaining('Memory module → CPU socket'), findsOneWidget);
+      expect(
+          find.textContaining('Memory module to CPU socket'), findsOneWidget);
       expect(
           find.textContaining(MissionContentData.incompatiblePlacementFeedback),
           findsOneWidget);
@@ -670,13 +885,13 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      final definition = MissionSimulationDefinitions.byId('coc1_m1');
+      final definition = MissionSimulationDefinitions.byId('coc3_m2');
       final controller = _controller(definition);
       await tester.pumpWidget(_host(definition, controller: controller));
       await tester.pumpAndSettle();
-      final source = find.byKey(const ValueKey('workspace-source-motherboard'));
-      final wrongSlot =
-          find.byKey(const ValueKey('workspace-destination-cpu_position'));
+      final source = find.byKey(const ValueKey('workspace-source-server_node'));
+      final wrongSlot = find
+          .byKey(const ValueKey('workspace-destination-client_node_position'));
       await tester.ensureVisible(source);
       await tester.ensureVisible(wrongSlot);
       await tester.pumpAndSettle();
@@ -686,7 +901,7 @@ void main() {
 
       expect(find.byKey(const ValueKey('incorrect-placement-dialog')),
           findsOneWidget);
-      expect(find.textContaining('Motherboard → Processor inspection tray'),
+      expect(find.textContaining('Server to Deployment test position'),
           findsOneWidget);
       expect(
           find.descendant(
@@ -786,15 +1001,15 @@ void main() {
         final failures = <String>[];
         for (final definition in MissionSimulationDefinitions.all) {
           for (final phase in definition.phases) {
+            final state = MissionRuntimeState.initial(definition.id)
+                .copyWith(currentPhaseId: phase.id);
             await tester.pumpWidget(
               MaterialApp(
                 home: Scaffold(
                   body: SingleChildScrollView(
                     child: MissionPhaseInteraction(
                       phase: phase,
-                      state: MissionRuntimeState.initial(
-                        definition.id,
-                      ).copyWith(currentPhaseId: phase.id),
+                      state: state,
                       onAction: (_, __, ___) async {},
                       onRuntimeTransition: (_) {},
                       onReturnFromReview: () {},
@@ -810,12 +1025,16 @@ void main() {
                 .where((type) => find.byType(type).evaluate().isNotEmpty)
                 .toList(growable: false);
             final exception = tester.takeException();
+            final key = MissionActionGuide.forPhase(phase, state)
+                .currentStep
+                ?.controlKey;
             if (find.byType(TechnicalUnavailableState).evaluate().isNotEmpty ||
                 renderedWidgets.length != 1 ||
+                (key != null && find.byKey(ValueKey(key)).evaluate().isEmpty) ||
                 exception != null) {
               failures.add(
                 '${definition.id}/${phase.id}: '
-                'widgets=$renderedWidgets exception=$exception',
+                'widgets=$renderedWidgets control=$key exception=$exception',
               );
             }
           }
@@ -891,6 +1110,8 @@ Widget _host(
   MissionOrientationCoordinator? orientationCoordinator,
   MissionSubmitCallback? onSubmit,
   double textScale = 1,
+  bool timedPractice = false,
+  String? practiceUserId,
 }) {
   return MaterialApp(
     builder: (context, child) => MediaQuery(
@@ -906,6 +1127,8 @@ Widget _host(
       orientationCoordinator:
           orientationCoordinator ?? _FakeOrientationCoordinator(),
       onSubmit: onSubmit,
+      timedPractice: timedPractice,
+      practiceUserId: practiceUserId,
     ),
   );
 }

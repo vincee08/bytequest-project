@@ -3,10 +3,11 @@ select plan(9);
 select is((select count(*)::integer from public.practice_mission_contracts),20,'all twenty work orders have server practice contracts');
 select is((select count(*)::integer from public.practice_mission_contracts c
   where left(c.mission_id,4) in ('coc1','coc2','coc3')
+  and c.mission_id <> 'coc1_m1'
   and c.version='css-sag-20261011-v2'
   and exists(select 1 from jsonb_array_elements(c.definition->'phases') p
     where p->'presentation'->'equipment'->'placement'->'items' is not null)
-),15,'all fifteen COC1-COC3 contracts require an equipment workspace');
+),14,'fourteen practical COC1-COC3 contracts retain equipment placement');
 select ok(not has_table_privilege('authenticated','public.practice_quiz_attempts','SELECT'),'learners cannot read answer keys');
 select ok(not has_table_privilege('authenticated','public.practice_coc_progress','UPDATE'),'learners cannot alter COC completion');
 select ok(not has_table_privilege('authenticated','public.practice_mission_completions','INSERT'),'learners cannot award practical completion');

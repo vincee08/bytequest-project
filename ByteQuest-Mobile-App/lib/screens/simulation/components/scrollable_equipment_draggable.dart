@@ -12,6 +12,8 @@ class ScrollableEquipmentDraggable extends StatefulWidget {
     required this.child,
     this.childWhenDragging,
     this.enabled = true,
+    this.onDragStarted,
+    this.onDragFinished,
   });
 
   final String data;
@@ -19,6 +21,8 @@ class ScrollableEquipmentDraggable extends StatefulWidget {
   final Widget child;
   final Widget? childWhenDragging;
   final bool enabled;
+  final VoidCallback? onDragStarted;
+  final VoidCallback? onDragFinished;
 
   @override
   State<ScrollableEquipmentDraggable> createState() =>
@@ -86,8 +90,12 @@ class _ScrollableEquipmentDraggableState
         data: widget.data,
         maxSimultaneousDrags: widget.enabled ? 1 : 0,
         feedback: widget.feedback,
+        onDragStarted: widget.onDragStarted,
         onDragUpdate: _updateDrag,
-        onDragEnd: (_) => _stopScrolling(),
+        onDragEnd: (_) {
+          _stopScrolling();
+          widget.onDragFinished?.call();
+        },
         child: widget.child,
         childWhenDragging: widget.childWhenDragging,
       );

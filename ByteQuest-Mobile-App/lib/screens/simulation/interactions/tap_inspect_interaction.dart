@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../../data/mission_content_data.dart';
 import '../components/tool_tray.dart';
 import '../runtime/mission_runtime_models.dart';
 import 'multi_select_interaction.dart';
@@ -72,6 +73,14 @@ class TapInspectInteraction extends StatelessWidget {
           ],
           const SizedBox(height: 8),
         ],
+        SimulationFeedback(
+          icon: Icons.fact_check_outlined,
+          text: MissionContentData.taskCount(
+            MissionContentData.inspectionsTaskLabel,
+            objects.where((object) => selectedIds.contains(object.id)).length,
+            objects.length,
+          ),
+        ),
       ],
     );
   }

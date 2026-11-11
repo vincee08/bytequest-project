@@ -152,7 +152,7 @@ On app restart or return from background, every mission must restore:
 
 ## 4. Git Rules
 
-- The active development branch is **Dro-branch**. Never push directly to `main`.
+- The active development branch is **vince-branch**, tracking `bytequest-project/vince-branch`. Never push directly to `main`.
 - `main` is the stable/protected branch. Merge only after explicit approval.
 - Commit messages use the imperative mood: `Add COC1 M1 hardware inspection mission`.
 - Stage specific files — never `git add .` blindly.

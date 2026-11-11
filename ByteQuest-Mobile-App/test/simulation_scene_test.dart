@@ -10,6 +10,62 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  testWidgets('Objects outline stays usable with zoom and scrolling',
+      (tester) async {
+    final definition = MissionSimulationDefinitions.byId('coc1_m2');
+    final selected = <String>[];
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SizedBox(
+          width: 320,
+          height: 300,
+          child: SimulationScene(
+            scene: definition.scene,
+            highlightObjects: true,
+            onObjectSelected: selected.add,
+          ),
+        ),
+      ),
+    ));
+    final objects = tester.widget<TextButton>(
+        find.byKey(const ValueKey('simulation-objects-button')));
+    expect(objects.style?.side?.resolve({})?.width, 2);
+    await tester.tap(find.byKey(const ValueKey('simulation-zoom-in')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('simulation-objects-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find
+        .byKey(ValueKey('object-list-${definition.scene.objects.first.id}')));
+    await tester.pumpAndSettle();
+    expect(selected, [definition.scene.objects.first.id]);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('compact hardware cards keep readable target width',
+      (tester) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final definition = MissionSimulationDefinitions.byId('coc1_m1');
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SizedBox(
+          width: 320,
+          height: 300,
+          child: SimulationScene(
+              scene: definition.scene, onObjectSelected: (_) {}),
+        ),
+      ),
+    ));
+    expect(
+        tester.getSize(find.byKey(const ValueKey('hotspot-motherboard'))).width,
+        greaterThanOrEqualTo(100));
+    expect(find.byKey(const ValueKey('hotspot-image-motherboard')),
+        findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final viewport in const [Size(320, 300), Size(640, 210)]) {
     testWidgets('catalog objects render once without overlaps at $viewport',
         (tester) async {

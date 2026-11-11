@@ -102,42 +102,9 @@ class _SignupScreenState extends State<SignupScreen> {
           _isLoading = false;
         });
 
-        // Parse error message to provide user-friendly feedback
-        String errorMessage = 'Sign up failed. Please try again.';
-        final errorStr = e.toString().toLowerCase();
-
-        if (errorStr.contains('user already registered') ||
-            errorStr.contains('email already exists') ||
-            errorStr.contains('already registered')) {
-          errorMessage =
-              'This email is already registered. Please log in instead.';
-        } else if (errorStr.contains('invalid email') ||
-            errorStr.contains('email address') &&
-                errorStr.contains('invalid')) {
-          errorMessage = 'Email validation failed. Please check:\n'
-              '• Email format is correct\n'
-              '• Email confirmation is disabled in Supabase settings\n'
-              'Try a different email if the issue persists.';
-        } else if (errorStr.contains('password') && errorStr.contains('weak')) {
-          errorMessage =
-              'Password is too weak. Please use a stronger password.';
-        } else if (errorStr.contains('network') ||
-            errorStr.contains('connection')) {
-          errorMessage =
-              'Network error. Please check your internet connection and try again.';
-        } else if (errorStr.contains('no host specified')) {
-          errorMessage = 'Configuration error. Please contact support.';
-        } else if (errorStr.contains('email') && errorStr.contains('confirm')) {
-          errorMessage =
-              'Email confirmation required. Please check your email inbox.';
-        } else if (errorStr.contains('row-level security')) {
-          errorMessage =
-              'Database permission error. Please contact support or check RLS_FIX_GUIDE.md';
-        }
-
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(errorMessage),
+            content: Text(MissionContentData.signupFailureMessage(e)),
             backgroundColor: AppTheme.errorRed,
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 4),

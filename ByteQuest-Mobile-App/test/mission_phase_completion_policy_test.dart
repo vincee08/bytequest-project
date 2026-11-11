@@ -2,9 +2,45 @@ import 'package:bytequest/data/mission_simulation_definitions.dart';
 import 'package:bytequest/screens/simulation/runtime/mission_phase_completion_policy.dart';
 import 'package:bytequest/screens/simulation/runtime/mission_runtime_models.dart';
 import 'package:flutter_test/flutter_test.dart';
+
 import 'support/equipment_practice_driver.dart';
 
 void main() {
+  test('COC1 M1 inspection and role identification need no placement', () {
+    final definition = MissionSimulationDefinitions.byId('coc1_m1');
+    final inspection = definition.phases.first;
+    final identification = definition.phases[1];
+    final driver = EquipmentPracticeDriver(definition)..complete(inspection);
+
+    expect(inspection.presentation['equipment'], isNot(contains('placement')));
+    expect(driver.state.placements, isEmpty);
+    expect(MissionPhaseCompletionPolicy.canAdvance(inspection, driver.state),
+        isTrue);
+    expect(
+      (identification.presentation['equipment'] as Map)['selection_groups'],
+      everyElement(containsPair('single_choice_on_tap', true)),
+    );
+    expect(
+      driver.actions
+          .where((action) => action.actionType == 'placement_attempted'),
+      isEmpty,
+    );
+  });
+
+  test('COC4 identification inspection advances without placement evidence',
+      () {
+    final definition = MissionSimulationDefinitions.byId('coc4_m1');
+    final phase = definition.phases.first;
+    final driver = EquipmentPracticeDriver(definition);
+    driver.complete(phase);
+    expect(driver.state.placements, isEmpty);
+    expect(
+        driver.actions
+            .where((action) => action.actionType == 'placement_attempted'),
+        isEmpty);
+    expect(MissionPhaseCompletionPolicy.canAdvance(phase, driver.state), true);
+  });
+
   group('MissionPhaseCompletionPolicy', () {
     test('all fourteen interaction families fail closed before terminal state',
         () {

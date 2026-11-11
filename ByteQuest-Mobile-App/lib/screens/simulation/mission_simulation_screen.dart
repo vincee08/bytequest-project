@@ -6,16 +6,21 @@ import 'package:flutter/services.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/simulation_fullscreen_button.dart';
 import '../../data/mission_content_data.dart';
+import '../../data/mission_phase_guidance.dart';
 import '../../models/mission_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/authoritative_assessment_service.dart';
 import '../../services/practice_mission_evidence_service.dart';
 import '../../services/progress_resume_service.dart';
 import '../../services/practice_progress_service.dart';
+import '../../services/practice_coc_session_service.dart';
+import '../../widgets/practice_coc_session_panel.dart';
 import 'components/equipment_operations.dart';
 import 'components/equipment_workspace.dart';
 import 'components/incorrect_placement_dialog.dart';
 import 'components/mission_task_status.dart';
+import 'components/mission_guidance_panel.dart';
+import 'components/mission_tutorial_panel.dart';
 import 'interactions/mission_interactions.dart';
 import 'runtime/mission_evidence_gateway.dart';
 import 'runtime/mission_phase_completion_policy.dart';
@@ -56,6 +61,8 @@ class MissionSimulationScreen extends StatefulWidget {
     this.controller,
     this.orientationCoordinator = const SystemMissionOrientationCoordinator(),
     this.onSubmit,
+    this.timedPractice = false,
+    this.practiceUserId,
   });
 
   final Mission mission;
@@ -64,6 +71,11 @@ class MissionSimulationScreen extends StatefulWidget {
   final MissionRuntimeController? controller;
   final MissionOrientationCoordinator orientationCoordinator;
   final MissionSubmitCallback? onSubmit;
+
+  /// Enabled by the production catalog practice route only. Assessment and
+  /// injected test controllers retain their existing evidence lifecycle.
+  final bool timedPractice;
+  final String? practiceUserId;
 
   @override
   State<MissionSimulationScreen> createState() =>
@@ -88,14 +100,33 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
   String? _restoreFailure;
   String? _technicalFeedback;
   String? _workspaceFeedback;
+  bool _lastActionRejected = false;
+  bool _tutorialInvite = false;
+  int? _tutorialStep;
   final ScrollController _controlsScrollController = ScrollController();
+  bool _showGuidance = false;
+  bool _showHow = false;
+  String? _workspaceMode;
+  String? _workspaceModePhaseId;
+  OverlayEntry? _guideOutline;
+  Rect? _guideOutlineRect;
+  String? _guideOutlineKey;
+  final GlobalKey _interactionGuideKey = GlobalKey();
+  final GlobalKey _operationsGuideKey = GlobalKey();
+  final _cocSessionService = const PracticeCocSessionService();
+  PracticeCocSession? _cocSession;
+  Timer? _cocTicker;
+  DateTime? _lastCocCheckpoint;
 
   MissionRuntimeState get _state => _controller.state;
+  String? get _tutorialUserId =>
+      widget.practiceUserId ??
+      (widget.controller == null ? AuthService().currentUserId : null);
 
   MissionRuntimeController _createController() {
     final assessment = AuthoritativeAssessmentService.instance;
     final firstPhaseId = widget.definition.phases.first.id;
-    final userId = AuthService().currentUserId;
+    final userId = widget.practiceUserId ?? AuthService().currentUserId;
     if (userId == null) {
       throw StateError('An authenticated learner is required.');
     }
@@ -131,7 +162,50 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
     super.initState();
     _initialState = _controller.state;
     WidgetsBinding.instance.addObserver(this);
+    _controlsScrollController.addListener(_refreshGuideOutline);
     unawaited(_restore());
+    if (widget.timedPractice) {
+      _cocTicker =
+          Timer.periodic(const Duration(seconds: 1), (_) => _tickCoc());
+    }
+  }
+
+  bool get _usesCocTimer =>
+      widget.timedPractice && _state.mode == MissionRuntimeMode.practice;
+
+  bool get _cocTimeBlocked {
+    if (!_usesCocTimer) return false;
+    final session = _cocSession;
+    final now = DateTime.now().toUtc();
+    return session == null ||
+        session.expiredAt(now) ||
+        session.clockMovedBackAt(now);
+  }
+
+  void _tickCoc() {
+    if (!mounted || !_usesCocTimer || _cocSession == null) return;
+    final now = DateTime.now().toUtc();
+    final session = _cocSession!;
+    setState(() => _cocSession = session.observedAt(now));
+    if (_lastCocCheckpoint == null ||
+        now.difference(_lastCocCheckpoint!) >= const Duration(seconds: 15)) {
+      _lastCocCheckpoint = now;
+      unawaited(_saveCocCheckpoint());
+    }
+  }
+
+  Future<void> _saveCocCheckpoint() async {
+    if (!_usesCocTimer) return;
+    final userId = widget.practiceUserId ?? AuthService().currentUserId;
+    final session = _cocSession;
+    if (userId == null || session == null) return;
+    try {
+      await _cocSessionService.checkpoint(userId, session);
+    } catch (_) {
+      if (mounted)
+        setState(() =>
+            _technicalFeedback = MissionContentData.practiceTimerSaveFailed);
+    }
   }
 
   Future<void> _restore() async {
@@ -142,6 +216,24 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
       }
       _accessVerified = true;
       await _controller.restore();
+      if (_state.mode == MissionRuntimeMode.practice) {
+        final userId = _tutorialUserId;
+        if (userId != null) {
+          try {
+            _tutorialInvite =
+                !await ProgressResumeService.missionTutorialSeen(userId);
+          } catch (_) {
+            _tutorialInvite = false;
+          }
+        }
+      }
+      if (_usesCocTimer) {
+        final userId = widget.practiceUserId ?? AuthService().currentUserId;
+        if (userId != null) {
+          _cocSession =
+              await _cocSessionService.load(userId, widget.definition.cocId);
+        }
+      }
       if (!_hasKnownPhase(_state.currentPhaseId)) {
         _restoreFailure =
             'Saved progress references a mission phase that is no longer '
@@ -210,6 +302,9 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
         state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached) {
       unawaited(_persistForLifecycle());
+      unawaited(_saveCocCheckpoint());
+    } else if (state == AppLifecycleState.resumed) {
+      _tickCoc();
     }
   }
 
@@ -230,10 +325,196 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
 
   @override
   void dispose() {
+    _clearGuideOutline();
+    _cocTicker?.cancel();
     _controlsScrollController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     unawaited(widget.orientationCoordinator.restoreSupportedOrientations());
     super.dispose();
+  }
+
+  void _clearGuideOutline() {
+    _guideOutlineKey = null;
+    _guideOutlineRect = null;
+    _guideOutline?.remove();
+    _guideOutline?.dispose();
+    _guideOutline = null;
+  }
+
+  List<String> _tutorialSteps() {
+    final phases = widget.definition.phases;
+    final hasEquipmentTab = !widget.definition.cocId.startsWith('coc4') &&
+        phases.any((phase) {
+          final equipment =
+              MissionEquipmentSimulator.map(phase.presentation['equipment']);
+          return equipment['placement'] is Map ||
+              equipment['connection'] is Map ||
+              phase.resolvedInteraction == InteractionFamily.place ||
+              phase.resolvedInteraction == InteractionFamily.connect;
+        });
+    final hasIdentification = phases
+        .any((phase) => phase.resolvedInteraction == InteractionFamily.select);
+    final hasPlacement = !widget.definition.cocId.startsWith('coc4') &&
+        phases.any((phase) {
+          final equipment =
+              MissionEquipmentSimulator.map(phase.presentation['equipment']);
+          return equipment['placement'] is Map ||
+              phase.resolvedInteraction == InteractionFamily.place;
+        });
+    return [
+      MissionContentData.tutorialWorkspace,
+      MissionContentData.tutorialInstructions,
+      if (hasEquipmentTab) MissionContentData.tutorialEquipment,
+      if (hasIdentification) MissionContentData.tutorialIdentification,
+      if (hasPlacement) MissionContentData.tutorialPlacement,
+      MissionContentData.tutorialProgress,
+      MissionContentData.tutorialContinue,
+    ];
+  }
+
+  void _startTutorial() {
+    setState(() {
+      _tutorialInvite = false;
+      _tutorialStep = 0;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final panel = _findGuideControl('mission-tutorial-panel');
+      if (panel != null) {
+        unawaited(Scrollable.ensureVisible(panel,
+            duration: MediaQuery.disableAnimationsOf(context)
+                ? Duration.zero
+                : AppTheme.simulationTransitionDuration,
+            alignment: .1));
+      }
+    });
+  }
+
+  void _nextTutorialStep() {
+    final current = _tutorialStep;
+    if (current == null) return;
+    if (current + 1 >= _tutorialSteps().length) {
+      unawaited(_dismissTutorial());
+    } else {
+      setState(() => _tutorialStep = current + 1);
+    }
+  }
+
+  Future<void> _dismissTutorial() async {
+    setState(() {
+      _tutorialInvite = false;
+      _tutorialStep = null;
+    });
+    final userId = _tutorialUserId;
+    if (userId != null) {
+      try {
+        await ProgressResumeService.markMissionTutorialSeen(userId);
+      } catch (_) {
+        // A display preference must never block mission interaction.
+      }
+    }
+  }
+
+  void _refreshGuideOutline() {
+    if (_guideOutlineKey == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _showHow) _paintGuideOutline();
+    });
+  }
+
+  BuildContext? _findGuideControl(String key) {
+    BuildContext? found;
+    void visit(Element element) {
+      if (found != null) return;
+      if (element.widget.key == ValueKey(key)) {
+        found = element;
+        return;
+      }
+      element.visitChildElements(visit);
+    }
+
+    (context as Element).visitChildElements(visit);
+    return found;
+  }
+
+  Future<void> _locateCurrentAction() async {
+    if (!mounted || !_showHow || _restoring) return;
+    final phase = widget.definition.phases[_phaseIndex];
+    final guide = MissionActionGuide.forPhase(phase, _state,
+        reviewReady: _controller.canSubmit &&
+            MissionEquipmentSimulator.readyForReview(
+                widget.definition, _state) &&
+            !_submitted);
+    final step = guide.currentStep;
+    final mode = _workspaceModePhaseId == phase.id ? _workspaceMode : null;
+    final oldKey = _guideOutlineKey;
+    final String? nextKey;
+    if (step?.workspaceMode != null && mode != step!.workspaceMode) {
+      nextKey = 'workspace-mode-${step.workspaceMode}';
+    } else if (step?.objectId != null && mode == step!.workspaceMode) {
+      _clearGuideOutline();
+      return; // SimulationScene owns object focus and its outline.
+    } else {
+      nextKey = step?.controlKey ?? 'mission-next';
+    }
+    if (oldKey != nextKey) _clearGuideOutline();
+    _guideOutlineKey = nextKey;
+    final target = _findGuideControl(_guideOutlineKey!);
+    if (target == null) {
+      _clearGuideOutline();
+      return; // A missing widget must never cause an unrelated highlight.
+    }
+    final motion = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : AppTheme.simulationTransitionDuration;
+    await Scrollable.ensureVisible(target, duration: motion, alignment: .35);
+    if (!mounted || !_showHow) return;
+    _paintGuideOutline();
+  }
+
+  void _paintGuideOutline() {
+    final key = _guideOutlineKey;
+    if (key == null) return;
+    final target = _findGuideControl(key);
+    final overlay = Overlay.of(context);
+    final box = target?.findRenderObject();
+    final overlayBox = overlay.context.findRenderObject();
+    if (box is! RenderBox ||
+        overlayBox is! RenderBox ||
+        !box.hasSize ||
+        !overlayBox.hasSize) return;
+    Rect rect = box.localToGlobal(Offset.zero, ancestor: overlayBox) & box.size;
+    final scrollable = Scrollable.maybeOf(target!);
+    final scrollBox = scrollable?.context.findRenderObject();
+    if (scrollBox is RenderBox && scrollBox.hasSize) {
+      final viewport =
+          scrollBox.localToGlobal(Offset.zero, ancestor: overlayBox) &
+              scrollBox.size;
+      rect = rect.intersect(viewport);
+    }
+    rect = rect.intersect(Offset.zero & overlayBox.size);
+    _guideOutlineRect = rect.isEmpty ? null : rect.inflate(3);
+    _guideOutline ??= OverlayEntry(builder: (_) {
+      final bounds = _guideOutlineRect;
+      if (bounds == null) return const SizedBox.shrink();
+      return Positioned.fromRect(
+        rect: bounds,
+        child: IgnorePointer(
+          key: const ValueKey('mission-guide-outline'),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              border: Border.all(color: AppTheme.primaryBlue, width: 3),
+              borderRadius: BorderRadius.circular(9),
+            ),
+          ),
+        ),
+      );
+    });
+    if (_guideOutline!.mounted) {
+      _guideOutline!.markNeedsBuild();
+    } else {
+      overlay.insert(_guideOutline!);
+    }
   }
 
   @override
@@ -271,8 +552,59 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
       );
     }
 
+    if (_cocTimeBlocked) {
+      final now = DateTime.now().toUtc();
+      final session = _cocSession;
+      return Scaffold(
+        backgroundColor: AppTheme.backgroundLight,
+        body: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                Text(widget.definition.title, style: AppTheme.titleLarge),
+                const SizedBox(height: 16),
+                if (session != null && session.clockMovedBackAt(now))
+                  Text(MissionContentData.practiceTimerClockChanged,
+                      style: AppTheme.bodyMedium),
+                PracticeCocSessionPanel(
+                  key: ValueKey(
+                      'mission-coc-session-${widget.definition.cocId}'),
+                  cocId: widget.definition.cocId,
+                  userId: widget.practiceUserId,
+                  onSessionChanged: (value) =>
+                      setState(() => _cocSession = value),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                    MissionContentData.practiceEvidencePreserved(
+                        _state.acceptedEvidenceIds.length,
+                        _state.pendingEvidence.length),
+                    style: AppTheme.bodySmall),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: () => unawaited(_leave()),
+                  icon: const Icon(Icons.arrow_back_rounded),
+                  label: const Text(MissionContentData.backLabel),
+                ),
+              ]),
+            ),
+          ),
+        ),
+      );
+    }
+
     final phaseIndex = _phaseIndex;
     final phase = widget.definition.phases[phaseIndex];
+    final guidance = MissionPhaseGuidance.forPhase(phase, _state);
+    final actionGuide = MissionActionGuide.forPhase(phase, _state,
+        reviewReady: _controller.canSubmit &&
+            MissionEquipmentSimulator.readyForReview(
+                widget.definition, _state) &&
+            !_submitted);
+    final currentStep = actionGuide.currentStep;
+    final activeWorkspaceMode =
+        _workspaceModePhaseId == phase.id ? _workspaceMode : null;
     final viewport = MediaQuery.sizeOf(context);
     final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.4;
     final wide = viewport.width >= 720 ||
@@ -293,6 +625,24 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
       hotspotStates: _equipmentHotspots(),
       saving: _writing,
       feedback: _workspaceFeedback,
+      highlightTarget: _showHow ? actionGuide.currentStep?.target : null,
+      highlightObjectId: _showHow &&
+              currentStep?.workspaceMode != null &&
+              activeWorkspaceMode == currentStep!.workspaceMode
+          ? currentStep.objectId
+          : null,
+      onModeChanged: (mode) {
+        if (_workspaceModePhaseId == phase.id && _workspaceMode == mode) return;
+        setState(() {
+          _workspaceModePhaseId = phase.id;
+          _workspaceMode = mode;
+        });
+        if (_showHow) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) unawaited(_locateCurrentAction());
+          });
+        }
+      },
       enabled: !_writing &&
           !_submitting &&
           !_submitted &&
@@ -311,6 +661,40 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
               phaseIndex: phaseIndex,
               phaseCount: widget.definition.phases.length,
               onBack: () => unawaited(_leave()),
+            ),
+            if (_usesCocTimer && _cocSession != null)
+              PracticeCocTimeLabel(
+                  session: _cocSession!, now: DateTime.now().toUtc()),
+            MissionGuidanceBar(
+              guidance: guidance,
+              actionGuide: actionGuide,
+              expanded: _showGuidance,
+              showHow: _showHow,
+              onShowHow: () {
+                setState(() {
+                  _showHow = !_showHow;
+                  if (_showHow) _showGuidance = true;
+                });
+                if (_showHow) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) unawaited(_locateCurrentAction());
+                  });
+                } else {
+                  _clearGuideOutline();
+                }
+              },
+              onReplayTutorial: _state.mode == MissionRuntimeMode.practice
+                  ? _startTutorial
+                  : null,
+              tutorialFirstUse: _tutorialInvite,
+              onToggle: () {
+                setState(() => _showGuidance = !_showGuidance);
+                if (_showGuidance && _controlsScrollController.hasClients) {
+                  _controlsScrollController.animateTo(0,
+                      duration: AppTheme.simulationTransitionDuration,
+                      curve: Curves.easeOut);
+                }
+              },
             ),
             Expanded(
               child: LayoutBuilder(
@@ -371,6 +755,32 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (leading != null) ...[leading, const SizedBox(height: 12)],
+              if (_state.mode == MissionRuntimeMode.practice &&
+                  (_tutorialInvite || _tutorialStep != null)) ...[
+                MissionTutorialPanel(
+                  key: const ValueKey('mission-tutorial-panel'),
+                  steps: _tutorialSteps(),
+                  stepIndex: _tutorialStep,
+                  onStart: _startTutorial,
+                  onNext: _nextTutorialStep,
+                  onSkip: () => unawaited(_dismissTutorial()),
+                  timedPractice: _usesCocTimer,
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (_showGuidance) ...[
+                MissionGuidancePanel(
+                  phase: phase,
+                  guidance: MissionPhaseGuidance.forPhase(phase, _state),
+                  actionGuide: MissionActionGuide.forPhase(phase, _state,
+                      reviewReady: _controller.canSubmit &&
+                          MissionEquipmentSimulator.readyForReview(
+                              widget.definition, _state) &&
+                          !_submitted),
+                  practice: _state.mode == MissionRuntimeMode.practice,
+                ),
+                const SizedBox(height: 12),
+              ],
               Text(MissionContentData.controlsScrollHint,
                   style: AppTheme.caption),
               const SizedBox(height: 8),
@@ -408,52 +818,81 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
                         trailing: Icon(Icons.expand_more)),
                   ),
                 ),
-              Text(phase.title, style: AppTheme.titleMedium),
-              const SizedBox(height: 6),
-              Text(phase.instruction, style: AppTheme.bodyMedium),
-              const SizedBox(height: 16),
-              MissionPhaseInteraction(
-                key: ValueKey('mission-interaction-${phase.id}'),
-                phase: phase,
-                state: _state,
-                enabled: !_writing && !_submitting && !_submitted,
-                onAction: (actionType, target, value) =>
-                    _recordAction(phase, actionType, target, value),
-                onRuntimeTransition: (transition) {
-                  _pendingInteractionTransition = transition;
-                },
-                completedPhaseTitles: widget.definition.phases
-                    .where((item) => _state.completedPhaseIds.contains(item.id))
-                    .map((item) => item.title)
-                    .toList(growable: false),
-                authoritativeEvidenceCount: _state.acceptedEvidenceIds.length,
-                pendingEvidenceCount: _state.pendingEvidence.length,
-                failedEvidenceCount: _controller.failedPendingEvidence.length,
-                canSubmit: _controller.canSubmit &&
-                    MissionEquipmentSimulator.readyForReview(
-                        widget.definition, _state) &&
-                    !_submitting &&
-                    !_submitted &&
-                    !_retryingEvidence,
-                retryingPendingEvidence: _retryingEvidence,
-                showReviewConfirmButton: false,
-                returnLabel: widget.definition.reviewMetadata['returnLabel']
-                        as String? ??
-                    'Return to mission',
-                confirmLabel: widget.definition.reviewMetadata['confirmLabel']
-                        as String? ??
-                    'Confirm evidence',
-                onReturnFromReview: () => unawaited(_returnFromReview()),
-                onConfirmReview: () => unawaited(_confirmSubmission()),
-                onRetryPendingEvidence: () =>
-                    unawaited(_retryPendingEvidence()),
-              ),
-              EquipmentOperations(
+              if (!_showGuidance) ...[
+                Text(phase.title, style: AppTheme.titleMedium),
+                const SizedBox(height: 6),
+                Text(phase.instruction, style: AppTheme.bodyMedium),
+                const SizedBox(height: 12),
+              ],
+              Container(
+                key: _interactionGuideKey,
+                decoration: _showHow &&
+                        MissionActionGuide.forPhase(phase, _state)
+                                .currentStep
+                                ?.target ==
+                            MissionGuideTarget.controls
+                    ? BoxDecoration(
+                        border:
+                            Border.all(color: AppTheme.primaryBlue, width: 2),
+                        borderRadius: AppTheme.radiusSm)
+                    : null,
+                child: MissionPhaseInteraction(
+                  key: ValueKey('mission-interaction-${phase.id}'),
                   phase: phase,
                   state: _state,
                   enabled: !_writing && !_submitting && !_submitted,
-                  onAction: (type, target, value) =>
-                      _recordAction(phase, type, target, value)),
+                  onAction: (actionType, target, value) =>
+                      _recordAction(phase, actionType, target, value),
+                  onRuntimeTransition: (transition) {
+                    _pendingInteractionTransition = transition;
+                  },
+                  completedPhaseTitles: widget.definition.phases
+                      .where(
+                          (item) => _state.completedPhaseIds.contains(item.id))
+                      .map((item) => item.title)
+                      .toList(growable: false),
+                  authoritativeEvidenceCount: _state.acceptedEvidenceIds.length,
+                  pendingEvidenceCount: _state.pendingEvidence.length,
+                  failedEvidenceCount: _controller.failedPendingEvidence.length,
+                  canSubmit: _controller.canSubmit &&
+                      MissionEquipmentSimulator.readyForReview(
+                          widget.definition, _state) &&
+                      !_submitting &&
+                      !_submitted &&
+                      !_retryingEvidence,
+                  retryingPendingEvidence: _retryingEvidence,
+                  showReviewConfirmButton: false,
+                  returnLabel: widget.definition.reviewMetadata['returnLabel']
+                          as String? ??
+                      'Return to mission',
+                  confirmLabel: widget.definition.reviewMetadata['confirmLabel']
+                          as String? ??
+                      'Confirm evidence',
+                  onReturnFromReview: () => unawaited(_returnFromReview()),
+                  onConfirmReview: () => unawaited(_confirmSubmission()),
+                  onRetryPendingEvidence: () =>
+                      unawaited(_retryPendingEvidence()),
+                ),
+              ),
+              Container(
+                key: _operationsGuideKey,
+                decoration: _showHow &&
+                        MissionActionGuide.forPhase(phase, _state)
+                                .currentStep
+                                ?.target ==
+                            MissionGuideTarget.operations
+                    ? BoxDecoration(
+                        border:
+                            Border.all(color: AppTheme.primaryBlue, width: 2),
+                        borderRadius: AppTheme.radiusSm)
+                    : null,
+                child: EquipmentOperations(
+                    phase: phase,
+                    state: _state,
+                    enabled: !_writing && !_submitting && !_submitted,
+                    onAction: (type, target, value) =>
+                        _recordAction(phase, type, target, value)),
+              ),
               if (_technicalFeedback case final feedback?) ...[
                 const SizedBox(height: 14),
                 Semantics(
@@ -474,6 +913,11 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
   }
 
   Widget _buildActionBar(MissionPhaseDefinition phase, int phaseIndex) {
+    final guide = MissionActionGuide.forPhase(phase, _state,
+        reviewReady: _controller.canSubmit &&
+            MissionEquipmentSimulator.readyForReview(
+                widget.definition, _state) &&
+            !_submitted);
     if (phase.primaryInteraction == InteractionFamily.review) {
       final equipmentReady =
           MissionEquipmentSimulator.readyForReview(widget.definition, _state);
@@ -482,27 +926,38 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
         status: _submitted
             ? MissionContentData.reviewSavedLabel
             : _state.pendingEvidence.isNotEmpty
-                ? MissionContentData.reviewPendingLabel
+                ? MissionContentData.guideReviewSyncStatus(
+                    _state.pendingEvidence.length,
+                    _controller.failedPendingEvidence.length)
                 : equipmentReady
                     ? MissionContentData.reviewReadyLabel
-                    : MissionContentData.phaseActionsPendingLabel,
+                    : MissionContentData.guideReviewIncomplete,
         label: widget.definition.reviewMetadata['confirmLabel'] as String? ??
             MissionContentData.confirmEvidenceLabel,
         saving: _writing || _submitting || _retryingEvidence,
         complete: _submitted,
+        highlighted: _showHow && canConfirm,
         onContinue: canConfirm ? () => unawaited(_confirmSubmission()) : null,
       );
     }
     final ready = MissionPhaseCompletionPolicy.canAdvance(phase, _state);
-    final pending = missionPendingTasks(phase, _state);
     final status = ready
         ? MissionContentData.readyToContinueLabel
-        : pending.isNotEmpty
-            ? pending.join('\n')
-            : MissionContentData.phaseActionsPendingLabel;
+        : _lastActionRejected
+            ? MissionContentData.guideRejected(
+                guide.completedCount,
+                guide.steps.length,
+                guide.currentStep?.text ??
+                    MissionContentData.guideCheckRequirements)
+            : MissionContentData.guideBlocked(
+                guide.completedCount,
+                guide.steps.length,
+                guide.currentStep?.text ??
+                    MissionContentData.guideCheckRequirements);
     return MissionActionBar(
       status: status,
       saving: _writing,
+      highlighted: _showHow && ready,
       label: phaseIndex == widget.definition.phases.length - 2
           ? MissionContentData.reviewEvidenceLabel
           : MissionContentData.continueLabel,
@@ -559,6 +1014,10 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
     String? target,
     Map<String, dynamic> value,
   ) async {
+    if (_cocTimeBlocked) {
+      _pendingInteractionTransition = null;
+      return;
+    }
     if (_writing) return;
     final queuedTransition = _pendingInteractionTransition;
     _pendingInteractionTransition = null;
@@ -579,6 +1038,8 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
                 actionValue['compatible'] == false));
     setState(() {
       _writing = true;
+      _lastActionRejected = actionValue['simulation_valid'] == false ||
+          actionValue['compatible'] == false;
       _workspaceFeedback =
           !wrongSlot && actionValue['simulation_valid'] == false
               ? actionValue['simulation_feedback'] as String?
@@ -647,7 +1108,14 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
               ? () => unawaited(_retryPendingEvidence())
               : null);
     } finally {
-      if (mounted) setState(() => _writing = false);
+      if (mounted) {
+        setState(() => _writing = false);
+        if (_showHow) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) unawaited(_locateCurrentAction());
+          });
+        }
+      }
     }
   }
 
@@ -675,7 +1143,9 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
   }
 
   Future<void> _advance(int phaseIndex) async {
-    if (_writing || phaseIndex >= widget.definition.phases.length - 1) return;
+    if (_writing ||
+        _cocTimeBlocked ||
+        phaseIndex >= widget.definition.phases.length - 1) return;
     final current = widget.definition.phases[phaseIndex];
     if (!MissionPhaseCompletionPolicy.canAdvance(current, _state)) return;
     final next = widget.definition.phases[phaseIndex + 1];
@@ -707,7 +1177,7 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
 
   Future<void> _returnFromReview() async {
     final reviewIndex = _phaseIndex;
-    if (_writing || reviewIndex == 0) return;
+    if (_writing || _cocTimeBlocked || reviewIndex == 0) return;
     final previous = widget.definition.phases[reviewIndex - 1];
     final review = widget.definition.phases[reviewIndex];
     setState(() => _writing = true);
@@ -728,7 +1198,7 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
   }
 
   Future<void> _revisitPhase(String destination) async {
-    if (_writing || !_hasKnownPhase(destination)) return;
+    if (_writing || _cocTimeBlocked || !_hasKnownPhase(destination)) return;
     final phase = widget.definition.phases[_phaseIndex];
     setState(() {
       _writing = true;
@@ -753,6 +1223,7 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
   Future<void> _confirmSubmission() async {
     if (_submitting ||
         _submitted ||
+        _cocTimeBlocked ||
         !_controller.canSubmit ||
         !MissionEquipmentSimulator.readyForReview(widget.definition, _state))
       return;
@@ -1255,6 +1726,7 @@ class _MissionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
+        key: const ValueKey('mission-header'),
         padding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
         decoration: const BoxDecoration(
           color: Colors.white,

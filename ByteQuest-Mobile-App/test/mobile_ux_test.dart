@@ -128,7 +128,11 @@ void main() {
   test('COC1 M2 phase three explains both connections and procedure', () {
     final phase = MissionSimulationDefinitions.byId('coc1_m2').phases[2];
     expect(missionPendingTasks(phase, MissionRuntimeState.initial('coc1_m2')),
-        ['Connections: 0 of 2', MissionContentData.sequencePendingLabel]);
+        [
+          'Connections: 0 of 2',
+          MissionContentData.sequencePendingLabel,
+          'Work-order checks: 0 of 2'
+        ]);
     final connected = MissionRuntimeState.initial('coc1_m2')
         .copyWith(connectedNodePairs: {'atx>board_power', 'sata>storage_data'});
     expect(missionPendingTasks(phase, connected),

@@ -39,6 +39,7 @@ class _ToolSelectionInteractionState extends State<ToolSelectionInteraction> {
         const MissionSectionLabel(icon: Icons.ads_click, text: 'Target'),
         const SizedBox(height: 8),
         Wrap(
+          key: const ValueKey('tool-target-options'),
           spacing: 8,
           runSpacing: 8,
           children: [

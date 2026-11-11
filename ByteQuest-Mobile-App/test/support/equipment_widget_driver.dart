@@ -56,8 +56,14 @@ Future<void> performEquipmentAction(
         await tapEquipmentControl(
             tester, within(find.byKey(ValueKey('multi-select-$id'))));
       }
-      await tapEquipmentControl(
-          tester, within(find.byKey(const ValueKey('multi-select-confirm'))));
+      if (group is! String ||
+          !MissionEquipmentSimulator.maps(equipment['selection_groups']).any(
+              (item) =>
+                  item['id'] == group &&
+                  item['single_choice_on_tap'] == true)) {
+        await tapEquipmentControl(
+            tester, within(find.byKey(const ValueKey('multi-select-confirm'))));
+      }
     case 'tool_attempted':
       await tapEquipmentControl(
           tester, find.byKey(ValueKey('tool-target-${action.target}')));

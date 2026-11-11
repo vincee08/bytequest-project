@@ -39,13 +39,19 @@ class ScenarioDecisionInteraction extends StatelessWidget {
         children: [
           Text(phase.instruction),
           const SizedBox(height: 10),
-          for (final choice in choices) ...[
-            OutlinedButton(
-              onPressed: enabled ? () => _select(choice) : null,
-              child: Text(choice['label'] as String? ?? 'Choose action'),
-            ),
-            const SizedBox(height: 8),
-          ],
+          Column(
+              key: const ValueKey('decision-options'),
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final choice in choices) ...[
+                  OutlinedButton(
+                    key: ValueKey('decision-choice-${choice['id']}'),
+                    onPressed: enabled ? () => _select(choice) : null,
+                    child: Text(choice['label'] as String? ?? 'Choose action'),
+                  ),
+                  const SizedBox(height: 8),
+                ]
+              ]),
         ],
       ),
     );
@@ -54,9 +60,10 @@ class ScenarioDecisionInteraction extends StatelessWidget {
   void _select(Map<String, dynamic> choice) {
     final id = choice['id'] as String?;
     if (id == null) return;
-    final availableActionIds = (choice['available_action_ids'] as List? ?? const [])
-        .whereType<String>()
-        .toList(growable: false);
+    final availableActionIds =
+        (choice['available_action_ids'] as List? ?? const [])
+            .whereType<String>()
+            .toList(growable: false);
     onRuntimeTransition(
       (runtime) => runtime.copyWith(
         selectedBranchActionIds: {...runtime.selectedBranchActionIds, id},

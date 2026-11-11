@@ -9,6 +9,7 @@ import '../../data/mission_content_data.dart';
 import '../../models/practice_progress_model.dart';
 import '../../services/practice_progress_service.dart';
 import '../../widgets/practice_progress_panel.dart';
+import '../../widgets/practice_coc_session_panel.dart';
 import '../../models/assigned_activity_model.dart';
 import '../../models/learning_resource_model.dart';
 import '../../models/mission_model.dart';
@@ -45,6 +46,8 @@ class _MissionsScreenState extends State<MissionsScreen>
   List<PracticeCocProgress> _practiceProgress = const [];
   String? _practiceError;
   bool _practiceLoading = true;
+  String? _selectedPracticeMissionId;
+  String? _expandedPracticeMissionId;
   Future<void> _loadPracticeProgress() async {
     if (mounted) setState(() => _practiceLoading = true);
     try {
@@ -181,6 +184,7 @@ class _MissionsScreenState extends State<MissionsScreen>
 
   Future<void> _launchPractice(Mission mission) async {
     _assessmentService.abandonLocalSession();
+    setState(() => _selectedPracticeMissionId = mission.id);
     await MissionLauncher.launch(context, mission);
     await _loadPracticeProgress();
   }
@@ -488,110 +492,146 @@ class _MissionsScreenState extends State<MissionsScreen>
           onAction: _loadPracticeProgress);
     }
     final missions = MissionsData.getAllMissions();
-    return ListView.separated(
+    return ListView(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
-      itemCount: missions.length + 5,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          return Column(children: [
-            if (_practiceError != null)
-              ListTile(
-                  title: Text(_practiceError!),
-                  trailing: IconButton(
-                      tooltip: MissionContentData.practiceQuizRetry,
-                      onPressed: _loadPracticeProgress,
-                      icon: const Icon(Icons.refresh))),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: AppTheme.backgroundPaleBlue,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: AppTheme.primaryBlue.withValues(alpha: 0.18),
-                ),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.info_outline, color: AppTheme.primaryBlue),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      MissionContentData.practiceQuizNotice,
-                      style: AppTheme.bodySmall.copyWith(
-                        height: 1.45,
-                        color: AppTheme.textDark,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            )
-          ]);
-        }
+      children: [
+        Text(MissionContentData.practiceQuizNotice, style: AppTheme.bodySmall),
+        const SizedBox(height: 12),
+        for (var index = 1; index <= 4; index++) ...[
+          _buildPracticeCocCard('coc$index', missions),
+          const SizedBox(height: 12),
+        ],
+      ],
+    );
+  }
 
-        final group = (index - 1) ~/ 6;
-        final position = (index - 1) % 6;
-        if (position == 0)
-          return PracticeProgressPanel(
-              coc: 'coc${group + 1}', onChanged: _loadPracticeProgress);
-        final mission = missions[group * 5 + position - 1];
-        final unlocked =
-            _practiceProgress.any((p) => p.coc == mission.cocId && p.unlocked);
-        return Card(
-          elevation: 0,
-          color: AppTheme.cardWhite,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: BorderSide(
-                color: unlocked ? AppTheme.primaryBlue : AppTheme.borderLight),
+  Widget _buildPracticeCocCard(String cocId, List<Mission> missions) {
+    final progress =
+        _practiceProgress.where((item) => item.coc == cocId).firstOrNull;
+    final unlocked = progress?.unlocked ?? false;
+    final cocMissions =
+        missions.where((mission) => mission.cocId == cocId).toList();
+    final verified = progress?.completedMissions.length ?? 0;
+    final selected = cocMissions
+        .where((mission) => mission.id == _selectedPracticeMissionId)
+        .firstOrNull;
+    return Card(
+      elevation: 0,
+      color: AppTheme.cardWhite,
+      shape: RoundedRectangleBorder(
+        borderRadius: AppTheme.radiusMd,
+        side: BorderSide(color: AppTheme.borderMedium),
+      ),
+      child: ExpansionTile(
+        key: PageStorageKey('learn-$cocId'),
+        initiallyExpanded: cocId == 'coc1',
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: CircleAvatar(
+          backgroundColor: AppTheme.softBlueAccent,
+          foregroundColor: AppTheme.deepBlue,
+          child: Text(cocId.substring(3)),
+        ),
+        title: Text(MissionContentData.practiceCocTitle(cocId),
+            style: AppTheme.titleMedium),
+        subtitle: Text(
+          '${MissionContentData.practiceMissionCount(verified)}'
+          '${progress?.completed == true ? ' · ${MissionContentData.practiceCocCompleteLabel}' : !unlocked ? ' · ${MissionContentData.practiceCocLockedLabel}' : ''}'
+          '${selected == null ? '' : ' · ${MissionContentData.practiceMissionSelectedLabel}: ${selected.missionCode}'}',
+          style: AppTheme.bodySmall,
+        ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  LearnerProgressBar(
+                    value: verified / 5,
+                    semanticLabel:
+                        MissionContentData.practiceMissionCount(verified),
+                  ),
+                  if (unlocked) ...[
+                    const SizedBox(height: 12),
+                    PracticeCocSessionPanel(cocId: cocId),
+                  ],
+                  for (final mission in cocMissions)
+                    _buildPracticeMissionTile(
+                      mission,
+                      unlocked: unlocked,
+                      verified:
+                          progress?.completedMissions.contains(mission.id) ??
+                              false,
+                    ),
+                  if (unlocked)
+                    PracticeProgressPanel(
+                        coc: cocId, onChanged: _loadPracticeProgress),
+                ]),
           ),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 8,
-            ),
-            minLeadingWidth: 44,
-            leading: Container(
-              width: 44,
-              height: 44,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: AppTheme.primaryBlue.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(11),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPracticeMissionTile(Mission mission,
+      {required bool unlocked, required bool verified}) {
+    final selected = mission.id == _selectedPracticeMissionId;
+    final detailsOpen = mission.id == _expandedPracticeMissionId;
+    return Semantics(
+      button: true,
+      enabled: unlocked,
+      selected: selected,
+      label:
+          '${MissionContentData.practiceMissionNumber(mission.missionNumber)}, '
+          '${mission.title}, ${verified ? MissionContentData.practiceMissionVerifiedLabel : unlocked ? MissionContentData.practiceMissionAvailableLabel : MissionContentData.practiceLockedMessage}',
+      child: Card(
+        elevation: 0,
+        color: selected ? AppTheme.backgroundPaleBlue : AppTheme.cardWhite,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppTheme.radiusSm,
+          side: BorderSide(
+              color: selected ? AppTheme.primaryBlue : AppTheme.borderLight),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ListTile(
+              key: ValueKey('learn-practice-${mission.id}'),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+              minVerticalPadding: 2,
+              leading: CircleAvatar(
+                radius: 18,
+                backgroundColor: AppTheme.softBlueAccent,
+                foregroundColor: AppTheme.deepBlue,
+                child: Text('${mission.missionNumber}'),
               ),
-              child: Text(
-                '${mission.missionNumber}',
-                style: AppTheme.titleMedium.copyWith(
-                  color: AppTheme.primaryBlue,
-                  fontWeight: FontWeight.w800,
-                ),
+              title: Text(mission.title, style: AppTheme.labelLarge),
+              subtitle: Text(
+                '${MissionContentData.practiceMissionNumber(mission.missionNumber)}'
+                '${verified ? ' · ${MissionContentData.practiceMissionVerifiedShortLabel}' : !unlocked ? ' · ${MissionContentData.practiceCocLockedLabel}' : ''}',
+                style: AppTheme.bodySmall,
               ),
-            ),
-            title: Text(
-              mission.title,
-              style: AppTheme.titleMedium.copyWith(
-                fontWeight: FontWeight.w700,
+              trailing: IconButton(
+                key: ValueKey('learn-practice-details-${mission.id}'),
+                tooltip: detailsOpen
+                    ? MissionContentData.practiceHideMissionDetails
+                    : MissionContentData.practiceShowMissionDetails,
+                onPressed: () => setState(() => _expandedPracticeMissionId =
+                    detailsOpen ? null : mission.id),
+                icon: Icon(detailsOpen
+                    ? Icons.expand_less_rounded
+                    : Icons.info_outline_rounded),
               ),
+              onTap: unlocked ? () => _launchPractice(mission) : null,
             ),
-            subtitle: Padding(
-              padding: const EdgeInsets.only(top: 4),
-              child: Text(
-                unlocked
-                    ? '${mission.missionCode} - Practice'
-                    : MissionContentData.practiceLockedMessage,
-                style: AppTheme.bodySmall.copyWith(
-                  color: AppTheme.textMedium,
-                ),
+            if (detailsOpen)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                child: Text(mission.description ?? mission.title,
+                    style: AppTheme.bodySmall),
               ),
-            ),
-            trailing: Icon(
-                unlocked ? Icons.chevron_right_rounded : Icons.lock_outline),
-            onTap: unlocked ? () => _launchPractice(mission) : null,
-          ),
-        );
-      },
+          ],
+        ),
+      ),
     );
   }
 

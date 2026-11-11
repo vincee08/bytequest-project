@@ -75,6 +75,49 @@ final class SharedPreferencesMissionRuntimeStore
 class ProgressResumeService {
   static const String _prefix = 'bq_resume_';
   static const String _missionRuntimePrefix = 'bq_mission_runtime_';
+  static const String _practiceCocSessionPrefix = 'bq_practice_coc_session_';
+  static const String _missionTutorialPrefix = 'bq_mission_tutorial_seen_';
+
+  /// Learner-scoped display preference. It does not affect mission evidence,
+  /// the COC deadline, or assessment state.
+  static Future<bool> missionTutorialSeen(String userId) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('$_missionTutorialPrefix$userId') ?? false;
+  }
+
+  static Future<bool> markMissionTutorialSeen(String userId) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.setBool('$_missionTutorialPrefix$userId', true);
+  }
+
+  /// Learner-scoped practice timer checkpoint. Official assessment attempts
+  /// never read this key; the server remains the progress authority.
+  static Future<Map<String, dynamic>?> loadPracticeCocSession({
+    required String userId,
+    required String cocId,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('$_practiceCocSessionPrefix${userId}_$cocId');
+    if (raw == null) return null;
+    try {
+      return Map<String, dynamic>.from(jsonDecode(raw) as Map);
+    } catch (error) {
+      debugPrint('Practice COC session checkpoint is unreadable: $error');
+      throw StateError('Practice COC session checkpoint is unreadable.');
+    }
+  }
+
+  static Future<bool> savePracticeCocSession({
+    required String userId,
+    required String cocId,
+    required Map<String, dynamic> checkpoint,
+  }) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.setString(
+      '$_practiceCocSessionPrefix${userId}_$cocId',
+      jsonEncode(checkpoint),
+    );
+  }
 
   static Future<bool> saveMissionRuntime({
     required String userId,

@@ -64,7 +64,9 @@ class EquipmentOperations extends StatelessWidget {
                 primaryInteraction: InteractionFamily.select,
                 presentation: {
                   'options': group['options'],
-                  'selection_group': group['id']
+                  'selection_group': group['id'],
+                  if (group['single_choice_on_tap'] == true)
+                    'single_choice_on_tap': true,
                 }),
             state: state,
             enabled: enabled,
@@ -120,29 +122,35 @@ class EquipmentOperations extends StatelessWidget {
           onAction: onAction,
           enabled: enabled,
         ),
-      if (operations.isNotEmpty) ...[
-        const SizedBox(height: 8),
-        Text(MissionContentData.equipmentOperationsLabel,
-            style: AppTheme.labelLarge),
-        for (final operation in operations) ...[
-          const SizedBox(height: 8),
-          Semantics(
-            button: true,
-            label: operation['label'] as String,
-            child: OutlinedButton.icon(
-              key: ValueKey('equipment-operation-${operation['id']}'),
-              style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48)),
-              onPressed: enabled
-                  ? () => onAction('equipment_operation',
-                      operation['id'] as String, const {'input_method': 'tap'})
-                  : null,
-              icon: const Icon(Icons.settings_outlined),
-              label: Text(operation['label'] as String),
-            ),
-          ),
-        ],
-      ],
+      if (operations.isNotEmpty)
+        Column(
+            key: const ValueKey('equipment-operations'),
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const SizedBox(height: 8),
+              Text(MissionContentData.equipmentOperationsLabel,
+                  style: AppTheme.labelLarge),
+              for (final operation in operations) ...[
+                const SizedBox(height: 8),
+                Semantics(
+                  button: true,
+                  label: operation['label'] as String,
+                  child: OutlinedButton.icon(
+                    key: ValueKey('equipment-operation-${operation['id']}'),
+                    style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48)),
+                    onPressed: enabled
+                        ? () => onAction(
+                            'equipment_operation',
+                            operation['id'] as String,
+                            const {'input_method': 'tap'})
+                        : null,
+                    icon: const Icon(Icons.settings_outlined),
+                    label: Text(operation['label'] as String),
+                  ),
+                ),
+              ],
+            ]),
     ]);
   }
 }

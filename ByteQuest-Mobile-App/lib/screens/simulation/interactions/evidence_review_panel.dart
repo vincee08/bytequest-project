@@ -97,6 +97,7 @@ class EvidenceReviewPanel extends StatelessWidget {
             ),
           const SizedBox(height: 8),
           OutlinedButton(
+            key: const ValueKey('review-return'),
             onPressed: onReturn,
             child: Text(returnLabel),
           ),

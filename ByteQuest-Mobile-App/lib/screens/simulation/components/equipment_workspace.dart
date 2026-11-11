@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../data/mission_content_data.dart';
+import '../../../data/mission_phase_guidance.dart';
 import '../runtime/mission_equipment_simulator.dart';
 import '../runtime/mission_runtime_models.dart';
 import 'component_orientation_dialog.dart';
@@ -28,6 +29,9 @@ class EquipmentWorkspace extends StatefulWidget {
     required this.enabled,
     this.saving = false,
     this.feedback,
+    this.highlightTarget,
+    this.highlightObjectId,
+    this.onModeChanged,
   });
 
   final MissionSimulationDefinition definition;
@@ -39,6 +43,9 @@ class EquipmentWorkspace extends StatefulWidget {
   final bool enabled;
   final bool saving;
   final String? feedback;
+  final MissionGuideTarget? highlightTarget;
+  final String? highlightObjectId;
+  final ValueChanged<String>? onModeChanged;
 
   @override
   State<EquipmentWorkspace> createState() => _EquipmentWorkspaceState();
@@ -48,7 +55,10 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
   _WorkspaceMode? _mode;
   String? _selected;
   bool _choosingOrientation = false;
+  bool _applying = false;
+  String? _dragging;
   String? _selectionHint;
+  String? _lastReportedMode;
 
   Map<String, dynamic> get _equipment =>
       MissionEquipmentSimulator.map(widget.phase.presentation['equipment']);
@@ -70,7 +80,9 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
     if (oldWidget.phase.id != widget.phase.id) {
       _mode = null;
       _selected = null;
+      _dragging = null;
       _selectionHint = null;
+      _lastReportedMode = null;
     }
   }
 
@@ -87,6 +99,12 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
       _WorkspaceMode.inspect,
     ];
     final mode = modes.contains(_mode) ? _mode! : modes.first;
+    if (_lastReportedMode != mode.name) {
+      _lastReportedMode = mode.name;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) widget.onModeChanged?.call(mode.name);
+      });
+    }
     final panel =
         mode == _WorkspaceMode.inspect ? <String, dynamic>{} : _panel(mode);
     final sources = MissionEquipmentSimulator.maps(
@@ -122,6 +140,15 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                                 materialTapTargetSize:
                                     MaterialTapTargetSize.padded,
                                 selected: mode == option,
+                                side: widget.highlightTarget ==
+                                        (option == _WorkspaceMode.place
+                                            ? MissionGuideTarget.place
+                                            : option == _WorkspaceMode.connect
+                                                ? MissionGuideTarget.connect
+                                                : MissionGuideTarget.objects)
+                                    ? const BorderSide(
+                                        color: AppTheme.primaryBlue, width: 2)
+                                    : null,
                                 avatar: Icon(
                                     switch (option) {
                                       _WorkspaceMode.place =>
@@ -136,11 +163,15 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                                     ? MissionContentData.workspaceSavingLabel
                                     : _label(option)),
                                 onSelected: widget.enabled
-                                    ? (_) => setState(() {
+                                    ? (_) {
+                                        setState(() {
                                           _mode = option;
+                                          _lastReportedMode = option.name;
                                           _selected = null;
                                           _selectionHint = null;
-                                        })
+                                        });
+                                        widget.onModeChanged?.call(option.name);
+                                      }
                                     : null,
                               ),
                             ),
@@ -177,8 +208,12 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                       SimulationScene(
                         key: ValueKey(
                             'workspace-scene-${mode.name}-${widget.phase.id}'),
+                        highlightObjects: widget.highlightTarget ==
+                            MissionGuideTarget.objects,
+                        highlightObjectId: widget.highlightObjectId,
                         scene: scene,
-                        compactToolbar: mode != _WorkspaceMode.inspect,
+                        compactToolbar: mode != _WorkspaceMode.inspect ||
+                            constraints.maxWidth < 400,
                         panEnabled:
                             widget.enabled && mode == _WorkspaceMode.inspect,
                         scrollEnabled: !widget.saving,
@@ -222,6 +257,15 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                                     widget.hotspotStates[destination['id']]!,
                           if (_selected != null)
                             _selected!: HotspotVisualState.selected,
+                          if (_dragging != null)
+                            _dragging!: HotspotVisualState.selected,
+                          if (mode != _WorkspaceMode.inspect &&
+                              (_dragging ?? _selected) != null)
+                            for (final destination in destinations)
+                              if (_canUseDestination(mode,
+                                  _dragging ?? _selected, destination, sources))
+                                'destination:${destination['id']}':
+                                    HotspotVisualState.selected,
                         },
                         connectedNodePairs: mode == _WorkspaceMode.inspect
                             ? widget.state.connectedNodePairs
@@ -251,6 +295,12 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                             }
                           } else if (sources
                               .any((source) => source['id'] == id)) {
+                            if (mode == _WorkspaceMode.place &&
+                                widget.state.placements.containsKey(id)) {
+                              setState(() => _selectionHint =
+                                  MissionContentData.workspaceAlreadyPlaced);
+                              return;
+                            }
                             setState(() {
                               _selected = id;
                               _selectionHint =
@@ -273,7 +323,19 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                                           'workspace-source-$equipmentId'),
                                       data: equipmentId,
                                       enabled: widget.enabled &&
-                                          !_choosingOrientation,
+                                          !_choosingOrientation &&
+                                          !_applying &&
+                                          !(mode == _WorkspaceMode.place &&
+                                              widget.state.placements
+                                                  .containsKey(equipmentId)),
+                                      onDragStarted: () => setState(() {
+                                        _dragging = equipmentId;
+                                        _selected = equipmentId;
+                                      }),
+                                      onDragFinished: () {
+                                        if (mounted)
+                                          setState(() => _dragging = null);
+                                      },
                                       feedback: Material(
                                         elevation: 2,
                                         borderRadius: AppTheme.radiusSm,
@@ -298,6 +360,7 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                                     onWillAcceptWithDetails: (details) =>
                                         widget.enabled &&
                                         !_choosingOrientation &&
+                                        !_applying &&
                                         sources.any((source) =>
                                             source['id'] == details.data),
                                     onAcceptWithDetails: (details) => unawaited(
@@ -309,7 +372,15 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                                         border: candidates.isEmpty
                                             ? null
                                             : Border.all(
-                                                color: AppTheme.primaryBlue,
+                                                color: _canUseDestination(
+                                                        mode,
+                                                        candidates.first,
+                                                        MissionEquipmentSimulator
+                                                            .item(destinations,
+                                                                equipmentId),
+                                                        sources)
+                                                    ? AppTheme.primaryBlue
+                                                    : AppTheme.errorRed,
                                                 width: 3),
                                         borderRadius: AppTheme.radiusSm,
                                       ),
@@ -416,7 +487,19 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
 
   Future<void> _apply(_WorkspaceMode mode, String source, String destination,
       List<Map<String, dynamic>> sources, String inputMethod) async {
-    if (!widget.enabled || _choosingOrientation) return;
+    if (!widget.enabled || _choosingOrientation || _applying) return;
+    if (mode == _WorkspaceMode.place &&
+        widget.state.placements.containsKey(source)) {
+      setState(
+          () => _selectionHint = MissionContentData.workspaceAlreadyPlaced);
+      return;
+    }
+    if (mode == _WorkspaceMode.connect &&
+        widget.state.connectedNodePairs.contains('$source>$destination')) {
+      setState(
+          () => _selectionHint = MissionContentData.workspaceAlreadyConnected);
+      return;
+    }
     final phaseId = widget.phase.id;
     String? orientation;
     if (mode == _WorkspaceMode.place) {
@@ -437,21 +520,46 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
       _selected = null;
       _selectionHint = null;
     });
-    await widget.onAction(
-      mode == _WorkspaceMode.place
-          ? 'placement_attempted'
-          : 'connection_created',
-      destination,
-      {
-        if (mode == _WorkspaceMode.place)
-          'item_id': source
-        else
-          'source_id': source,
-        'destination_id': destination,
-        if (orientation != null) 'orientation': orientation,
-        'input_method': inputMethod,
-      },
-    );
+    setState(() => _applying = true);
+    try {
+      await widget.onAction(
+        mode == _WorkspaceMode.place
+            ? 'placement_attempted'
+            : 'connection_created',
+        destination,
+        {
+          if (mode == _WorkspaceMode.place)
+            'item_id': source
+          else
+            'source_id': source,
+          'destination_id': destination,
+          if (orientation != null) 'orientation': orientation,
+          'input_method': inputMethod,
+        },
+      );
+    } finally {
+      if (mounted) setState(() => _applying = false);
+    }
+  }
+
+  bool _canUseDestination(_WorkspaceMode mode, String? source,
+      Map<String, dynamic> destination, List<Map<String, dynamic>> sources) {
+    if (source == null) return false;
+    final part = MissionEquipmentSimulator.item(sources, source);
+    if (part.isEmpty) return false;
+    final id = destination['equipmentId'] ?? destination['id'];
+    if (mode == _WorkspaceMode.place) {
+      final accepted = MissionEquipmentSimulator.strings(
+          destination['socket_categories'] ??
+              destination['accepted_categories']);
+      return accepted.contains(part['category']) &&
+          !widget.state.placements.containsKey(source) &&
+          !widget.state.placements.containsValue(id);
+    }
+    final interfaces = MissionEquipmentSimulator.strings(part['interfaces']);
+    return (interfaces.isEmpty ||
+            interfaces.contains(destination['interface'])) &&
+        !widget.state.connectedNodePairs.contains('$source>$id');
   }
 
   String _label(_WorkspaceMode mode) => switch (mode) {

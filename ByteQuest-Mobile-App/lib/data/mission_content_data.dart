@@ -20,6 +20,8 @@ class MissionContentData {
   static const controlsLabel = 'Task controls';
   static const taskStatusLabel = 'Remaining actions';
   static const inspectionsTaskLabel = 'Inspections';
+  static const identificationTapHint =
+      'Tap one component for this role. The readiness test checks your choice.';
   static const placementsTaskLabel = 'Placements';
   static const connectionsTaskLabel = 'Connections';
   static const configurationTaskLabel = 'Configuration fields';
@@ -28,6 +30,60 @@ class MissionContentData {
   static const emailFieldLabel = 'Email address (required)';
   static const passwordFieldLabel = 'Password (required)';
   static const confirmPasswordFieldLabel = 'Confirm password (required)';
+  static const signupNetworkUnavailableMessage =
+      'Cannot reach the account server. Check this device\'s internet connection and try again.';
+  static const signupAlreadyRegisteredMessage =
+      'This email is already registered. Please log in instead.';
+  static const signupInvalidEmailMessage =
+      'Please check the email address and try again.';
+  static const signupWeakPasswordMessage =
+      'Password is too weak. Please use a stronger password.';
+  static const signupProvisioningMessage =
+      'Your account needs setup by an administrator. Please contact support.';
+  static const signupDisabledMessage =
+      'New account registration is unavailable. Please contact support.';
+  static const signupEmailDeliveryMessage =
+      'Could not send the confirmation email. Please try again later.';
+  static const signupUnexpectedMessage =
+      'Could not create your account. Please try again.';
+
+  static String signupFailureMessage(Object error) {
+    final message = error.toString().toLowerCase();
+    if (message.contains('failed host lookup') ||
+        message.contains('socketexception') ||
+        message.contains('network is unreachable') ||
+        message.contains('connection refused') ||
+        message.contains('connection reset') ||
+        message.contains('connection timed out')) {
+      return signupNetworkUnavailableMessage;
+    }
+    if (message.contains('user already registered') ||
+        message.contains('email already exists') ||
+        message.contains('already registered')) {
+      return signupAlreadyRegisteredMessage;
+    }
+    if (message.contains('invalid email') ||
+        message.contains('email_address_invalid')) {
+      return signupInvalidEmailMessage;
+    }
+    if (message.contains('password') &&
+        (message.contains('weak') || message.contains('at least'))) {
+      return signupWeakPasswordMessage;
+    }
+    if (message.contains('provisioning is incomplete')) {
+      return signupProvisioningMessage;
+    }
+    if (message.contains('signup_disabled') ||
+        message.contains('signups not allowed')) {
+      return signupDisabledMessage;
+    }
+    if (message.contains('error sending confirmation email') ||
+        message.contains('email rate limit')) {
+      return signupEmailDeliveryMessage;
+    }
+    return signupUnexpectedMessage;
+  }
+
   static const newPasswordFieldLabel = 'New password (required)';
   static const studentIdFieldLabel = 'Student ID (optional)';
   static const sectionFieldLabel = 'Section or set (optional)';
@@ -35,6 +91,267 @@ class MissionContentData {
   static const profileAvatarLabel = 'Profile avatar';
   static const phaseCompleteLabel = 'Actions complete';
   static const controlsScrollHint = 'Scroll here for all task controls';
+  static const guidanceHeading = 'How to complete this task';
+  static const guideNextHeading = 'What to do next';
+  static const guideShowMeHow = 'Show me where';
+  static const tutorialReplay = 'Replay tutorial';
+  static const tutorialStart = 'Start tutorial';
+  static const tutorialSkip = 'Skip';
+  static const tutorialNext = 'Next';
+  static const tutorialFinish = 'Finish';
+  static const tutorialHeading = 'Quick mission tour';
+  static const tutorialInvite =
+      'New to missions? Take a quick tour of the controls.';
+  static const tutorialWorkspace =
+      'The technical workspace is the large area with equipment. Tap a device to inspect it. Use Objects if a device is hard to see.';
+  static const tutorialInstructions =
+      'What to do next names the current task. Open its steps to see what is done and what remains.';
+  static const tutorialEquipment =
+      'Place equipment and Connect ports are workspace tabs. Open the tab named in the guide before choosing a part or port.';
+  static const tutorialIdentification =
+      'For identification, tap an item in Selection set. If Confirm selection appears, tap it after choosing.';
+  static const tutorialPlacement =
+      'For placement, tap a part and then a compatible slot, or drag the part onto the slot. Choose an orientation if asked.';
+  static const tutorialProgress =
+      'The progress count shows recorded required actions. Rejected actions do not increase it.';
+  static const tutorialContinue =
+      'Continue or Review evidence is at the bottom. Its message explains what still needs work.';
+  static const tutorialTimer =
+      'The COC practice timer continues during this tour.';
+  static const guideHideHighlight = 'Hide highlight';
+  static const guideDone = 'Done';
+  static const guideCurrent = 'Now';
+  static const guideWaitingForSync =
+      'Action saved on this device. Server evidence is still waiting to sync.';
+  static const guideReadyToContinue =
+      'All required actions completed. Tap Continue.';
+  static String guideActionCount(int completed, int total) =>
+      '$completed of $total actions completed · ${total - completed} remaining';
+  static String guideRemaining(int remaining) =>
+      '$remaining required ${remaining == 1 ? 'action remains' : 'actions remain'} before Continue.';
+  static String guideInspectItem(String label) =>
+      'Tap Objects in the workspace or scroll to Inspection targets below. Select $label and read its condition. No dragging is needed.';
+  static const guideSelect =
+      'Below the workspace, tap items in Selection set, then tap Confirm selection.';
+  static const guideIdentify =
+      'Below the workspace, tap one component in Selection set. Your tap records it; no dragging is needed.';
+  static String guideClassify(String label) =>
+      'Scroll below the workspace to $label. Tap the component that fits this role.';
+  static const guideTool =
+      'Below the workspace, tap an equipment target under Target, then tap a tool in the tool tray. Check the feedback.';
+  static String guideToolTarget(String label) =>
+      'Below the workspace, tap $label under Target, then choose a tool in the tool tray. Check the feedback.';
+  static String guideConnect(String label, bool workspaceMode) => workspaceMode
+      ? 'Tap Connect ports above the workspace, then tap $label and a compatible destination. You can also drag the source onto a port.'
+      : 'Below the workspace, tap $label under Sources, then tap a compatible port under Destinations. You can also drag the source onto a port.';
+  static const guideConnectPorts =
+      'Scroll to Sources and Destinations below the workspace. Tap a source, then a compatible port.';
+  static String guideConfigure(List<String> fields) =>
+      'Scroll to Configuration values. Set ${fields.isEmpty ? 'the required fields' : fields.join(', ')}, then tap Apply configuration.';
+  static const guideSequence =
+      'Scroll to the procedure list. Use the up or down arrows or drag handle to order the steps, then tap Apply procedure order.';
+  static const guideTapSequence =
+      'Scroll to the procedure list. Use the up or down arrows to order the steps, then tap Apply procedure order.';
+  static String guideMatch(String label) =>
+      'Under Sources below the workspace, tap $label, then tap its matching destination under Matches.';
+  static String guidePlace(String label, bool workspaceMode) => workspaceMode
+      ? 'Tap Place equipment above the workspace, then select $label and a compatible destination, or drag it onto a slot. You can also use Components and devices below: choose an orientation if shown, then tap Install selected component.'
+      : 'Below the workspace, tap $label under Components and devices, choose a compatible destination and orientation if shown, then tap Install selected component.';
+  static const guideDiagnostic =
+      'Scroll to Troubleshooting diagnostics. Tap a diagnostic action to reveal one finding, then read Recorded findings.';
+  static String guideDiagnosticFinding(int number) =>
+      'In Troubleshooting diagnostics, run a diagnostic action to reveal finding $number. Read Recorded findings before deciding.';
+  static const guideTest =
+      'Scroll below the workspace and tap Run test. Wait for Test completed and read the measurements.';
+  static const guideTestInterpret =
+      'Below the test result, enter an interpretation and tap Record test interpretation.';
+  static const guideObserve =
+      'Scroll to the observation field. Enter what you can see, then tap Record observation.';
+  static const guideDecide =
+      'Scroll to the decision buttons. Read the evidence, then tap the action it supports.';
+  static const guideInterpret =
+      'Scroll to the result field. Explain the result, then tap Record interpretation.';
+  static const guideReview =
+      'Review the recorded actions below. If evidence is pending, tap Retry pending evidence. When ready, tap Confirm evidence at the bottom.';
+  static const guideReviewPending =
+      'Scroll to Evidence review and tap Retry pending evidence. Wait for the action to sync before confirming.';
+  static const guideReviewIncomplete =
+      'Scroll to Evidence review and tap Return to mission. Complete the missing task, then review again.';
+  static String guideBlocked(int completed, int total, String next) =>
+      'Cannot continue yet: $completed of $total required actions complete. $next';
+  static String guideRejected(int completed, int total, String next) =>
+      'That action did not count. $completed of $total required '
+      'actions complete. $next';
+  static String guideReviewSyncStatus(int pending, int failed) =>
+      'Cannot confirm yet: $pending evidence ${pending == 1 ? 'action' : 'actions'} waiting to sync, $failed needing retry. Scroll to Evidence review and tap Retry pending evidence.';
+  static String guideOperation(String label) =>
+      'Scroll to Operate the equipment and tap $label. Check the equipment feedback.';
+  static const guideOperationDecision =
+      'Scroll to Operate the equipment. Use the case findings to choose a correction button, then check the feedback.';
+  static const guideCheckRequirements =
+      'Check the remaining-task status below and complete the indicated equipment check.';
+  static const guidanceShowSteps = 'Show steps';
+  static const guidanceHideSteps = 'Hide steps';
+  static const guidanceObjectiveLabel = 'Objective';
+  static const guidanceProgressLabel = 'Required-action progress';
+  static const guidanceHintLabel = 'Hint';
+  static const guidanceActionRecorded = 'Main action recorded';
+  static const guidanceActionPending = 'Main action still needed';
+  static const diagnosticFindingsProgressLabel = 'Diagnostic findings';
+  static const rolesIdentifiedProgressLabel = 'Roles identified';
+  static const workOrderChecksProgressLabel = 'Work-order checks';
+  static const guidanceIdentifyLabel = 'Tap to Identify';
+  static const guidanceInspectLabel = 'Tap to Inspect';
+  static const guidanceInspectPlaceLabel = 'Inspect and Place';
+  static const guidanceSelectLabel = 'Select';
+  static const guidanceToolLabel = 'Use Tool';
+  static const guidanceConnectLabel = 'Connect';
+  static const guidanceConfigureLabel = 'Configure';
+  static const guidanceSequenceLabel = 'Order Steps';
+  static const guidanceMatchLabel = 'Match';
+  static const guidancePlaceLabel = 'Drag & Drop';
+  static const guidanceTapPlaceLabel = 'Tap to Place';
+  static const guidanceTroubleshootLabel = 'Troubleshoot';
+  static const guidanceTestLabel = 'Test';
+  static const guidanceObserveLabel = 'Observe';
+  static const guidanceDecideLabel = 'Decide';
+  static const guidanceInterpretLabel = 'Interpret';
+  static const guidanceReviewLabel = 'Review';
+  static const guidanceInspectSevenSummary =
+      'Tap all seven components and read their inspection details.';
+  static const guidanceIdentifyRoleSummary =
+      'Tap one component for each requested role.';
+  static const guidanceInspectSummary =
+      'Tap each required object to inspect its condition.';
+  static const guidanceInspectPlaceSummary =
+      'Place required equipment, then complete the phase controls.';
+  static const guidanceSelectSummary =
+      'Choose the items supported by the work order.';
+  static const guidanceToolSummary =
+      'Choose a tool and apply it to a compatible target.';
+  static const guidanceConnectSummary =
+      'Connect each required source to its destination.';
+  static const guidanceConfigureSummary =
+      'Enter the required values and apply configuration.';
+  static const guidanceSequenceSummary =
+      'Arrange the procedure and apply its order.';
+  static const guidanceMatchSummary =
+      'Pair each source with the matching destination.';
+  static const guidancePlaceSummary =
+      'Install each component in a compatible slot.';
+  static const guidanceTroubleshootSummary =
+      'Run diagnostics and use the revealed findings.';
+  static const guidanceTestSummary =
+      'Run the test and inspect its measured output.';
+  static const guidanceObserveSummary =
+      'Record the condition that is actually visible.';
+  static const guidanceDecideSummary =
+      'Choose the next action supported by the evidence.';
+  static const guidanceInterpretSummary =
+      'Explain what the recorded result indicates.';
+  static const guidanceReviewSummary =
+      'Review saved work before confirming evidence.';
+  static const guidanceSupplementalPlacement =
+      'Open Place equipment in the workspace. Select a component and install it in a compatible destination.';
+  static const guidanceSupplementalConnection =
+      'Open Connect ports and link the required source and destination interfaces.';
+  static const guidanceSupplementalConfiguration =
+      'Complete the configuration controls below, then tap Apply configuration.';
+  static const guidanceSupplementalTool =
+      'Select the preparation tool and the equipment target shown below.';
+  static const guidanceRoleSelection =
+      'For each requested role, tap the component you choose. Your selection is recorded when tapped.';
+  static const guidanceRoleSelectionFinish =
+      'Check that every requested role has a selected component before continuing.';
+  static const guidanceInspectObjects =
+      'Tap each listed component or inspection target in the workspace or task controls.';
+  static const guidanceReadInspection =
+      'Read the condition and function information shown after each tap.';
+  static const guidanceInspectFinish =
+      'Inspect every required target, then check the remaining-action status.';
+  static const guidanceChooseItems =
+      'Read the work order and tap the items you believe are needed.';
+  static const guidanceConfirmSelection =
+      'Tap Confirm selection to record your choices.';
+  static const guidanceChooseTool =
+      'Select a tool from the available tool controls.';
+  static const guidanceApplyTool =
+      'Choose the equipment target and check the tool-contact feedback.';
+  static const guidanceChooseConnectionSource =
+      'Select a source port or cable endpoint in Connect ports.';
+  static const guidanceChooseConnectionDestination =
+      'Tap the matching destination, or drag the source to it in the workspace.';
+  static const guidanceCheckConnection =
+      'Check the recorded link and connect any remaining required sources.';
+  static const guidanceOpenConfiguration =
+      'Open the configuration controls below the workspace.';
+  static const guidanceEnterConfiguration =
+      'Enter or choose each value required by the work order.';
+  static const guidanceApplyConfiguration =
+      'Tap Apply configuration and correct any field the validation rejects.';
+  static const guidanceReadSequence =
+      'Read the technical procedure and its listed actions.';
+  static const guidanceArrangeSequence =
+      'Move actions with the arrows or drag handle into the required order.';
+  static const guidanceApplySequence =
+      'Tap Apply procedure order to record the sequence.';
+  static const guidanceChooseMatchSource =
+      'Choose a source item from the matching controls.';
+  static const guidanceChooseMatchDestination =
+      'Choose the destination that fits that source.';
+  static const guidanceMatchFinish =
+      'Record all required pairs and check for unmatched sources.';
+  static const guidanceChooseComponent =
+      'Select the component you want to install from Components and devices.';
+  static const guidanceDragComponent =
+      'Drag it toward a compatible slot; release when the destination is highlighted.';
+  static const guidanceConfirmPlacement =
+      'For tap placement, choose the destination and orientation, then tap Install selected component.';
+  static const guidancePlaceFinish =
+      'Install the remaining required components before continuing.';
+  static const guidanceReadSymptom =
+      'Read the reported symptom and inspect the visible equipment state.';
+  static const guidanceRunDiagnostic =
+      'Tap a diagnostic action that can reveal a new measured fact.';
+  static const guidanceUseFindings =
+      'Read each recorded finding before choosing a correction or retest.';
+  static const guidanceRunTest = 'Tap Run test in the task controls.';
+  static const guidanceReadTest =
+      'Read the displayed measurements and operating status.';
+  static const guidanceInterpretTest =
+      'Enter your interpretation, then tap Record test interpretation.';
+  static const guidanceObserveCondition =
+      'Inspect the visible or reported condition described in this phase.';
+  static const guidanceRecordObservation =
+      'Enter only what you observed, then tap Record observation.';
+  static const guidanceReviewEvidence =
+      'Review the information gathered in earlier phases.';
+  static const guidanceChooseDecision =
+      'Tap the action that best fits the current technical evidence.';
+  static const guidanceReadResult =
+      'Read the recorded test or diagnostic result.';
+  static const guidanceRecordInterpretation =
+      'Explain what it indicates, then tap Record interpretation.';
+  static const guidanceReviewRecordedWork =
+      'Review the recorded actions and any measured results.';
+  static const guidanceRetryEvidence =
+      'If evidence is pending, use Retry pending evidence before confirming.';
+  static const guidanceConfirmEvidence =
+      'Tap Confirm evidence when the review and required checks are ready.';
+  static const guidanceEquipmentOperations =
+      'Use the Equipment operations buttons for the work-order checks in this phase.';
+  static const guidanceIdentificationHint =
+      'Tap a component to inspect or identify it. No dragging is required.';
+  static const guidancePlacementHint =
+      'If a component does not fit, inspect the slot and choose a compatible destination.';
+  static const guidanceConnectionHint =
+      'Check connector and signal types before linking two ports.';
+  static const guidanceConfigurationHint =
+      'Use the work order and field format hints when checking values.';
+  static const guidanceDiagnosticHint =
+      'Use the displayed measurement before choosing the next action.';
+  static const guidanceGeneralHint =
+      'Check the remaining-action status to see what is still required.';
   static const readyToContinueLabel =
       'Phase actions complete. Continue when ready.';
   static const phaseActionsPendingLabel =
@@ -69,6 +386,10 @@ class MissionContentData {
       'Select a part or cable on the left first, then choose a location on the right.';
   static const workspaceSelectDestination =
       'Selected. Tap a destination on the right.';
+  static const workspaceAlreadyPlaced =
+      'This equipment is already installed. Select an unplaced component.';
+  static const workspaceAlreadyConnected =
+      'These ports are already connected. Select another endpoint pair.';
   static const reviewEvidenceLabel = 'Review evidence';
   static const confirmEvidenceLabel = 'Confirm evidence';
   static const reviewReadyLabel =
@@ -103,6 +424,27 @@ class MissionContentData {
   static String moveStep(String label, String direction) =>
       'Move $label $direction';
   static const practiceProgressTitle = 'Virtual practice progression';
+  static const practiceTimerStart = 'Start timed COC practice';
+  static const practiceTimerResume = 'Continue timed COC practice';
+  static const practiceTimerRestart = 'Start a new timed practice session';
+  static const practiceTimerNotStarted =
+      'Start this COC practice session to use its five mission workspaces.';
+  static const practiceTimerProvisional =
+      '60 minutes for all five missions. ByteQuest practice default, not an official TESDA limit.';
+  static const practiceTimerExpired =
+      'Practice time has ended. Your recorded evidence and mission progress are preserved. Start a new practice session from the COC path to continue.';
+  static const practiceTimerClockChanged =
+      'The device clock moved backward. Practice actions are paused. Restore the correct device time and reopen this COC.';
+  static const practiceTimerSaveFailed =
+      'The practice timer could not be saved. Try again before starting.';
+  static const practiceTimerRemainingLabel = 'COC practice time remaining';
+  static const practiceTimerCompactLabel = 'COC practice';
+  static const practiceTimerExpiredShort = 'Practice time ended';
+  static String practiceTimerWarningShort(int minutes) => '$minutes min left';
+  static String practiceEvidencePreserved(int accepted, int pending) =>
+      '$accepted evidence actions saved; $pending waiting to sync.';
+  static String practiceTimerWarning(int minutes) =>
+      '$minutes minutes remain in this COC practice session.';
   static const loadingPracticeProgressLabel = 'Loading practice access';
   static const practiceMissionsPendingLabel =
       'Complete the remaining missions below to unlock the COC quiz.';
@@ -111,6 +453,22 @@ class MissionContentData {
   static const practiceQuizReviewLabel = 'Review COC quiz';
   static String practiceMissionCount(int count) =>
       '$count of 5 practice missions verified';
+  static String practiceCocTitle(String coc) => switch (coc) {
+        'coc1' => 'Install and Configure Computer Systems',
+        'coc2' => 'Set Up Computer Networks',
+        'coc3' => 'Set Up Computer Servers',
+        'coc4' => 'Maintain and Repair Computer Systems',
+        _ => 'Computer Systems Servicing',
+      };
+  static String practiceMissionNumber(int number) => 'Mission $number of 5';
+  static const practiceMissionVerifiedLabel = 'Verified practice';
+  static const practiceMissionAvailableLabel = 'Available for practice';
+  static const practiceMissionSelectedLabel = 'Selected mission';
+  static const practiceMissionVerifiedShortLabel = 'Verified';
+  static const practiceCocCompleteLabel = 'COC complete';
+  static const practiceCocLockedLabel = 'Locked';
+  static const practiceShowMissionDetails = 'Show mission details';
+  static const practiceHideMissionDetails = 'Hide mission details';
   static const practiceProgressUnavailable =
       'Practice access could not be verified. Check your connection and retry.';
   static const practiceLockedMessage =
@@ -176,7 +534,7 @@ class MissionContentData {
   static String incorrectPlacementMessage(
       String reason, String? component, String? destination) {
     if (component == null || destination == null) return reason;
-    return '$component → $destination\n\n$reason';
+    return '$component to $destination\n\n$reason';
   }
 
   static const orientationFeedback =

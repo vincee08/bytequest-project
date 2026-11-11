@@ -7,6 +7,7 @@ import '../../models/mission_model.dart';
 import '../../models/learner_learning_path_model.dart';
 import '../simulation/mission_launcher.dart';
 import '../../widgets/practice_progress_panel.dart';
+import '../../widgets/practice_coc_session_panel.dart';
 import '../../data/mission_content_data.dart';
 
 /// COC Details Screen - Shows missions for a specific COC
@@ -81,38 +82,24 @@ class COCDetailsScreen extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 16),
-                        Row(
+                        Wrap(
+                          runSpacing: 12,
+                          spacing: 20,
                           children: [
-                            Expanded(
-                              child: _buildStatItem(
-                                'Missions',
-                                '${missions.length}',
-                                Icons.assignment_turned_in,
-                              ),
+                            _buildStatItem(
+                              'Missions',
+                              '${missions.length}',
+                              Icons.assignment_turned_in,
                             ),
-                            Container(
-                              width: 1,
-                              height: 40,
-                              color: AppTheme.textLight.withOpacity(0.2),
+                            _buildStatItem(
+                              'Released',
+                              '$releasedCount/${projection.missions.length}',
+                              Icons.trending_up,
                             ),
-                            Expanded(
-                              child: _buildStatItem(
-                                'Released',
-                                '$releasedCount/${projection.missions.length}',
-                                Icons.trending_up,
-                              ),
-                            ),
-                            Container(
-                              width: 1,
-                              height: 40,
-                              color: AppTheme.textLight.withOpacity(0.2),
-                            ),
-                            Expanded(
-                              child: _buildStatItem(
-                                'Status',
-                                projection.lifecycleLabel,
-                                Icons.route_outlined,
-                              ),
+                            _buildStatItem(
+                              'Status',
+                              projection.lifecycleLabel,
+                              Icons.route_outlined,
                             ),
                           ],
                         ),
@@ -123,6 +110,10 @@ class COCDetailsScreen extends StatelessWidget {
                   Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 24),
                       child: PracticeProgressPanel(coc: cocId)),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+                    child: PracticeCocSessionPanel(cocId: cocId),
+                  ),
                   // Missions List
                   for (final mission in missions)
                     Padding(
@@ -140,6 +131,8 @@ class COCDetailsScreen extends StatelessWidget {
 
   Widget _buildStatItem(String label, String value, IconData icon) {
     return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(icon, color: AppTheme.primaryBlue, size: 20),
         const SizedBox(height: 8),

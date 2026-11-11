@@ -1,6 +1,8 @@
 import 'dart:convert';
 
 import 'package:bytequest/data/mission_simulation_definitions.dart';
+import 'package:bytequest/core/theme/app_theme.dart';
+import 'package:bytequest/data/mission_phase_guidance.dart';
 import 'package:bytequest/screens/simulation/components/equipment_workspace.dart';
 import 'package:bytequest/screens/simulation/components/hotspot_widget.dart';
 import 'package:bytequest/screens/simulation/components/scene_connection_painter.dart';
@@ -13,6 +15,29 @@ import 'package:flutter_test/flutter_test.dart';
 import 'support/equipment_practice_driver.dart';
 
 void main() {
+  testWidgets('Show me how outlines the real placement mode', (tester) async {
+    final driver =
+        EquipmentPracticeDriver(MissionSimulationDefinitions.byId('coc1_m2'));
+    await tester.pumpWidget(_host(driver, driver.definition.phases[1],
+        highlightTarget: MissionGuideTarget.place));
+    final chip = tester
+        .widget<ChoiceChip>(find.byKey(const ValueKey('workspace-mode-place')));
+    expect(chip.side, const BorderSide(color: AppTheme.primaryBlue, width: 2),
+        reason: 'The placement chip should carry the guidance outline.');
+    expect(find.byKey(const ValueKey('simulation-objects-button')),
+        findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('COC1 M1 inspection has no placement controls', (tester) async {
+    final definition = MissionSimulationDefinitions.byId('coc1_m1');
+    final driver = EquipmentPracticeDriver(definition);
+    await tester.pumpWidget(_host(driver, definition.phases.first));
+    expect(find.byType(Draggable<String>), findsNothing);
+    expect(find.byType(DragTarget<String>), findsNothing);
+    expect(driver.state.placements, isEmpty);
+  });
+
   testWidgets('canvas drag scrolls to an offscreen destination',
       (tester) async {
     tester.view.physicalSize = const Size(412, 915);
@@ -150,8 +175,8 @@ void main() {
     });
   }
 
-  for (final definition
-      in MissionSimulationDefinitions.all.where((d) => d.cocId != 'coc4')) {
+  for (final definition in MissionSimulationDefinitions.all
+      .where((d) => d.cocId != 'coc4' && d.id != 'coc1_m1')) {
     testWidgets(
         '${definition.id} records a real placement from the main canvas',
         (tester) async {
@@ -179,15 +204,15 @@ void main() {
   testWidgets(
       'incompatible drops are recorded without installing and accepted placements restore',
       (tester) async {
-    final definition = MissionSimulationDefinitions.byId('coc1_m1');
+    final definition = MissionSimulationDefinitions.byId('coc3_m2');
     final driver = EquipmentPracticeDriver(definition);
     final phase = definition.phases.first;
     await tester.pumpWidget(_host(driver, phase));
-    await _drag(tester, 'motherboard', 'cpu_position');
+    await _drag(tester, 'server_node', 'client_node_position');
     expect(driver.actions.single.value['simulation_valid'], false);
     expect(driver.state.placements, isEmpty);
-    await _drag(tester, 'motherboard', 'motherboard_position');
-    expect(driver.state.placements['motherboard'], 'motherboard_position');
+    await _drag(tester, 'server_node', 'server_node_position');
+    expect(driver.state.placements['server_node'], 'server_node_position');
     driver.state = MissionRuntimeState.fromJson(
         jsonDecode(jsonEncode(driver.state.toJson())) as Map<String, dynamic>);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -195,9 +220,9 @@ void main() {
     await tester.pumpAndSettle();
     final installed = tester.widget<HotspotWidget>(find.descendant(
         of: find.byKey(
-            const ValueKey('workspace-destination-motherboard_position')),
+            const ValueKey('workspace-destination-server_node_position')),
         matching: find.byType(HotspotWidget)));
-    expect(installed.object.label, contains('Motherboard'));
+    expect(installed.object.label, contains('Server'));
     expect(installed.state, HotspotVisualState.completed);
     expect(driver.actions.length, 2);
   });
@@ -215,6 +240,38 @@ void main() {
     await tester.pumpAndSettle();
     expect(driver.state.placements['server_node'], 'server_node_position');
     expect(driver.actions.single.value['input_method'], 'tap');
+  });
+
+  testWidgets('completed placement cannot emit a duplicate action',
+      (tester) async {
+    final definition = MissionSimulationDefinitions.byId('coc3_m2');
+    final driver = EquipmentPracticeDriver(definition);
+    await tester.pumpWidget(_host(driver, definition.phases.first));
+    await _drag(tester, 'server_node', 'server_node_position');
+    expect(driver.actions, hasLength(1));
+    await _drag(tester, 'server_node', 'server_node_position');
+    expect(driver.actions, hasLength(1));
+    expect(driver.state.placements['server_node'], 'server_node_position');
+  });
+
+  testWidgets('canvas drop uses transformed targets after zoom and pan',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 650);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final definition = MissionSimulationDefinitions.byId('coc3_m2');
+    final driver = EquipmentPracticeDriver(definition);
+    await tester.pumpWidget(_host(driver, definition.phases.first));
+    final viewer =
+        tester.widget<InteractiveViewer>(find.byType(InteractiveViewer));
+    viewer.transformationController!.value =
+        Matrix4.diagonal3Values(1.25, 1.25, 1)..setTranslationRaw(-20, -12, 0);
+    await tester.pump();
+    await _drag(tester, 'server_node', 'server_node_position');
+    expect(driver.state.placements['server_node'], 'server_node_position');
+    expect(driver.actions.single.value['input_method'], 'drag');
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('assembly requires an explicit orientation after a canvas drop',
@@ -291,10 +348,9 @@ void main() {
     });
   }
 
-  test('all COC1–COC3 work orders require placement evidence before review',
-      () {
-    for (final definition
-        in MissionSimulationDefinitions.all.where((d) => d.cocId != 'coc4')) {
+  test('practical COC1–COC3 work orders require placement before review', () {
+    for (final definition in MissionSimulationDefinitions.all
+        .where((d) => d.cocId != 'coc4' && d.id != 'coc1_m1')) {
       final driver = EquipmentPracticeDriver(definition);
       for (final phase in definition.phases) {
         driver.complete(phase);
@@ -324,7 +380,10 @@ Future<void> _drag(
 }
 
 Widget _host(EquipmentPracticeDriver driver, MissionPhaseDefinition phase,
-        {double textScale = 1, bool enabled = true, double? height}) =>
+        {double textScale = 1,
+        bool enabled = true,
+        double? height,
+        MissionGuideTarget? highlightTarget}) =>
     MaterialApp(
       home: Scaffold(
           body: StatefulBuilder(
@@ -341,6 +400,7 @@ Widget _host(EquipmentPracticeDriver driver, MissionPhaseDefinition phase,
                         hotspotStates: driver.state.hotspotStates,
                         enabled: enabled,
                         saving: !enabled,
+                        highlightTarget: highlightTarget,
                         onCameraChanged: (_, __) {},
                         onAction: (type, target, value) async {
                           driver.act(phase, type, target, value);

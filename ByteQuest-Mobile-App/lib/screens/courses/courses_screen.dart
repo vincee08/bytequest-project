@@ -8,6 +8,7 @@ import 'coc_details_screen.dart';
 import 'package:provider/provider.dart';
 import '../../services/mission_service.dart';
 import '../../data/mission_content_data.dart';
+import '../../widgets/practice_coc_session_panel.dart';
 
 class CoursesScreen extends StatefulWidget {
   const CoursesScreen({super.key});
@@ -188,6 +189,28 @@ class _CoursesScreenState extends State<CoursesScreen> {
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 16),
+          for (final mission in coc.missions) ...[
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(
+                mission.released
+                    ? Icons.check_circle_rounded
+                    : Icons.radio_button_unchecked_rounded,
+                size: 18,
+                color: mission.released
+                    ? AppTheme.accentGreen
+                    : AppTheme.textMedium,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  '${MissionContentData.practiceMissionNumber(mission.number)} · ${mission.title}',
+                  style: AppTheme.bodySmall,
+                ),
+              ),
+            ]),
+            const SizedBox(height: 6),
+          ],
+          const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -227,8 +250,10 @@ class _CoursesScreenState extends State<CoursesScreen> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              Wrap(
+                spacing: 8,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text(
                     'Instructor-released mission results',
@@ -266,6 +291,10 @@ class _CoursesScreenState extends State<CoursesScreen> {
               ),
             ],
           ),
+          if (unlocked) ...[
+            const SizedBox(height: 12),
+            PracticeCocSessionPanel(cocId: coc.code, showStartControl: false),
+          ],
         ],
       ),
     );

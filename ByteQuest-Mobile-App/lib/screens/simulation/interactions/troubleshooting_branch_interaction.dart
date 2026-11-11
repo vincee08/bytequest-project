@@ -75,20 +75,27 @@ class TroubleshootingBranchInteraction extends StatelessWidget {
             style: AppTheme.labelLarge,
           ),
           const SizedBox(height: 8),
-          for (final action in actions) ...[
-            OutlinedButton.icon(
-              onPressed: enabled &&
-                      MissionEquipmentSimulator.conditionsMet(
-                          action['requires'], state)
-                  ? () => _recordDiagnostic(action)
-                  : null,
-              icon: const Icon(Icons.search_rounded),
-              label: Text(
-                action['label'] as String? ?? MissionContentData.inspectLabel,
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
+          Column(
+              key: const ValueKey('diagnostic-actions'),
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (final action in actions) ...[
+                  OutlinedButton.icon(
+                    key: ValueKey('diagnostic-action-${action['id']}'),
+                    onPressed: enabled &&
+                            MissionEquipmentSimulator.conditionsMet(
+                                action['requires'], state)
+                        ? () => _recordDiagnostic(action)
+                        : null,
+                    icon: const Icon(Icons.search_rounded),
+                    label: Text(
+                      action['label'] as String? ??
+                          MissionContentData.inspectLabel,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ]
+              ]),
           if (state.revealedFactIds.any(facts.containsKey)) ...[
             const SizedBox(height: 4),
             Text(
@@ -109,6 +116,7 @@ class TroubleshootingBranchInteraction extends StatelessWidget {
           if (correctionId != null) ...[
             const SizedBox(height: 8),
             FilledButton.icon(
+              key: ValueKey('diagnostic-correction-$correctionId'),
               onPressed:
                   canCorrect ? () => _recordCorrection(correction) : null,
               icon: const Icon(Icons.build_outlined),
@@ -121,6 +129,7 @@ class TroubleshootingBranchInteraction extends StatelessWidget {
           if (retest['id'] is String) ...[
             const SizedBox(height: 8),
             OutlinedButton.icon(
+              key: ValueKey('diagnostic-retest-${retest['id']}'),
               onPressed: canRetest ? () => _recordRetest(retest) : null,
               icon: const Icon(Icons.replay_rounded),
               label: Text(

@@ -217,6 +217,65 @@ void main() {
     expect(actions.single['value'], containsPair('selected_ids', ['c']));
   });
 
+  testWidgets('role identification records one tap and suppresses repeat taps',
+      (tester) async {
+    final actions = <Map<String, dynamic>>[];
+    final phase = _phase(
+      InteractionFamily.select,
+      id: 'coc1_m1_p2_processing',
+      presentation: {
+        'selection_group': 'processing',
+        'single_choice_on_tap': true,
+        'options': [
+          {'id': 'cpu', 'label': 'Processor'},
+          {'id': 'ram', 'label': 'Memory module'},
+        ],
+      },
+    );
+    var state = MissionRuntimeState.initial('coc1_m1');
+
+    Future<void> pump() => tester.pumpWidget(MaterialApp(
+          home: Scaffold(
+            body: MultiSelectInteraction(
+              phase: phase,
+              state: state,
+              onAction: (type, target, value) async {
+                actions.add({'type': type, 'target': target, 'value': value});
+                state = state.copyWith(equipmentState: {
+                  'classifications': {
+                    'processing': value['selected_ids'],
+                  },
+                });
+              },
+            ),
+          ),
+        ));
+
+    await pump();
+    expect(find.byKey(const ValueKey('multi-select-confirm')), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('multi-select-cpu')));
+    await tester.pump();
+    await pump();
+    expect(actions, hasLength(1));
+    expect(actions.single['type'], 'selection_confirmed');
+    expect(actions.single['value'], containsPair('selected_ids', ['cpu']));
+    expect(actions.single['value'], containsPair('input_method', 'tap'));
+    expect(
+        tester
+            .getSemantics(find.byKey(const ValueKey('multi-select-cpu')))
+            .flagsCollection
+            .isSelected,
+        Tristate.isTrue);
+
+    await tester.tap(find.byKey(const ValueKey('multi-select-cpu')));
+    await tester.pump();
+    expect(actions, hasLength(1));
+    await tester.tap(find.byKey(const ValueKey('multi-select-ram')));
+    await tester.pump();
+    expect(actions, hasLength(2));
+    expect(actions.last['value'], containsPair('selected_ids', ['ram']));
+  });
+
   testWidgets('configuration preserves drafts and reconciles resumed state',
       (tester) async {
     final actions = <Map<String, dynamic>>[];

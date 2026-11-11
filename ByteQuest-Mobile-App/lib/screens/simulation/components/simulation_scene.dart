@@ -36,6 +36,8 @@ class SimulationScene extends StatefulWidget {
       objectBuilder;
   final String? interactionHint;
   final bool compactToolbar;
+  final bool highlightObjects;
+  final String? highlightObjectId;
 
   const SimulationScene({
     super.key,
@@ -56,6 +58,8 @@ class SimulationScene extends StatefulWidget {
     this.objectBuilder,
     this.interactionHint,
     this.compactToolbar = false,
+    this.highlightObjects = false,
+    this.highlightObjectId,
   }) : assert(
           scene != null || profile != null,
           'Provide either a runtime scene definition or a legacy profile.',
@@ -77,6 +81,49 @@ class _SimulationSceneState extends State<SimulationScene> {
     _transformationController.value = Matrix4.diagonal3Values(scale, scale, 1)
       ..setTranslationRaw(
           widget.initialCameraOffset.dx, widget.initialCameraOffset.dy, 0);
+    _scheduleFocus();
+  }
+
+  @override
+  void didUpdateWidget(covariant SimulationScene oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.highlightObjectId != widget.highlightObjectId) {
+      _scheduleFocus();
+    }
+  }
+
+  void _scheduleFocus() {
+    if (widget.highlightObjectId == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || widget.highlightObjectId == null) return;
+      // Reset zoom and pan before locating the model object. This keeps the
+      // outline aligned with its hit target in compact and landscape layouts.
+      _transformationController.value = Matrix4.identity();
+      _publishCamera();
+      final target = _findKey(
+          context, ValueKey('simulation-object-${widget.highlightObjectId}'));
+      if (target == null) return;
+      await Scrollable.ensureVisible(target,
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : AppTheme.simulationTransitionDuration,
+          alignment: .35);
+    });
+  }
+
+  static BuildContext? _findKey(BuildContext root, Key key) {
+    BuildContext? result;
+    void visit(Element element) {
+      if (result != null) return;
+      if (element.widget.key == key) {
+        result = element;
+        return;
+      }
+      element.visitChildElements(visit);
+    }
+
+    (root as Element).visitChildElements(visit);
+    return result;
   }
 
   void _publishCamera() {
@@ -154,6 +201,7 @@ class _SimulationSceneState extends State<SimulationScene> {
               backgroundRenderer: widget.backgroundRenderer,
               statusOverlays: widget.statusOverlays,
               objectBuilder: widget.objectBuilder,
+              highlightObjectId: widget.highlightObjectId,
             );
             return Column(
               mainAxisSize:
@@ -164,6 +212,7 @@ class _SimulationSceneState extends State<SimulationScene> {
                   title: resolved.title,
                   interactionHint: widget.interactionHint,
                   compact: widget.compactToolbar,
+                  highlightObjects: widget.highlightObjects,
                   onShowObjects: () => _showObjectPicker(resolved),
                   onFit: _fitView,
                   onZoomOut: () => _zoomBy(.8),
@@ -229,6 +278,7 @@ class _SceneToolbar extends StatelessWidget {
   final String title;
   final String? interactionHint;
   final bool compact;
+  final bool highlightObjects;
   final VoidCallback onShowObjects;
   final VoidCallback onFit;
   final VoidCallback onZoomOut;
@@ -238,6 +288,7 @@ class _SceneToolbar extends StatelessWidget {
     required this.title,
     this.interactionHint,
     this.compact = false,
+    this.highlightObjects = false,
     required this.onShowObjects,
     required this.onFit,
     required this.onZoomOut,
@@ -275,17 +326,28 @@ class _SceneToolbar extends StatelessWidget {
               children: [
                 if (compact)
                   IconButton(
+                    key: const ValueKey('simulation-objects-button'),
                     tooltip: MissionContentData.workspaceObjectsLabel,
+                    style: highlightObjects
+                        ? IconButton.styleFrom(
+                            side: const BorderSide(
+                                color: AppTheme.primaryBlue, width: 2))
+                        : null,
                     onPressed: onShowObjects,
                     icon: const Icon(Icons.list_alt_outlined),
                   )
                 else
                   TextButton.icon(
+                    key: const ValueKey('simulation-objects-button'),
                     onPressed: onShowObjects,
                     icon: const Icon(Icons.list_alt_outlined, size: 20),
                     label: const Text('Objects'),
-                    style:
-                        TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                    style: TextButton.styleFrom(
+                        minimumSize: const Size(48, 48),
+                        side: highlightObjects
+                            ? const BorderSide(
+                                color: AppTheme.primaryBlue, width: 2)
+                            : null),
                   ),
                 IconButton(
                   key: const ValueKey('simulation-zoom-out'),
@@ -344,6 +406,7 @@ class _SceneViewport extends StatelessWidget {
   final List<Widget> statusOverlays;
   final Widget Function(SceneObjectDefinition object, Widget hotspot)?
       objectBuilder;
+  final String? highlightObjectId;
 
   const _SceneViewport({
     required this.resolved,
@@ -360,6 +423,7 @@ class _SceneViewport extends StatelessWidget {
     required this.backgroundRenderer,
     required this.statusOverlays,
     this.objectBuilder,
+    this.highlightObjectId,
   });
 
   @override
@@ -373,7 +437,8 @@ class _SceneViewport extends StatelessWidget {
               viewport.width / baseWorkspace.width,
             );
             final layout = _layoutObjects(resolved.definition.objects,
-                workspaceScale, MediaQuery.textScalerOf(context));
+                workspaceScale, MediaQuery.textScalerOf(context),
+                readableInspectionLabels: objectBuilder == null);
             final logicalWorkspace = layout.workspace;
             final mappedObjects = layout.objects;
             final contentHeight = math.max(
@@ -443,7 +508,16 @@ class _SceneViewport extends StatelessWidget {
                           Positioned.fromRect(
                             key: ValueKey('simulation-object-${object.id}'),
                             rect: mappedObjects[object.id]!,
-                            child: _objectControl(object, workspaceScale),
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                border: object.id == highlightObjectId
+                                    ? Border.all(
+                                        color: AppTheme.primaryBlue, width: 4)
+                                    : null,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: _objectControl(object, workspaceScale),
+                            ),
                           ),
                       ],
                     ),
@@ -653,10 +727,17 @@ Rect _mappedRect(
 /// Existing separated scene coordinates remain intact. A larger canvas scrolls
 /// vertically instead of shrinking touch targets or stacking them at an edge.
 ({Size workspace, Map<String, Rect> objects}) _layoutObjects(
-    List<SceneObjectDefinition> objects, double scale, TextScaler textScaler) {
+    List<SceneObjectDefinition> objects, double scale, TextScaler textScaler,
+    {required bool readableInspectionLabels}) {
   const base = SimulationScene.logicalCanvasSize;
-  final minimumWidth = HotspotWidget.minimumTapExtent / scale;
-  final minimumHeight = math.max(72, textScaler.scale(12) * 2.3 + 36) / scale;
+  // Keep technical names readable on compact phones; the same mapped rects
+  // drive painting and hit testing after a crowded scene reflows.
+  final minimumWidth =
+      (readableInspectionLabels ? 104.0 : HotspotWidget.minimumTapExtent) /
+          scale;
+  final minimumHeight = math.max(
+          readableInspectionLabels ? 92 : 72, textScaler.scale(12) * 2.3 + 36) /
+      scale;
   final mapped = {
     for (final object in objects)
       object.id: _mappedRect(object, base,

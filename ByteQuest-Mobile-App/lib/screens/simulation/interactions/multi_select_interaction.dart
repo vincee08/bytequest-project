@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
+import '../../../data/mission_content_data.dart';
 import '../components/tool_tray.dart';
 import '../runtime/mission_runtime_models.dart';
 import '../templates/authoritative_mission_contract.dart';
@@ -28,6 +29,28 @@ class MultiSelectInteraction extends StatefulWidget {
 
 class _MultiSelectInteractionState extends State<MultiSelectInteraction> {
   late Set<String> _selected = _runtimeSelection(widget.state);
+  bool _submitting = false;
+
+  Future<void> _identify(String id) async {
+    if (_submitting || _selected.contains(id)) return;
+    setState(() {
+      _submitting = true;
+      _selected = {id};
+    });
+    try {
+      await widget.onAction('selection_confirmed', widget.phase.id, {
+        'selected_ids': [id],
+        'input_method': 'tap',
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _submitting = false;
+          _selected = _runtimeSelection(widget.state);
+        });
+      }
+    }
+  }
 
   @override
   void didUpdateWidget(covariant MultiSelectInteraction oldWidget) {
@@ -67,6 +90,8 @@ class _MultiSelectInteractionState extends State<MultiSelectInteraction> {
 
   @override
   Widget build(BuildContext context) {
+    final identifyOnTap =
+        widget.phase.presentation['single_choice_on_tap'] == true;
     final options = interactionItems(
       widget.phase.presentation['options'] ??
           widget.phase.presentation['objects'],
@@ -80,35 +105,51 @@ class _MultiSelectInteractionState extends State<MultiSelectInteraction> {
           text: 'Selection set',
         ),
         const SizedBox(height: 8),
-        for (final option in options) ...[
-          MissionSelectableActionCard(
-            key: ValueKey('multi-select-${option.id}'),
-            label: option.label,
-            selected: _selected.contains(option.id),
-            enabled: widget.enabled,
-            icon: Icons.check_box_outline_blank_rounded,
-            onTap: () => setState(() {
-              if (!_selected.add(option.id)) _selected.remove(option.id);
-            }),
-          ),
-          const SizedBox(height: 8),
-        ],
-        FilledButton.icon(
-          key: const ValueKey('multi-select-confirm'),
-          onPressed: widget.enabled
-              ? () => unawaited(widget.onAction(
-                    'selection_confirmed',
-                    widget.phase.id,
-                    {
-                      'selected_ids': _selected.toList(growable: false),
-                      'input_method': 'button',
-                    },
-                  ))
-              : null,
-          style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-          icon: const Icon(Icons.task_alt_rounded),
-          label: const Text('Confirm selection'),
+        Column(
+          key: const ValueKey('multi-select-options'),
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            for (final option in options) ...[
+              MissionSelectableActionCard(
+                key: ValueKey('multi-select-${option.id}'),
+                label: option.label,
+                selected: _selected.contains(option.id),
+                enabled: widget.enabled && !_submitting,
+                icon: Icons.check_box_outline_blank_rounded,
+                onTap: identifyOnTap
+                    ? () => unawaited(_identify(option.id))
+                    : () => setState(() {
+                          if (!_selected.add(option.id))
+                            _selected.remove(option.id);
+                        }),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ],
         ),
+        if (identifyOnTap)
+          const SimulationFeedback(
+            icon: Icons.touch_app_outlined,
+            text: MissionContentData.identificationTapHint,
+          )
+        else
+          FilledButton.icon(
+            key: const ValueKey('multi-select-confirm'),
+            onPressed: widget.enabled
+                ? () => unawaited(widget.onAction(
+                      'selection_confirmed',
+                      widget.phase.id,
+                      {
+                        'selected_ids': _selected.toList(growable: false),
+                        'input_method': 'button',
+                      },
+                    ))
+                : null,
+            style:
+                FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+            icon: const Icon(Icons.task_alt_rounded),
+            label: const Text('Confirm selection'),
+          ),
       ],
     );
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_theme.dart';
 import '../../../data/mission_content_data.dart';
+import '../runtime/mission_equipment_simulator.dart';
 import '../runtime/mission_runtime_models.dart';
 
 /// Describes recorded actions without determining correctness or competency.
@@ -55,6 +56,23 @@ List<String> missionPendingTasks(
             state.configurationValues[id]?.toString().trim().isNotEmpty ==
             true);
   }
+  final checks = MissionEquipmentSimulator.maps(equipment['completion']);
+  if (checks.isNotEmpty) {
+    final completed = checks
+        .where((check) => MissionEquipmentSimulator.conditionMet(check, state))
+        .length;
+    if (completed < checks.length) {
+      pending.add(MissionContentData.taskCount(
+          MissionContentData.workOrderChecksProgressLabel,
+          completed,
+          checks.length));
+    }
+  }
+  if (family != InteractionFamily.review &&
+      !state.interactionCompletedPhaseIds.contains(phase.id) &&
+      pending.isEmpty) {
+    pending.add(MissionContentData.guidanceActionPending);
+  }
   return pending;
 }
 
@@ -75,21 +93,26 @@ class MissionActionBar extends StatelessWidget {
       required this.label,
       required this.onContinue,
       this.saving = false,
-      this.complete = false});
+      this.complete = false,
+      this.highlighted = false});
 
   final String status;
   final String label;
   final VoidCallback? onContinue;
   final bool saving;
   final bool complete;
+  final bool highlighted;
 
   @override
   Widget build(BuildContext context) => Material(
         color: AppTheme.cardWhite,
         child: Container(
           key: const ValueKey('mission-action-bar'),
-          decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: AppTheme.borderMedium))),
+          decoration: BoxDecoration(
+              border: highlighted
+                  ? Border.all(color: AppTheme.primaryBlue, width: 2)
+                  : const Border(
+                      top: BorderSide(color: AppTheme.borderMedium))),
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
           child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -122,6 +145,9 @@ class MissionActionBar extends StatelessWidget {
                 else
                   Semantics(
                       liveRegion: true,
+                      label: saving
+                          ? MissionContentData.workspaceSavingLabel
+                          : status,
                       child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -138,6 +164,8 @@ class MissionActionBar extends StatelessWidget {
                                         ? MissionContentData
                                             .workspaceSavingLabel
                                         : status,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
                                     style: AppTheme.bodySmall)),
                           ])),
                 const SizedBox(height: 8),
