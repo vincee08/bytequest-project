@@ -158,8 +158,8 @@ export default async function ClassDetailPage({
           <TabsContent id="learners" value="learners" className="space-y-5">
             {classroom.status === "active" ? (
               <section className="rounded-xl border border-border bg-card p-5">
-                <h2 className="font-semibold">Enroll a registered learner</h2>
-                <p className="mb-4 mt-1 text-sm text-muted-foreground">Enrollment uses the learner&apos;s existing Supabase account and preserves class history.</p>
+                <h2 className="font-semibold">Enroll a learner</h2>
+                <p className="mb-4 mt-1 text-sm text-muted-foreground">Find a registered learner by name or email, then select their profile. Previous enrollment records are retained.</p>
                 <EnrollLearnerForm classId={id} />
               </section>
             ) : null}

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { z } from "zod";
 import { Ban, Loader2, Settings2, UserMinus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -19,62 +18,7 @@ import {
 } from "@/components/ui/select";
 import { createClient } from "@/lib/supabase/client";
 
-export function EnrollLearnerForm({ classId }: { classId: string }) {
-  const router = useRouter();
-  const [email, setEmail] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    const parsed = z.string().trim().email().safeParse(email);
-    if (!parsed.success) {
-      toast.error("Enter the learner's registered email address.");
-      return;
-    }
-
-    setSubmitting(true);
-    const { error } = await createClient().rpc("enroll_learner_by_email", {
-      p_class_id: classId,
-      p_email: parsed.data,
-    });
-    if (error) {
-      const message =
-        error.message.includes("ACTIVE_LEARNER_NOT_FOUND")
-          ? "No active learner account matches that email."
-          : error.message.includes("LEARNER_ALREADY_ENROLLED")
-            ? "That learner is already enrolled in this class."
-            : error.message;
-      toast.error(message);
-      setSubmitting(false);
-      return;
-    }
-
-    setEmail("");
-    toast.success("Learner enrolled.");
-    router.refresh();
-    setSubmitting(false);
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
-      <div className="flex-1 space-y-2">
-        <Label htmlFor="learner-email">Learner email</Label>
-        <Input
-          id="learner-email"
-          type="email"
-          value={email}
-          onChange={(event) => setEmail(event.target.value)}
-          placeholder="learner@school.edu.ph"
-          required
-        />
-      </div>
-      <Button type="submit" disabled={submitting} className="min-h-10">
-        {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-        Enroll learner
-      </Button>
-    </form>
-  );
-}
+export { EnrollLearnerForm } from "./EnrollLearnerForm";
 
 export function DeactivateMembershipForm({
   membershipId,

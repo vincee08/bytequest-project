@@ -226,7 +226,7 @@ if (command === "setup") {
       "quiz-preview-accounts.json",
     );
     args = ["scripts/quiz-workflow-api-tests.mjs"];
-  } else if (command === "resource-tests") {
+  } else if (["resource-tests", "enrollment-tests"].includes(command)) {
     if (!env.BQ_PLAYWRIGHT_MODULE && process.platform === "win32") {
       const cache = path.join(process.env.LOCALAPPDATA, "npm-cache", "_npx");
       for (const entry of fs.readdirSync(cache)) {
@@ -243,7 +243,7 @@ if (command === "setup") {
         }
       }
     }
-    args = ["scripts/resource-ai-workflow-tests.mjs", ...process.argv.slice(3)];
+    args = [command === "enrollment-tests" ? "scripts/learner-enrollment-tests.mjs" : "scripts/resource-ai-workflow-tests.mjs", ...process.argv.slice(3)];
   } else if (command === "owner-resources") {
     args = ["scripts/quiz-resource-owner-setup.mjs"];
   } else if (command === "end-qa-sessions") {
