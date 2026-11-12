@@ -1,6 +1,7 @@
 import "server-only";
 
-export const OPENROUTER_CHAT_COMPLETIONS_URL = "https://openrouter.ai/api/v1/chat/completions";
+export const OPENROUTER_CHAT_COMPLETIONS_URL =
+  "https://openrouter.ai/api/v1/chat/completions";
 export const DEFAULT_OPENROUTER_MODEL = "openrouter/free";
 export const DEFAULT_OPENROUTER_TIMEOUT_MS = 90_000;
 const MIN_OPENROUTER_TIMEOUT_MS = 10_000;
@@ -10,7 +11,7 @@ export interface QuizAiConfiguration {
   provider: "openrouter";
   apiKey: string;
   model: string;
-  endpoint: typeof OPENROUTER_CHAT_COMPLETIONS_URL;
+  endpoint: string;
   timeoutMs: number;
 }
 
@@ -34,6 +35,24 @@ function getOpenRouterTimeoutMs() {
 }
 
 export function getQuizAiConfiguration(): QuizAiConfiguration {
+  // Only the fixed isolated QA backend can use the fixed loopback simulator.
+  // Never accept a caller-supplied provider URL or forward a real key to it.
+  if (process.env.BQ_AI_TEST_ENDPOINT) {
+    if (
+      process.env.BQ_ISOLATED_QA !== "BQQuizQA20261112" ||
+      process.env.NEXT_PUBLIC_SUPABASE_URL !== "http://127.0.0.1:58921" ||
+      process.env.BQ_AI_TEST_ENDPOINT !==
+        "http://127.0.0.1:3007/chat/completions"
+    )
+      throw new QuizAiConfigurationError();
+    return {
+      provider: "openrouter",
+      apiKey: "isolated-simulator-only",
+      model: "qa-simulator",
+      endpoint: process.env.BQ_AI_TEST_ENDPOINT,
+      timeoutMs: 10_000,
+    };
+  }
   const apiKey = process.env.OPENROUTER_API_KEY?.trim();
   if (!apiKey) throw new QuizAiConfigurationError();
 

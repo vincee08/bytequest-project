@@ -79,6 +79,39 @@ void main() {
     expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed, isNull);
   });
 
+  testWidgets('manual and AI provenance use identical learner question controls',
+      (tester) async {
+    for (final origin in ['instructor_authored', 'ai_generated_draft']) {
+      final attempt = LearnerQuizAttempt.fromJson({
+        'attempt_id': 'same-attempt',
+        'started_at': '2026-11-12T00:00:00Z',
+        'quiz': {'assignment_id': 'assignment', 'title': 'Networking review'},
+        'questions': [
+          {
+            'id': 'item',
+            'type': 'multiple_choice',
+            'prompt': 'Choose the routing device.',
+            'options': ['Router', 'Switch'],
+            'origin': origin,
+            'provider': 'private-provider',
+          }
+        ],
+      });
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pumpWidget(MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: QuizTakingScreen(attempt: attempt),
+      ));
+      expect(find.text('Choose the routing device.'), findsOneWidget);
+      expect(find.text('Router'), findsOneWidget);
+      expect(find.text('Switch'), findsOneWidget);
+      expect(find.text('Question 1 of 1'), findsOneWidget);
+      expect(find.textContaining('AI-generated'), findsNothing);
+      expect(find.textContaining('private-provider'), findsNothing);
+      expect(tester.takeException(), isNull);
+    }
+  });
+
   for (final fixture in <({String type, List<String> options, String label})>[
     (
       type: 'multiple_choice',

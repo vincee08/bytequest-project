@@ -890,6 +890,7 @@ export function QuizAuthoringWorkspace({
           <section className={panel}>
             {isDraft && version ? (
               <AiQuizPanel
+                classes={classes}
                 version={version}
                 grounding={grounding}
                 topic={quiz.topic}

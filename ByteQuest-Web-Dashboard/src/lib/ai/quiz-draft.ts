@@ -42,7 +42,12 @@ export interface QuizGenerationGrounding {
   coc: { id: string; code: string; title: string };
   competency: { id: string; code: string; title: string; sourceTrace: string };
   module: { id: string; title: string; version: number; sourceTrace: unknown };
-  activity: { id: string; title: string; version: number; instructions: string | null };
+  activity: {
+    id: string;
+    title: string;
+    version: number;
+    instructions: string | null;
+  };
   mission: {
     id: string;
     number: number;
@@ -68,21 +73,51 @@ export interface QuizDraftRequest {
   difficulty: "foundation" | "intermediate" | "advanced";
   itemCount: number;
   itemTypes: QuizItemType[];
-  grounding: QuizGenerationGrounding;
+  grounding?: QuizGenerationGrounding;
+  resource?: { title: string; text: string };
+}
+
+export function quizDraftAlignment(request: QuizDraftRequest) {
+  if (request.resource && !request.grounding)
+    return {
+      competency: "Supplementary learning",
+      coc: "Supplementary",
+      learningOutcome: request.topic,
+    };
+  if (!request.grounding || request.resource)
+    throw new Error("AI_SOURCE_REQUIRED");
+  return {
+    competency: request.grounding.competency.title,
+    coc: `${request.grounding.coc.code} - ${request.grounding.coc.title}`,
+    learningOutcome: request.grounding.mission.objective,
+  };
 }
 
 function normalize(value: string) {
   return value.trim().replace(/\s+/g, " ");
 }
 
-function validateQuestionContract(question: QuizDraftQuestion, request: QuizDraftRequest) {
+function validateQuestionContract(
+  question: QuizDraftQuestion,
+  request: QuizDraftRequest,
+) {
   if (!request.itemTypes.includes(question.type)) return false;
-  if (normalize(question.competency) !== normalize(request.grounding.competency.title)) return false;
-  if (normalize(question.coc) !== normalize(`${request.grounding.coc.code} - ${request.grounding.coc.title}`)) return false;
-  if (normalize(question.learningOutcome) !== normalize(request.grounding.mission.objective)) return false;
+  const alignment = quizDraftAlignment(request);
+  if (normalize(question.competency) !== normalize(alignment.competency))
+    return false;
+  if (normalize(question.coc) !== normalize(alignment.coc)) return false;
+  if (
+    normalize(question.learningOutcome) !== normalize(alignment.learningOutcome)
+  )
+    return false;
 
-  if (question.type === "multiple_choice" || question.type === "scenario_based") {
-    const uniqueChoices = new Set(question.choices.map((choice) => normalize(choice).toLocaleLowerCase()));
+  if (
+    question.type === "multiple_choice" ||
+    question.type === "scenario_based"
+  ) {
+    const uniqueChoices = new Set(
+      question.choices.map((choice) => normalize(choice).toLocaleLowerCase()),
+    );
     return (
       question.choices.length >= 2 &&
       uniqueChoices.size === question.choices.length &&
@@ -91,13 +126,19 @@ function validateQuestionContract(question: QuizDraftQuestion, request: QuizDraf
   }
 
   if (question.type === "true_false") {
-    return question.choices.length === 0 && ["true", "false"].includes(question.correctAnswer.toLocaleLowerCase());
+    return (
+      question.choices.length === 0 &&
+      ["true", "false"].includes(question.correctAnswer.toLocaleLowerCase())
+    );
   }
 
   return question.choices.length === 0;
 }
 
-export function normalizeAndValidateQuizDraft(payload: unknown, request: QuizDraftRequest): QuizDraftItem[] {
+export function normalizeAndValidateQuizDraft(
+  payload: unknown,
+  request: QuizDraftRequest,
+): QuizDraftItem[] {
   const parsed = quizDraftResponseSchema.safeParse(payload);
   if (!parsed.success || parsed.data.questions.length !== request.itemCount) {
     throw new Error("AI_DRAFT_CONTRACT_INVALID");
@@ -105,7 +146,8 @@ export function normalizeAndValidateQuizDraft(payload: unknown, request: QuizDra
 
   const prompts = new Set<string>();
   for (const question of parsed.data.questions) {
-    if (!validateQuestionContract(question, request)) throw new Error("AI_DRAFT_QUESTION_INVALID");
+    if (!validateQuestionContract(question, request))
+      throw new Error("AI_DRAFT_QUESTION_INVALID");
     const key = normalize(question.question).toLocaleLowerCase();
     if (prompts.has(key)) throw new Error("AI_DRAFT_DUPLICATE_QUESTION");
     prompts.add(key);
@@ -116,7 +158,9 @@ export function normalizeAndValidateQuizDraft(payload: unknown, request: QuizDra
     prompt: normalize(question.question),
     options: question.choices.map(normalize),
     correct_answer:
-      question.type === "true_false" ? question.correctAnswer.toLocaleLowerCase() : normalize(question.correctAnswer),
+      question.type === "true_false"
+        ? question.correctAnswer.toLocaleLowerCase()
+        : normalize(question.correctAnswer),
     explanation: normalize(question.explanation),
   }));
 }

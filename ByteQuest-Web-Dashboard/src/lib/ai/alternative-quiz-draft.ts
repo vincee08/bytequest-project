@@ -3,14 +3,22 @@ export function buildAlternativeQuizDraftRequest(input: {
   activityVersionId: string;
   topic: string;
   difficulty: "foundation" | "intermediate" | "advanced";
-  itemType: "multiple_choice" | "true_false" | "identification" | "scenario_based";
+  itemType:
+    | "multiple_choice"
+    | "true_false"
+    | "identification"
+    | "scenario_based";
   originalPrompt: string;
   instructorContext: string;
+  sourceMode?: "approved_coc" | "class_resource";
 }) {
   const alternativeContext = [
     input.instructorContext.trim().slice(0, 900),
-    `Generate a distinct alternative to this existing draft question, grounded only in the approved selected activity: ${input.originalPrompt.slice(0, 900)}`,
-  ].filter(Boolean).join("\n").slice(0, 2000);
+    `Generate a distinct alternative to this existing draft question, grounded only in the ${input.sourceMode === "class_resource" ? "selected class resource" : "approved selected activity"}: ${input.originalPrompt.slice(0, 900)}`,
+  ]
+    .filter(Boolean)
+    .join("\n")
+    .slice(0, 2000);
 
   return {
     quizVersionId: input.quizVersionId,

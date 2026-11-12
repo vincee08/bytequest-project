@@ -2479,6 +2479,12 @@ export type Database = {
           },
         ]
       }
+      resource_upload_jobs: {
+        Row: { id: string; class_id: string; instructor_id: string; storage_path: string; state: string; updated_at: string }
+        Insert: { id: string; class_id: string; instructor_id: string; storage_path: string; state?: string; updated_at?: string }
+        Update: { state?: string; updated_at?: string }
+        Relationships: []
+      }
       support_concerns: {
         Row: {
           class_id: string | null

@@ -9,6 +9,7 @@ if (!/^supabase-ByteQuest_Backend_QA_[\w-]+-database-[\w-]+$/.test(container ?? 
 }
 const migration = fs.readFileSync('supabase/migrations/20261112111620_quiz_publishing_and_single_attempt.sql', 'utf8');
 const body = migration.replace(/^begin;\s*$/m, '').replace(/^commit;\s*$/m, '');
+const resourceMigration = fs.readFileSync('supabase/migrations/20261112151434_resource_quiz_sources_and_request_safety.sql', 'utf8').replace(/^begin;\s*$/m, '').replace(/^commit;\s*$/m, '');
 const fixtures = `
 create temp table qa_staff as select gen_random_uuid() id,role from (values('instructor'),('instructor'),('admin')) s(role);
 insert into auth.users(id,instance_id,aud,role,email,encrypted_password,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
@@ -16,10 +17,10 @@ select id,'00000000-0000-0000-0000-000000000000'::uuid,'authenticated','authenti
 '{"provider":"email","providers":["email"]}'::jsonb,'{"full_name":"Isolated quiz QA"}'::jsonb,now(),now() from qa_staff;
 update public.profiles p set role=s.role::public.user_role,status='active' from qa_staff s where p.user_id=s.id;
 `;
-const tests = ['quiz_single_attempt_rollback.sql', 'learner_quiz_lifecycle_rollback.sql', 'foundation_lifecycle_rollback.sql'];
+const tests = ['quiz_single_attempt_rollback.sql', 'learner_quiz_lifecycle_rollback.sql', 'foundation_lifecycle_rollback.sql', 'resource_ai_workflow_rollback.sql'];
 for (const name of tests) {
   const test = fs.readFileSync(`supabase/tests/${name}`, 'utf8').replace(/^begin;\s*$/m, '').replace(/^rollback;\s*$/m, '');
-  const result = spawnSync('docker', ['exec', '-i', container, 'psql', '-U', 'supabase_admin', '-d', database, '-v', 'ON_ERROR_STOP=1', '-q'], { input: `begin;\n${fixtures}\n${body}\n${test}\nrollback;`, encoding: 'utf8', maxBuffer: 5_000_000 });
+  const result = spawnSync('docker', ['exec', '-i', container, 'psql', '-U', 'supabase_admin', '-d', database, '-v', 'ON_ERROR_STOP=1', '-q'], { input: `begin;\n${fixtures}\n${body}\n${resourceMigration}\n${test}\nrollback;`, encoding: 'utf8', maxBuffer: 5_000_000 });
   if (result.status !== 0) { process.stdout.write(result.stdout); process.stderr.write(result.stderr); process.exit(result.status ?? 1); }
   console.log(`PASS ${name} (migration and fixtures rolled back)`);
 }

@@ -8,6 +8,57 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  isAllowedLearningResourceMime,
+  MAX_LEARNING_RESOURCE_BYTES,
+} from "@/lib/resources/policy";
+
+function uploadWithProgress(
+  url: string,
+  body: FormData,
+  onProgress: (value: number) => void,
+) {
+  return new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.timeout = 180_000;
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable)
+        onProgress(Math.round((event.loaded / event.total) * 100));
+    };
+    xhr.onerror = () =>
+      reject(
+        new Error(
+          "The connection was interrupted. Retry the same file; duplicate copies are prevented.",
+        ),
+      );
+    xhr.ontimeout = () =>
+      reject(
+        new Error(
+          "Upload confirmation timed out. Retry the same file and details to check its status.",
+        ),
+      );
+    xhr.onload = () => {
+      let payload: { error?: string } = {};
+      try {
+        payload = JSON.parse(xhr.responseText);
+      } catch {
+        /* A proxy may return HTML. */
+      }
+      if (xhr.status >= 200 && xhr.status < 300) resolve();
+      else
+        reject(
+          new Error(
+            payload.error ||
+              (xhr.status === 413
+                ? "The file must be no more than 50 MB."
+                : "The upload service is unavailable. Try again shortly."),
+          ),
+        );
+    };
+    xhr.send(body);
+  });
+}
 
 export interface LearningResourceItem {
   id: string;
@@ -41,38 +92,63 @@ export function LearningResourceManager({
   const [description, setDescription] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const uploadingRef = useRef(false);
+  const [progress, setProgress] = useState(0);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
+
+  function validateFile(value: File | null) {
+    if (!value) return "Choose a file to upload.";
+    if (!isAllowedLearningResourceMime(value.type))
+      return "Choose PDF, JPEG, PNG, WebP, MP4, or WebM.";
+    if (value.size < 1 || value.size > MAX_LEARNING_RESOURCE_BYTES)
+      return "Choose a nonempty file no larger than 50 MB.";
+    return null;
+  }
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [archivingId, setArchivingId] = useState<string | null>(null);
   const [deleteReason, setDeleteReason] = useState("");
 
   const upload = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (uploadingRef.current) return;
+    setUploadSuccess(false);
+    const validation = validateFile(file);
+    setUploadError(validation);
+    if (validation) return;
     if (!file || title.trim().length < 2) {
       toast.error("Choose an allowed file and provide a clear title.");
       return;
     }
 
+    uploadingRef.current = true;
     setUploading(true);
+    setProgress(0);
     try {
       const body = new FormData();
       body.set("file", file);
       body.set("title", title.trim());
       body.set("description", description.trim());
-      const response = await fetch(`/api/classes/${classId}/resources`, { method: "POST", body });
-      const payload = (await response.json().catch(() => ({}))) as { error?: string };
-      if (!response.ok) {
-        throw new Error(payload.error || "Resource upload failed.");
-      }
+      await uploadWithProgress(
+        `/api/classes/${classId}/resources`,
+        body,
+        setProgress,
+      );
 
       setTitle("");
       setDescription("");
       setFile(null);
       if (fileInput.current) fileInput.current.value = "";
       toast.success("Learning resource uploaded and class access applied.");
+      setUploadSuccess(true);
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Resource upload failed.");
+      const message =
+        error instanceof Error ? error.message : "Resource upload failed.";
+      setUploadError(message);
+      toast.error(message);
     } finally {
+      uploadingRef.current = false;
       setUploading(false);
     }
   };
@@ -84,12 +160,17 @@ export function LearningResourceManager({
     }
     setArchivingId(resourceId);
     try {
-      const response = await fetch(`/api/classes/${classId}/resources/${resourceId}`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: deleteReason.trim() }),
-      });
-      const payload = (await response.json().catch(() => ({}))) as { error?: string };
+      const response = await fetch(
+        `/api/classes/${classId}/resources/${resourceId}`,
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: deleteReason.trim() }),
+        },
+      );
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
       if (!response.ok) {
         throw new Error(payload.error || "Resource archive failed.");
       }
@@ -98,7 +179,9 @@ export function LearningResourceManager({
       setDeleteReason("");
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Resource archive failed.");
+      toast.error(
+        error instanceof Error ? error.message : "Resource archive failed.",
+      );
     } finally {
       setArchivingId(null);
     }
@@ -107,23 +190,94 @@ export function LearningResourceManager({
   return (
     <div className="space-y-5">
       {classActive ? (
-        <form onSubmit={upload} className="grid gap-4 rounded-xl border border-border bg-card p-5 md:grid-cols-2">
+        <form
+          onSubmit={upload}
+          className="grid gap-4 rounded-xl border border-border bg-card p-5 md:grid-cols-2"
+        >
           <div className="space-y-2">
             <Label htmlFor="resource-title">Resource title</Label>
-            <Input id="resource-title" value={title} onChange={(event) => setTitle(event.target.value)} minLength={2} maxLength={300} required />
+            <Input
+              disabled={uploading}
+              id="resource-title"
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              minLength={2}
+              maxLength={300}
+              required
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="resource-file">File</Label>
-            <Input ref={fileInput} id="resource-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.mp4,.webm" onChange={(event) => setFile(event.target.files?.[0] ?? null)} required />
-            <p className="text-xs leading-relaxed text-muted-foreground">PDF, JPEG, PNG, WebP, MP4, or WebM. Maximum 50 MB.</p>
+            <Input
+              disabled={uploading}
+              ref={fileInput}
+              id="resource-file"
+              type="file"
+              accept=".pdf,.jpg,.jpeg,.png,.webp,.mp4,.webm"
+              aria-describedby="resource-file-help resource-upload-feedback"
+              aria-invalid={Boolean(uploadError)}
+              onChange={(event) => {
+                const selected = event.target.files?.[0] ?? null;
+                setFile(selected);
+                setUploadError(validateFile(selected));
+                setUploadSuccess(false);
+              }}
+              required
+            />
+            <p
+              id="resource-file-help"
+              className="text-xs leading-relaxed text-muted-foreground"
+            >
+              PDF, JPEG, PNG, WebP, MP4, or WebM. Maximum 50 MB. AI reading
+              supports text PDFs up to 10 MB / 50 pages.
+            </p>
           </div>
           <div className="space-y-2 md:col-span-2">
             <Label htmlFor="resource-description">Description (optional)</Label>
-            <Textarea id="resource-description" value={description} onChange={(event) => setDescription(event.target.value)} maxLength={2000} rows={3} />
+            <Textarea
+              disabled={uploading}
+              id="resource-description"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              maxLength={2000}
+              rows={2}
+            />
           </div>
-          <div className="md:col-span-2">
+          <div className="space-y-3 md:col-span-2">
+            <div id="resource-upload-feedback">
+              {uploadError ? (
+                <p role="alert" className="text-sm text-destructive">
+                  {uploadError}
+                </p>
+              ) : null}
+              {uploadSuccess ? (
+                <p role="status" className="text-sm text-foreground">
+                  Resource saved. It is available to this class and in My Class
+                  Resource in the Quiz AI Assistant.
+                </p>
+              ) : null}
+              {uploading ? (
+                <div className="space-y-2">
+                  <progress
+                    aria-label="Resource upload progress"
+                    className="h-2 w-full accent-primary"
+                    value={progress}
+                    max={100}
+                  />
+                  <p role="status" className="text-sm text-muted-foreground">
+                    {progress < 100
+                      ? `Uploading ${progress}%`
+                      : "File sent. Saving securely to private Storage…"}
+                  </p>
+                </div>
+              ) : null}
+            </div>
             <Button type="submit" disabled={uploading}>
-              {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileUp className="mr-2 h-4 w-4" />}
+              {uploading ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <FileUp className="mr-2 h-4 w-4" />
+              )}
               {uploading ? "Uploading securely…" : "Upload resource"}
             </Button>
           </div>
@@ -133,7 +287,9 @@ export function LearningResourceManager({
       <section className="overflow-hidden rounded-xl border border-border bg-card">
         <div className="border-b border-border px-5 py-4">
           <h2 className="font-semibold">Class learning resources</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Only active class members can open active files.</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Only active class members can open active files.
+          </p>
         </div>
         {resources.length ? (
           <div className="divide-y divide-border">
@@ -142,34 +298,106 @@ export function LearningResourceManager({
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
                     <p className="font-medium">{resource.title}</p>
-                    {resource.description ? <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{resource.description}</p> : null}
-                    <p className="mt-1 text-xs text-muted-foreground">{resource.mime_type ?? "Unknown type"} · {readableSize(resource.size_bytes)} · {new Intl.DateTimeFormat("en-PH", { dateStyle: "medium" }).format(new Date(resource.created_at))}</p>
-                    {resource.deletion_reason ? <p className="mt-1 text-xs text-muted-foreground">Archived reason: {resource.deletion_reason}</p> : null}
+                    {resource.description ? (
+                      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                        {resource.description}
+                      </p>
+                    ) : null}
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {resource.mime_type ?? "Unknown type"} ·{" "}
+                      {readableSize(resource.size_bytes)} ·{" "}
+                      {new Intl.DateTimeFormat("en-PH", {
+                        dateStyle: "medium",
+                      }).format(new Date(resource.created_at))}
+                    </p>
+                    {resource.deletion_reason ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Archived reason: {resource.deletion_reason}
+                      </p>
+                    ) : null}
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center gap-2">
                     {resource.status === "active" ? (
                       <>
                         <Button asChild size="sm" variant="outline">
-                          <a href={`/api/classes/${classId}/resources/${resource.id}`} target="_blank" rel="noreferrer"><Download className="mr-2 h-4 w-4" />Open</a>
+                          <a
+                            href={`/api/classes/${classId}/resources/${resource.id}`}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <Download className="mr-2 h-4 w-4" />
+                            Open
+                          </a>
                         </Button>
-                        <Button type="button" size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setDeletingId(resource.id)}><Trash2 className="mr-2 h-4 w-4" />Archive</Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => setDeletingId(resource.id)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Archive
+                        </Button>
                       </>
                     ) : (
-                      <span className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground">Archived</span>
+                      <span className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground">
+                        Archived
+                      </span>
                     )}
                   </div>
                 </div>
                 {deletingId === resource.id ? (
                   <div className="mt-4 flex flex-col gap-3 rounded-lg bg-muted/50 p-3 sm:flex-row sm:items-end">
-                    <div className="flex-1 space-y-2"><Label htmlFor={`resource-delete-${resource.id}`}>Required archive reason</Label><Input id={`resource-delete-${resource.id}`} value={deleteReason} onChange={(event) => setDeleteReason(event.target.value)} minLength={5} maxLength={1000} /></div>
-                    <div className="flex gap-2"><Button type="button" variant="ghost" size="sm" disabled={archivingId === resource.id} onClick={() => { setDeletingId(null); setDeleteReason(""); }}>Cancel</Button><Button type="button" variant="destructive" size="sm" disabled={archivingId === resource.id} onClick={() => archive(resource.id)}>{archivingId === resource.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Confirm archive</Button></div>
+                    <div className="flex-1 space-y-2">
+                      <Label htmlFor={`resource-delete-${resource.id}`}>
+                        Required archive reason
+                      </Label>
+                      <Input
+                        id={`resource-delete-${resource.id}`}
+                        value={deleteReason}
+                        onChange={(event) =>
+                          setDeleteReason(event.target.value)
+                        }
+                        minLength={5}
+                        maxLength={1000}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={archivingId === resource.id}
+                        onClick={() => {
+                          setDeletingId(null);
+                          setDeleteReason("");
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        disabled={archivingId === resource.id}
+                        onClick={() => archive(resource.id)}
+                      >
+                        {archivingId === resource.id ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : null}
+                        Confirm archive
+                      </Button>
+                    </div>
                   </div>
                 ) : null}
               </div>
             ))}
           </div>
         ) : (
-          <p className="px-5 py-10 text-center text-sm text-muted-foreground">No learning resource has been uploaded for this class.</p>
+          <p className="px-5 py-10 text-center text-sm text-muted-foreground">
+            No learning resource has been uploaded for this class.
+          </p>
         )}
       </section>
     </div>
