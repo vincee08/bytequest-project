@@ -15,6 +15,30 @@ import 'package:flutter_test/flutter_test.dart';
 import 'support/equipment_practice_driver.dart';
 
 void main() {
+  testWidgets(
+      'feedback stays outside the canvas and expires without covering targets',
+      (tester) async {
+    final driver =
+        EquipmentPracticeDriver(MissionSimulationDefinitions.byId('coc1_m2'));
+    const feedback =
+        'Inspect the socket alignment before seating the component.';
+    await tester.pumpWidget(
+        _host(driver, driver.definition.phases[1], feedback: feedback));
+    await tester.pump();
+    final canvas = tester
+        .getRect(find.byKey(const ValueKey('simulation-workspace-scroll')));
+    final message = tester.getRect(find.text(feedback));
+    expect(message.top, greaterThanOrEqualTo(canvas.bottom));
+    expect(find.byKey(const ValueKey('workspace-source-motherboard')),
+        findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpAndSettle();
+    expect(find.text(feedback), findsNothing);
+    expect(find.byKey(const ValueKey('workspace-source-motherboard')),
+        findsOneWidget);
+    expect(driver.actions, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('Show me how outlines the real placement mode', (tester) async {
     final driver =
         EquipmentPracticeDriver(MissionSimulationDefinitions.byId('coc1_m2'));
@@ -382,6 +406,7 @@ Future<void> _drag(
 Widget _host(EquipmentPracticeDriver driver, MissionPhaseDefinition phase,
         {double textScale = 1,
         bool enabled = true,
+        String? feedback,
         double? height,
         MissionGuideTarget? highlightTarget}) =>
     MaterialApp(
@@ -400,6 +425,7 @@ Widget _host(EquipmentPracticeDriver driver, MissionPhaseDefinition phase,
                         hotspotStates: driver.state.hotspotStates,
                         enabled: enabled,
                         saving: !enabled,
+                        feedback: feedback,
                         highlightTarget: highlightTarget,
                         onCameraChanged: (_, __) {},
                         onAction: (type, target, value) async {

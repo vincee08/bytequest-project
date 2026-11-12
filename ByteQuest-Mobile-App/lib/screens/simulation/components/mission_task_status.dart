@@ -94,6 +94,7 @@ class MissionActionBar extends StatelessWidget {
       required this.onContinue,
       this.saving = false,
       this.complete = false,
+      this.progressLabel,
       this.highlighted = false});
 
   final String status;
@@ -102,6 +103,7 @@ class MissionActionBar extends StatelessWidget {
   final bool saving;
   final bool complete;
   final bool highlighted;
+  final String? progressLabel;
 
   @override
   Widget build(BuildContext context) => Material(
@@ -113,73 +115,64 @@ class MissionActionBar extends StatelessWidget {
                   ? Border.all(color: AppTheme.primaryBlue, width: 2)
                   : const Border(
                       top: BorderSide(color: AppTheme.borderMedium))),
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-          child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                if (MediaQuery.textScalerOf(context).scale(1) > 1.4)
-                  OutlinedButton.icon(
-                      onPressed: () => showDialog<void>(
-                          context: context,
-                          builder: (dialogContext) => AlertDialog(
-                                scrollable: true,
-                                title: Text(complete || onContinue != null
-                                    ? MissionContentData.phaseCompleteLabel
-                                    : MissionContentData.taskStatusLabel),
-                                content: Text(status),
-                                actions: [
-                                  TextButton(
-                                      onPressed: () =>
-                                          Navigator.pop(dialogContext),
-                                      child: const Text(
-                                          MissionContentData.backLabel))
-                                ],
-                              )),
-                      icon: const Icon(Icons.checklist_rounded),
-                      label: Text(saving
-                          ? MissionContentData.workspaceSavingLabel
-                          : complete || onContinue != null
-                              ? MissionContentData.phaseCompleteLabel
-                              : MissionContentData.taskStatusLabel))
-                else
-                  Semantics(
-                      liveRegion: true,
-                      label: saving
-                          ? MissionContentData.workspaceSavingLabel
-                          : status,
-                      child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Icon(
-                                complete || onContinue != null
-                                    ? Icons.check_circle_outline
-                                    : Icons.info_outline,
-                                size: 20,
-                                color: AppTheme.deepBlue),
-                            const SizedBox(width: 8),
-                            Expanded(
-                                child: Text(
-                                    saving
-                                        ? MissionContentData
-                                            .workspaceSavingLabel
-                                        : status,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppTheme.bodySmall)),
-                          ])),
-                const SizedBox(height: 8),
-                FilledButton.icon(
-                  key: const ValueKey('mission-next'),
-                  onPressed: saving ? null : onContinue,
-                  icon: saving
-                      ? const SizedBox.square(
-                          dimension: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.arrow_forward_rounded),
-                  label: Text(label),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Row(children: [
+            Semantics(
+              liveRegion: true,
+              label: saving ? MissionContentData.workspaceSavingLabel : status,
+              child: Tooltip(
+                message: saving
+                    ? MissionContentData.workspaceSavingLabel
+                    : complete || onContinue != null
+                        ? MissionContentData.phaseCompleteLabel
+                        : MissionContentData.taskStatusLabel,
+                child: TextButton.icon(
+                  key: const ValueKey('mission-task-status'),
+                  onPressed: () => showDialog<void>(
+                      context: context,
+                      builder: (dialogContext) => AlertDialog(
+                            scrollable: true,
+                            title: Text(complete || onContinue != null
+                                ? MissionContentData.phaseCompleteLabel
+                                : MissionContentData.taskStatusLabel),
+                            content: Text(status),
+                            actions: [
+                              TextButton(
+                                  onPressed: () => Navigator.pop(dialogContext),
+                                  child:
+                                      const Text(MissionContentData.backLabel))
+                            ],
+                          )),
+                  icon: Icon(
+                      complete || onContinue != null
+                          ? Icons.check_circle_outline
+                          : Icons.checklist_rounded,
+                      color: AppTheme.deepBlue),
+                  label: MediaQuery.textScalerOf(context).scale(1) > 1.4
+                      ? const SizedBox.shrink()
+                      : Text(
+                          progressLabel ?? MissionContentData.taskStatusLabel),
+                  style: TextButton.styleFrom(
+                      minimumSize: const Size(48, 48),
+                      padding: const EdgeInsets.symmetric(horizontal: 4)),
                 ),
-              ]),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+                child: FilledButton.icon(
+              key: const ValueKey('mission-next'),
+              onPressed: saving ? null : onContinue,
+              icon: saving
+                  ? const SizedBox.square(
+                      dimension: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.arrow_forward_rounded),
+              label: Text(label),
+              style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(48)),
+            )),
+          ]),
         ),
       );
 }

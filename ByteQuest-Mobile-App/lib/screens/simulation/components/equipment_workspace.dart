@@ -59,6 +59,30 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
   String? _dragging;
   String? _selectionHint;
   String? _lastReportedMode;
+  bool _feedbackVisible = false;
+  Timer? _feedbackTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleFeedback();
+  }
+
+  void _scheduleFeedback() {
+    _feedbackTimer?.cancel();
+    _feedbackVisible = widget.feedback != null;
+    if (_feedbackVisible) {
+      _feedbackTimer = Timer(const Duration(seconds: 5), () {
+        if (mounted) setState(() => _feedbackVisible = false);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _feedbackTimer?.cancel();
+    super.dispose();
+  }
 
   Map<String, dynamic> get _equipment =>
       MissionEquipmentSimulator.map(widget.phase.presentation['equipment']);
@@ -77,6 +101,7 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
   @override
   void didUpdateWidget(covariant EquipmentWorkspace oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.feedback != oldWidget.feedback) _scheduleFeedback();
     if (oldWidget.phase.id != widget.phase.id) {
       _mode = null;
       _selected = null;
@@ -121,10 +146,9 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                   Padding(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    child: Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      children: [
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(children: [
                         for (final option in modes)
                           Padding(
                             padding: const EdgeInsets.only(right: 4),
@@ -176,10 +200,10 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                               ),
                             ),
                           ),
-                      ],
+                      ]),
                     ),
                   ),
-                if (modes.length > 1 &&
+                if (_selectionHint != null &&
                     constraints.maxHeight >= 420 &&
                     MediaQuery.textScalerOf(context).scale(1) <= 1.4)
                   Padding(
@@ -212,8 +236,7 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                             MissionGuideTarget.objects,
                         highlightObjectId: widget.highlightObjectId,
                         scene: scene,
-                        compactToolbar: mode != _WorkspaceMode.inspect ||
-                            constraints.maxWidth < 400,
+                        compactToolbar: true,
                         panEnabled:
                             widget.enabled && mode == _WorkspaceMode.inspect,
                         scrollEnabled: !widget.saving,
@@ -333,8 +356,9 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                                         _selected = equipmentId;
                                       }),
                                       onDragFinished: () {
-                                        if (mounted)
+                                        if (mounted) {
                                           setState(() => _dragging = null);
+                                        }
                                       },
                                       feedback: Material(
                                         elevation: 2,
@@ -390,29 +414,45 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                                 );
                               },
                       ),
-                      if (widget.feedback != null)
-                        Positioned(
-                          left: 8,
-                          right: 8,
-                          top: 56,
-                          child: IgnorePointer(
-                            child: Semantics(
-                              liveRegion: true,
-                              label: widget.feedback,
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                color: AppTheme.softBlueAccent,
-                                child: Text(widget.feedback!,
-                                    maxLines: 3,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppTheme.bodySmall),
-                              ),
-                            ),
-                          ),
-                        ),
                     ],
                   ),
                 ),
+                if (_feedbackVisible &&
+                    widget.feedback != null &&
+                    constraints.maxHeight >= 240)
+                  Material(
+                    color: AppTheme.softBlueAccent,
+                    child: Row(children: [
+                      const SizedBox(width: 8),
+                      Expanded(
+                          child: Semantics(
+                        liveRegion: true,
+                        child: Text(widget.feedback!,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTheme.bodySmall),
+                      )),
+                      IconButton(
+                        tooltip: MissionContentData.workspaceViewFeedback,
+                        onPressed: () => showDialog<void>(
+                            context: context,
+                            builder: (dialogContext) => AlertDialog(
+                                  scrollable: true,
+                                  title: const Text(MissionContentData
+                                      .workspaceFeedbackLabel),
+                                  content: Text(widget.feedback!),
+                                  actions: [
+                                    TextButton(
+                                        onPressed: () =>
+                                            Navigator.pop(dialogContext),
+                                        child: const Text(
+                                            MissionContentData.backLabel))
+                                  ],
+                                )),
+                        icon: const Icon(Icons.info_outline_rounded),
+                      ),
+                    ]),
+                  ),
               ],
             ));
   }
@@ -421,11 +461,9 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
       _WorkspaceMode mode,
       List<Map<String, dynamic>> sources,
       List<Map<String, dynamic>> destinations) {
-    final rows = ((sources.length > destinations.length
-                ? sources.length
-                : destinations.length) /
-            2)
-        .ceil();
+    final rows = sources.length > destinations.length
+        ? sources.length
+        : destinations.length;
     final height = (.78 / rows).clamp(.12, .26).toDouble();
     SceneObjectDefinition object(
         Map<String, dynamic> data, int index, bool destination) {
@@ -443,9 +481,9 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
         label: installed == null
             ? data['label'] as String
             : '${installed['label']} · ${data['label']}',
-        x: (destination ? .55 : .03) + (index % 2) * .23,
-        y: .09 + (index ~/ 2) * (.82 / rows),
-        width: .20,
+        x: destination ? .54 : .03,
+        y: .04 + index * (.90 / rows),
+        width: .42,
         height: height,
         hotspotType: destination ? 'port_destination' : 'device_source',
         connectionNodeIds: [id],

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -20,6 +21,7 @@ import 'components/equipment_workspace.dart';
 import 'components/incorrect_placement_dialog.dart';
 import 'components/mission_task_status.dart';
 import 'components/mission_guidance_panel.dart';
+import 'components/mission_workspace_layout.dart';
 import 'components/mission_tutorial_panel.dart';
 import 'interactions/mission_interactions.dart';
 import 'runtime/mission_evidence_gateway.dart';
@@ -105,6 +107,7 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
   int? _tutorialStep;
   final ScrollController _controlsScrollController = ScrollController();
   bool _showGuidance = false;
+  bool _expandedControls = false;
   bool _showHow = false;
   String? _workspaceMode;
   String? _workspaceModePhaseId;
@@ -113,6 +116,8 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
   String? _guideOutlineKey;
   final GlobalKey _interactionGuideKey = GlobalKey();
   final GlobalKey _operationsGuideKey = GlobalKey();
+  final GlobalKey _workspaceLayoutKey = GlobalKey();
+  final GlobalKey _controlsLayoutKey = GlobalKey();
   final _cocSessionService = const PracticeCocSessionService();
   PracticeCocSession? _cocSession;
   Timer? _cocTicker;
@@ -376,6 +381,7 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
     setState(() {
       _tutorialInvite = false;
       _tutorialStep = 0;
+      _expandedControls = true;
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
@@ -446,6 +452,13 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
                 widget.definition, _state) &&
             !_submitted);
     final step = guide.currentStep;
+    if ((step?.target == MissionGuideTarget.controls ||
+            step?.target == MissionGuideTarget.operations) &&
+        !_expandedControls) {
+      setState(() => _expandedControls = true);
+      await WidgetsBinding.instance.endOfFrame;
+      if (!mounted || !_showHow) return;
+    }
     final mode = _workspaceModePhaseId == phase.id ? _workspaceMode : null;
     final oldKey = _guideOutlineKey;
     final String? nextKey;
@@ -493,7 +506,7 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
       rect = rect.intersect(viewport);
     }
     rect = rect.intersect(Offset.zero & overlayBox.size);
-    _guideOutlineRect = rect.isEmpty ? null : rect.inflate(3);
+    _guideOutlineRect = rect.isEmpty ? null : rect;
     _guideOutline ??= OverlayEntry(builder: (_) {
       final bounds = _guideOutlineRect;
       if (bounds == null) return const SizedBox.shrink();
@@ -605,11 +618,9 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
     final currentStep = actionGuide.currentStep;
     final activeWorkspaceMode =
         _workspaceModePhaseId == phase.id ? _workspaceMode : null;
-    final viewport = MediaQuery.sizeOf(context);
     final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.4;
-    final wide = viewport.width >= 720 ||
-        (viewport.width >= 600 && viewport.width > viewport.height);
     final scene = EquipmentWorkspace(
+      key: _workspaceLayoutKey,
       definition: widget.definition,
       phase: phase,
       state: _state,
@@ -649,97 +660,165 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
           phase.primaryInteraction != InteractionFamily.review,
     );
 
+    final guidanceBar = MissionGuidanceBar(
+      guidance: guidance,
+      actionGuide: actionGuide,
+      expanded: _showGuidance,
+      showHow: _showHow,
+      onShowHow: () {
+        setState(() => _showHow = !_showHow);
+        if (_showHow) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) unawaited(_locateCurrentAction());
+          });
+        } else {
+          _clearGuideOutline();
+        }
+      },
+      onReplayTutorial:
+          _state.mode == MissionRuntimeMode.practice ? _startTutorial : null,
+      tutorialFirstUse: _tutorialInvite,
+      onToggle: () => unawaited(_openGuide(phase, actionGuide)),
+    );
+    final header = Column(mainAxisSize: MainAxisSize.min, children: [
+      _MissionHeader(
+        title: widget.definition.title,
+        environment: widget.definition.environmentLabel,
+        phaseTitle: phase.title,
+        phaseIndex: phaseIndex,
+        phaseCount: widget.definition.phases.length,
+        onBack: () => unawaited(_leave()),
+      ),
+      if (_usesCocTimer && _cocSession != null)
+        PracticeCocTimeLabel(
+            session: _cocSession!, now: DateTime.now().toUtc(), compact: true),
+    ]);
+    Widget controls({Widget? leading}) => KeyedSubtree(
+          key: _controlsLayoutKey,
+          child: KeyedSubtree(
+            key: ValueKey('mission-controls-phase-${phase.id}'),
+            child: _buildControls(phase, phaseIndex, leading: leading),
+          ),
+        );
+    Widget workspaceLayout(
+            {required Widget taskControls, required Widget guide}) =>
+        MissionWorkspaceLayout(
+          scene: scene,
+          controls: taskControls,
+          guidance: guide,
+          actionBar: _buildActionBar(phase, phaseIndex),
+          expandedControls: _expandedControls ||
+              phase.primaryInteraction == InteractionFamily.review,
+          onToggleControls: () {
+            setState(() => _expandedControls = !_expandedControls);
+            _refreshGuideOutline();
+          },
+        );
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
       body: SafeArea(
-        child: Column(
-          children: [
-            _MissionHeader(
-              title: widget.definition.title,
-              environment: widget.definition.environmentLabel,
-              phaseTitle: phase.title,
-              phaseIndex: phaseIndex,
-              phaseCount: widget.definition.phases.length,
-              onBack: () => unawaited(_leave()),
-            ),
-            if (_usesCocTimer && _cocSession != null)
-              PracticeCocTimeLabel(
-                  session: _cocSession!, now: DateTime.now().toUtc()),
-            MissionGuidanceBar(
-              guidance: guidance,
-              actionGuide: actionGuide,
-              expanded: _showGuidance,
-              showHow: _showHow,
-              onShowHow: () {
-                setState(() {
-                  _showHow = !_showHow;
-                  if (_showHow) _showGuidance = true;
-                });
-                if (_showHow) {
-                  WidgetsBinding.instance.addPostFrameCallback((_) {
-                    if (mounted) unawaited(_locateCurrentAction());
-                  });
-                } else {
-                  _clearGuideOutline();
-                }
-              },
-              onReplayTutorial: _state.mode == MissionRuntimeMode.practice
-                  ? _startTutorial
-                  : null,
-              tutorialFirstUse: _tutorialInvite,
-              onToggle: () {
-                setState(() => _showGuidance = !_showGuidance);
-                if (_showGuidance && _controlsScrollController.hasClients) {
-                  _controlsScrollController.animateTo(0,
-                      duration: AppTheme.simulationTransitionDuration,
-                      curve: Curves.easeOut);
-                }
-              },
+        child: LayoutBuilder(builder: (context, safeBounds) {
+          if (MissionWorkspaceLayout.usesSidePanel(safeBounds)) {
+            // In short landscape windows the mission chrome scrolls with the
+            // task panel, so it cannot consume the equipment canvas height.
+            return workspaceLayout(
+              taskControls:
+                  controls(leading: Column(children: [header, guidanceBar])),
+              guide: const SizedBox.shrink(),
+            );
+          }
+          return Column(children: [
+            header,
+            Expanded(child: LayoutBuilder(builder: (context, constraints) {
+              if (largeText) {
+                return Column(children: [
+                  guidanceBar,
+                  Expanded(
+                      child: controls(
+                          leading: SizedBox(
+                              height:
+                                  math.max(320, constraints.maxHeight * .75),
+                              child: scene))),
+                  _buildActionBar(phase, phaseIndex),
+                ]);
+              }
+              return workspaceLayout(
+                  taskControls: controls(), guide: guidanceBar);
+            })),
+          ]);
+        }),
+      ),
+    );
+  }
+
+  Future<void> _openGuide(
+      MissionPhaseDefinition phase, MissionActionGuide actionGuide) async {
+    setState(() => _showGuidance = true);
+    _clearGuideOutline();
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      sheetAnimationStyle: MediaQuery.disableAnimationsOf(context)
+          ? AnimationStyle.noAnimation
+          : const AnimationStyle(
+              duration: AppTheme.simulationTransitionDuration),
+      builder: (sheetContext) => FractionallySizedBox(
+        heightFactor: .88,
+        child: SafeArea(
+          top: false,
+          child: Column(children: [
+            Padding(
+              padding: const EdgeInsets.only(left: 16, right: 8),
+              child: Row(children: [
+                Expanded(
+                    child: Text(MissionContentData.workspaceGuideLabel,
+                        style: AppTheme.titleMedium)),
+                IconButton(
+                  key: const ValueKey('mission-guide-close'),
+                  tooltip: MissionContentData.workspaceCloseGuide,
+                  onPressed: () => Navigator.pop(sheetContext),
+                  icon: const Icon(Icons.close_rounded),
+                ),
+              ]),
             ),
             Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  if (largeText) {
-                    return _buildControls(phase, phaseIndex,
-                        leading: SizedBox(height: 400, child: scene));
-                  }
-                  final controls = KeyedSubtree(
-                    key: ValueKey('mission-controls-phase-${phase.id}'),
-                    child: _buildControls(phase, phaseIndex),
-                  );
-                  if (wide) {
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(flex: 3, child: scene),
-                        const VerticalDivider(width: 1),
-                        Expanded(
-                            flex: 2,
-                            child: Column(children: [
-                              Expanded(child: controls),
-                              _buildActionBar(phase, phaseIndex),
-                            ])),
-                      ],
-                    );
-                  }
-                  final sceneHeight = (constraints.maxHeight * .56)
-                      .clamp(constraints.maxHeight > 260 ? 210.0 : 0.0, 420.0)
-                      .toDouble();
-                  return Column(
-                    children: [
-                      SizedBox(height: sceneHeight, child: scene),
-                      const Divider(height: 1),
-                      Expanded(child: controls),
-                    ],
-                  );
-                },
-              ),
-            ),
-            if (!wide || largeText) _buildActionBar(phase, phaseIndex),
-          ],
+                child: SingleChildScrollView(
+              key: const ValueKey('mission-guide-scroll'),
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(widget.definition.title, style: AppTheme.titleMedium),
+                    const SizedBox(height: 8),
+                    Text(widget.definition.scenario,
+                        style: AppTheme.bodyMedium),
+                    const SizedBox(height: 12),
+                    MissionGuidancePanel(
+                      phase: phase,
+                      guidance: MissionPhaseGuidance.forPhase(phase, _state),
+                      actionGuide: actionGuide,
+                      practice: _state.mode == MissionRuntimeMode.practice,
+                    ),
+                    if (_state.mode == MissionRuntimeMode.practice)
+                      ExpansionTile(
+                        title: const Text(MissionContentData.practiceHintLabel),
+                        children: [
+                          Padding(
+                              padding: const EdgeInsets.all(12),
+                              child: Text(widget.definition.practiceGuidance))
+                        ],
+                      ),
+                  ]),
+            )),
+          ]),
         ),
       ),
     );
+    if (!mounted) return;
+    setState(() => _showGuidance = false);
+    if (_showHow) unawaited(_locateCurrentAction());
   }
 
   Widget _buildControls(MissionPhaseDefinition phase, int phaseIndex,
@@ -750,7 +829,7 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
         child: SingleChildScrollView(
           controller: _controlsScrollController,
           key: const ValueKey('mission-controls-scroll'),
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(leading == null ? 12 : 0),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -766,62 +845,6 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
                   onSkip: () => unawaited(_dismissTutorial()),
                   timedPractice: _usesCocTimer,
                 ),
-                const SizedBox(height: 12),
-              ],
-              if (_showGuidance) ...[
-                MissionGuidancePanel(
-                  phase: phase,
-                  guidance: MissionPhaseGuidance.forPhase(phase, _state),
-                  actionGuide: MissionActionGuide.forPhase(phase, _state,
-                      reviewReady: _controller.canSubmit &&
-                          MissionEquipmentSimulator.readyForReview(
-                              widget.definition, _state) &&
-                          !_submitted),
-                  practice: _state.mode == MissionRuntimeMode.practice,
-                ),
-                const SizedBox(height: 12),
-              ],
-              Text(MissionContentData.controlsScrollHint,
-                  style: AppTheme.caption),
-              const SizedBox(height: 8),
-              if (phaseIndex == 0) ...[
-                Text(widget.definition.scenario, style: AppTheme.bodyMedium),
-                const SizedBox(height: 12),
-              ],
-              if (_state.mode == MissionRuntimeMode.practice)
-                ExpansionTile(
-                    title: const Text(MissionContentData.practiceHintLabel),
-                    children: [
-                      Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: Text(widget.definition.practiceGuidance))
-                    ]),
-              if (phaseIndex > 0)
-                PopupMenuButton<String>(
-                  tooltip: MissionContentData.revisePhaseLabel,
-                  enabled: !_writing && !_submitting && !_submitted,
-                  onSelected: (id) => unawaited(_revisitPhase(id)),
-                  itemBuilder: (_) => [
-                    for (final previous
-                        in widget.definition.phases.take(phaseIndex))
-                      PopupMenuItem(
-                          value: previous.id, child: Text(previous.title))
-                  ],
-                  child: Container(
-                    constraints: const BoxConstraints(minHeight: 48),
-                    decoration: BoxDecoration(
-                        border: Border.all(color: AppTheme.primaryBlue),
-                        borderRadius: AppTheme.radiusSm),
-                    child: const ListTile(
-                        leading: Icon(Icons.history),
-                        title: Text(MissionContentData.revisePhaseLabel),
-                        trailing: Icon(Icons.expand_more)),
-                  ),
-                ),
-              if (!_showGuidance) ...[
-                Text(phase.title, style: AppTheme.titleMedium),
-                const SizedBox(height: 6),
-                Text(phase.instruction, style: AppTheme.bodyMedium),
                 const SizedBox(height: 12),
               ],
               Container(
@@ -907,6 +930,30 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
                   ),
                 ),
               ],
+              if (phaseIndex > 0) ...[
+                const SizedBox(height: 12),
+                PopupMenuButton<String>(
+                  tooltip: MissionContentData.revisePhaseLabel,
+                  enabled: !_writing && !_submitting && !_submitted,
+                  onSelected: (id) => unawaited(_revisitPhase(id)),
+                  itemBuilder: (_) => [
+                    for (final previous
+                        in widget.definition.phases.take(phaseIndex))
+                      PopupMenuItem(
+                          value: previous.id, child: Text(previous.title))
+                  ],
+                  child: Container(
+                    constraints: const BoxConstraints(minHeight: 48),
+                    decoration: BoxDecoration(
+                        border: Border.all(color: AppTheme.primaryBlue),
+                        borderRadius: AppTheme.radiusSm),
+                    child: const ListTile(
+                        leading: Icon(Icons.history),
+                        title: Text(MissionContentData.revisePhaseLabel),
+                        trailing: Icon(Icons.expand_more)),
+                  ),
+                ),
+              ],
             ],
           ),
         ));
@@ -923,6 +970,7 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
           MissionEquipmentSimulator.readyForReview(widget.definition, _state);
       final canConfirm = _controller.canSubmit && equipmentReady && !_submitted;
       return MissionActionBar(
+        progressLabel: '${_state.acceptedEvidenceIds.length}',
         status: _submitted
             ? MissionContentData.reviewSavedLabel
             : _state.pendingEvidence.isNotEmpty
@@ -955,6 +1003,7 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
                 guide.currentStep?.text ??
                     MissionContentData.guideCheckRequirements);
     return MissionActionBar(
+      progressLabel: '${guide.completedCount}/${guide.steps.length}',
       status: status,
       saving: _writing,
       highlighted: _showHow && ready,
@@ -1727,7 +1776,7 @@ class _MissionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         key: const ValueKey('mission-header'),
-        padding: const EdgeInsets.fromLTRB(4, 8, 12, 8),
+        padding: const EdgeInsets.fromLTRB(4, 4, 8, 4),
         decoration: const BoxDecoration(
           color: Colors.white,
           border: Border(bottom: BorderSide(color: AppTheme.borderLight)),
@@ -1752,7 +1801,7 @@ class _MissionHeader extends StatelessWidget {
                   Text(
                     MissionContentData.phasePosition(
                         phaseIndex + 1, phaseCount, phaseTitle),
-                    maxLines: 2,
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: AppTheme.bodySmall,
                   ),

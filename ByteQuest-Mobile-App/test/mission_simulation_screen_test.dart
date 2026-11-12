@@ -101,11 +101,17 @@ void main() {
         controller: controller, practiceUserId: 'locator-learner'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+    // Full remaining-action details are disclosed from the compact status
+    // control, leaving the workspace available for equipment.
+    await tester.tap(find.byKey(const ValueKey('mission-task-status')));
+    await tester.pumpAndSettle();
     expect(
         find.textContaining(
             'Cannot continue yet: ${objects.length - 1} of ${objects.length} '
             'required actions complete'),
         findsOneWidget);
+    await tester.tap(find.text(MissionContentData.backLabel));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const ValueKey('mission-show-me-how')));
     await tester.pumpAndSettle();
     expect(find.byType(SimulationScene), findsOneWidget);
@@ -156,17 +162,12 @@ void main() {
     expect(find.byKey(const ValueKey('mission-guide-outline')), findsOneWidget);
     final controlsScroll =
         find.byKey(const ValueKey('mission-controls-scroll'));
-    expect(
-        tester
-            .state<ScrollableState>(find
-                .descendant(
-                    of: controlsScroll, matching: find.byType(Scrollable))
-                .first)
-            .position
-            .pixels,
-        greaterThan(0));
     final firstOption = (phase.presentation['options'] as List).first as Map;
     final option = find.byKey(ValueKey('multi-select-${firstOption['id']}'));
+    expect(tester.getRect(controlsScroll).contains(tester.getCenter(option)),
+        isTrue,
+        reason:
+            'The outlined control must be visible, whether or not scrolling was needed.');
     await tester.ensureVisible(option);
     await tester.tap(option);
     await tester.pump();

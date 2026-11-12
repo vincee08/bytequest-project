@@ -18,6 +18,16 @@ class MissionContentData {
   static const learningPathLabel = 'Learning path';
   static const quizzesLabel = 'Quizzes';
   static const controlsLabel = 'Task controls';
+  static const workspaceLabel = 'Technical workspace';
+  static const workspaceGuideLabel = 'Mission guide';
+  static const workspaceExpandControls = 'Expand task controls';
+  static const workspaceExpandScene = 'Expand workspace';
+  static const workspaceCloseGuide = 'Close guide';
+  static const workspaceFeedbackLabel = 'Action feedback';
+  static const workspaceViewFeedback = 'Read action feedback';
+  static const workspaceZoomIn = 'Zoom in workspace';
+  static const workspaceZoomOut = 'Zoom out workspace';
+  static const workspaceFitView = 'Fit and reset workspace view';
   static const taskStatusLabel = 'Remaining actions';
   static const inspectionsTaskLabel = 'Inspections';
   static const identificationTapHint =

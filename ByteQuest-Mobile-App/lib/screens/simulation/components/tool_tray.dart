@@ -40,24 +40,25 @@ class ToolTray extends StatelessWidget {
     return Semantics(
       container: true,
       label: 'Available tools',
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(vertical: 4),
-        child: Row(
-          children: [
-            for (final tool in tools) ...[
-              _ToolButton(
-                key: ValueKey('tool-tray-tool-${tool.id}'),
-                tool: tool,
-                selected: state.selectedToolId == tool.id,
-                enabled: canApply,
-                onPressed: () => _attempt(tool),
-              ),
-              const SizedBox(width: 8),
-            ],
-          ],
-        ),
-      ),
+      child: LayoutBuilder(
+          builder: (context, constraints) => Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final tool in tools)
+                    ConstrainedBox(
+                      constraints:
+                          BoxConstraints(maxWidth: constraints.maxWidth),
+                      child: _ToolButton(
+                        key: ValueKey('tool-tray-tool-${tool.id}'),
+                        tool: tool,
+                        selected: state.selectedToolId == tool.id,
+                        enabled: canApply,
+                        onPressed: () => _attempt(tool),
+                      ),
+                    ),
+                ],
+              )),
     );
   }
 
@@ -119,7 +120,8 @@ class _ToolButton extends StatelessWidget {
               width: selected ? 2 : 1,
             ),
           ),
-          icon: Icon(selected ? Icons.check_circle_rounded : Icons.build_outlined),
+          icon: Icon(
+              selected ? Icons.check_circle_rounded : Icons.build_outlined),
           label: Text(tool.label),
         ),
       );
@@ -139,17 +141,16 @@ class _ToolDefinition {
   final Set<String> compatibleCategories;
 }
 
-List<_ToolDefinition> _items(dynamic value) => (value as List? ?? const [])
-    .whereType<Map>()
-    .map((item) {
+List<_ToolDefinition> _items(dynamic value) =>
+    (value as List? ?? const []).whereType<Map>().map((item) {
       final map = Map<String, dynamic>.from(item);
       return _ToolDefinition(
         id: map['id'] as String,
         label: map['label'] as String,
         category: map['category'] as String? ?? 'general',
-        compatibleCategories: (map['compatible_categories'] as List? ?? const [])
-            .whereType<String>()
-            .toSet(),
+        compatibleCategories:
+            (map['compatible_categories'] as List? ?? const [])
+                .whereType<String>()
+                .toSet(),
       );
-    })
-    .toList(growable: false);
+    }).toList(growable: false);

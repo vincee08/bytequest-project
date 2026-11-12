@@ -242,17 +242,22 @@ class _PracticeCocSessionPanelState extends State<PracticeCocSessionPanel>
 
 class PracticeCocTimeLabel extends StatelessWidget {
   const PracticeCocTimeLabel(
-      {super.key, required this.session, required this.now});
+      {super.key,
+      required this.session,
+      required this.now,
+      this.compact = false});
 
   final PracticeCocSession session;
   final DateTime now;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final remaining = session.remainingAt(now);
     final minutes = (remaining.inSeconds / 60).ceil();
-    final compact = MediaQuery.sizeOf(context).height < 500 &&
-        MediaQuery.textScalerOf(context).scale(1) > 1.4;
+    final compactLabel = compact ||
+        (MediaQuery.sizeOf(context).height < 500 &&
+            MediaQuery.textScalerOf(context).scale(1) > 1.4);
     final warning = session.expiredAt(now)
         ? MissionContentData.practiceTimerExpired
         : minutes <= 1
@@ -268,9 +273,10 @@ class PracticeCocTimeLabel extends StatelessWidget {
           '${MissionContentData.practiceTimerRemainingLabel}: ${_PracticeCocSessionPanelState._format(remaining)}',
       child: Container(
         key: const ValueKey('practice-coc-time-label'),
-        constraints: const BoxConstraints(minHeight: 48),
+        constraints: BoxConstraints(minHeight: compact ? 32 : 48),
         alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding:
+            EdgeInsets.symmetric(horizontal: 12, vertical: compact ? 2 : 8),
         color: warning == null
             ? AppTheme.backgroundPaleBlue
             : AppTheme.surfaceMuted,
@@ -285,7 +291,7 @@ class PracticeCocTimeLabel extends StatelessWidget {
               session.expiredAt(now)
                   ? MissionContentData.practiceTimerExpiredShort
                   : warning == null
-                      ? compact
+                      ? compactLabel
                           ? MissionContentData.practiceTimerCompactLabel
                           : MissionContentData.practiceTimerRemainingLabel
                       : MissionContentData.practiceTimerWarningShort(

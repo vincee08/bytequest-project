@@ -31,9 +31,8 @@ class MissionGuidanceBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.sizeOf(context);
-    final compact = size.height < 500 ||
-        size.width < 360 ||
-        MediaQuery.textScalerOf(context).scale(1) > 1.4;
+    final compact =
+        size.height < 500 || MediaQuery.textScalerOf(context).scale(1) > 1.4;
     final current = actionGuide.currentStep;
     final currentText = current?.text ??
         (guidance.interactionLabel == MissionContentData.guidanceReviewLabel
@@ -42,8 +41,9 @@ class MissionGuidanceBar extends StatelessWidget {
     return Material(
       key: const ValueKey('mission-guidance-bar'),
       color: AppTheme.cardWhite,
-      child: Column(mainAxisSize: MainAxisSize.min, children: [
-        InkWell(
+      child: Row(children: [
+        Expanded(
+            child: InkWell(
           key: const ValueKey('mission-guidance-toggle'),
           onTap: onToggle,
           child: Semantics(
@@ -54,7 +54,7 @@ class MissionGuidanceBar extends StatelessWidget {
                 '${expanded ? MissionContentData.guidanceHideSteps : MissionContentData.guidanceShowSteps}',
             child: Container(
               constraints: const BoxConstraints(minHeight: 48),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: const BoxDecoration(
                 border: Border(bottom: BorderSide(color: AppTheme.borderLight)),
               ),
@@ -67,81 +67,40 @@ class MissionGuidanceBar extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (compact)
-                        Text(currentText,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTheme.bodySmall
-                                .copyWith(color: AppTheme.deepBlue))
-                      else
-                        Text(guidance.interactionLabel,
-                            style: AppTheme.labelSmall
-                                .copyWith(color: AppTheme.deepBlue)),
-                      if (!compact)
-                        Text(currentText,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTheme.bodySmall),
+                      Text(currentText,
+                          maxLines: compact ? 1 : 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: AppTheme.bodySmall
+                              .copyWith(color: AppTheme.deepBlue)),
                     ],
                   ),
                 ),
                 const SizedBox(width: 6),
-                if (compact)
-                  IconButton(
-                    key: const ValueKey('mission-show-me-how'),
-                    tooltip: showHow
-                        ? MissionContentData.guideHideHighlight
-                        : MissionContentData.guideShowMeHow,
-                    onPressed: onShowHow,
-                    icon: Icon(showHow
-                        ? Icons.visibility_off_outlined
-                        : Icons.ads_click_rounded),
-                  ),
-                if (compact && onReplayTutorial != null)
-                  IconButton(
-                    key: const ValueKey('mission-replay-tutorial'),
-                    tooltip: tutorialFirstUse
-                        ? MissionContentData.tutorialStart
-                        : MissionContentData.tutorialReplay,
-                    onPressed: onReplayTutorial,
-                    icon: const Icon(Icons.school_outlined),
-                  ),
                 Icon(expanded ? Icons.expand_less : Icons.expand_more,
                     color: AppTheme.deepBlue),
               ]),
             ),
           ),
+        )),
+        IconButton(
+          key: const ValueKey('mission-show-me-how'),
+          tooltip: showHow
+              ? MissionContentData.guideHideHighlight
+              : MissionContentData.guideShowMeHow,
+          onPressed: onShowHow,
+          icon: Icon(showHow
+              ? Icons.visibility_off_outlined
+              : Icons.ads_click_rounded),
         ),
-        if (!compact)
-          Row(children: [
-            Expanded(
-                child: TextButton.icon(
-              key: const ValueKey('mission-show-me-how'),
-              onPressed: onShowHow,
-              icon: Icon(
-                  showHow
-                      ? Icons.visibility_off_outlined
-                      : Icons.ads_click_rounded,
-                  size: 18),
-              label: Text(showHow
-                  ? MissionContentData.guideHideHighlight
-                  : MissionContentData.guideShowMeHow),
-              style: TextButton.styleFrom(
-                alignment: Alignment.centerLeft,
-                minimumSize: const Size.fromHeight(48),
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-              ),
-            )),
-            if (onReplayTutorial != null)
-              IconButton(
-                key: const ValueKey('mission-replay-tutorial'),
-                tooltip: tutorialFirstUse
-                    ? MissionContentData.tutorialStart
-                    : MissionContentData.tutorialReplay,
-                onPressed: onReplayTutorial,
-                icon: const Icon(Icons.school_outlined, size: 18),
-              ),
-          ]),
+        if (onReplayTutorial != null)
+          IconButton(
+            key: const ValueKey('mission-replay-tutorial'),
+            tooltip: tutorialFirstUse
+                ? MissionContentData.tutorialStart
+                : MissionContentData.tutorialReplay,
+            onPressed: onReplayTutorial,
+            icon: const Icon(Icons.school_outlined),
+          ),
       ]),
     );
   }

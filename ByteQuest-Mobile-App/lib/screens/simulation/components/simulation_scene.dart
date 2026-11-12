@@ -297,7 +297,7 @@ class _SceneToolbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
         child: LayoutBuilder(
           builder: (context, constraints) {
             final titleWidget = Column(
@@ -351,19 +351,19 @@ class _SceneToolbar extends StatelessWidget {
                   ),
                 IconButton(
                   key: const ValueKey('simulation-zoom-out'),
-                  tooltip: 'Zoom out workspace',
+                  tooltip: MissionContentData.workspaceZoomOut,
                   onPressed: onZoomOut,
                   icon: const Icon(Icons.zoom_out_rounded),
                 ),
                 IconButton(
                   key: const ValueKey('simulation-zoom-in'),
-                  tooltip: 'Zoom in workspace',
+                  tooltip: MissionContentData.workspaceZoomIn,
                   onPressed: onZoomIn,
                   icon: const Icon(Icons.zoom_in_rounded),
                 ),
                 IconButton(
                   key: const ValueKey('simulation-fit-view'),
-                  tooltip: 'Fit and reset workspace view',
+                  tooltip: MissionContentData.workspaceFitView,
                   onPressed: onFit,
                   icon: const Icon(Icons.center_focus_strong_outlined),
                 ),
@@ -672,8 +672,8 @@ class _ResolvedScene {
         : const Iterable<SimulationSceneKind>.empty();
     return _ResolvedScene(
       definition: definition,
-      title:
-          definition.initialStatus['title'] as String? ?? 'Technical workspace',
+      title: definition.initialStatus['title'] as String? ??
+          MissionContentData.workspaceLabel,
       prompt: definition.initialStatus['prompt'] as String? ??
           'Inspect the available schematic objects.',
       legacyKind: resolvedKind.isEmpty ? null : resolvedKind.single,
@@ -732,12 +732,8 @@ Rect _mappedRect(
   const base = SimulationScene.logicalCanvasSize;
   // Keep technical names readable on compact phones; the same mapped rects
   // drive painting and hit testing after a crowded scene reflows.
-  final minimumWidth =
-      (readableInspectionLabels ? 104.0 : HotspotWidget.minimumTapExtent) /
-          scale;
-  final minimumHeight = math.max(
-          readableInspectionLabels ? 92 : 72, textScaler.scale(12) * 2.3 + 36) /
-      scale;
+  final minimumWidth = (readableInspectionLabels ? 112.0 : 128.0) / scale;
+  final minimumHeight = math.max(112, textScaler.scale(12) * 2.3 + 64) / scale;
   final mapped = {
     for (final object in objects)
       object.id: _mappedRect(object, base,
