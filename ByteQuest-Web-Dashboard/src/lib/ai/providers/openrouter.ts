@@ -14,6 +14,7 @@ type ProviderFailureCode =
   | "OPENROUTER_RATE_LIMITED"
   | "OPENROUTER_MODEL_UNAVAILABLE"
   | "OPENROUTER_TIMEOUT"
+  | "OPENROUTER_TRUNCATED_RESPONSE"
   | "OPENROUTER_INVALID_RESPONSE"
   | "OPENROUTER_REQUEST_FAILED";
 
@@ -125,10 +126,23 @@ function extractMessageContent(payload: unknown): string {
   if (!payload || typeof payload !== "object") throw publicProviderFailure(502);
   const value = payload as {
     error?: unknown;
-    choices?: Array<{ message?: { content?: unknown; refusal?: unknown } }>;
+    choices?: Array<{
+      finish_reason?: unknown;
+      message?: { content?: unknown; refusal?: unknown };
+    }>;
   };
   if (value.error) throw publicProviderFailure(502);
-  const message = value.choices?.[0]?.message;
+  const choice = value.choices?.[0];
+  // Reasoning tokens share the output budget, even when excluded from content.
+  // Never accept a truncated response, including a valid-looking JSON prefix.
+  if (choice?.finish_reason === "length") {
+    throw new QuizAiProviderError(
+      "OPENROUTER_TRUNCATED_RESPONSE",
+      "OpenRouter reached its output limit before completing the draft. No question was saved. Request fewer questions or ask the administrator to select a compatible model.",
+      502,
+    );
+  }
+  const message = choice?.message;
   if (
     !message ||
     message.refusal ||
@@ -162,10 +176,10 @@ export async function generateQuizDraftWithOpenRouter(
         model: configuration.model,
         temperature: 0.2,
         max_tokens: Math.min(8_000, 1_000 + request.itemCount * 1_000),
-        reasoning: {
-          effort: "low",
-          exclude: true,
-        },
+        reasoning:
+          configuration.reasoningEffort === "none"
+            ? { enabled: false, exclude: true }
+            : { effort: "low", exclude: true },
         provider: {
           // OpenRouter recommends this for structured outputs so routing does
           // not silently choose an endpoint that ignores response_format.

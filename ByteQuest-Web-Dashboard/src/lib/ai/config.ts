@@ -13,6 +13,7 @@ export interface QuizAiConfiguration {
   model: string;
   endpoint: string;
   timeoutMs: number;
+  reasoningEffort?: "low" | "none";
 }
 
 export class QuizAiConfigurationError extends Error {
@@ -62,5 +63,9 @@ export function getQuizAiConfiguration(): QuizAiConfiguration {
     model: process.env.OPENROUTER_MODEL?.trim() || DEFAULT_OPENROUTER_MODEL,
     endpoint: OPENROUTER_CHAT_COMPLETIONS_URL,
     timeoutMs: getOpenRouterTimeoutMs(),
+    // Operators may disable optional reasoning only for a compatible model.
+    // Mandatory-reasoning models must retain the default setting.
+    reasoningEffort:
+      process.env.OPENROUTER_REASONING_EFFORT?.trim() === "none" ? "none" : "low",
   };
 }

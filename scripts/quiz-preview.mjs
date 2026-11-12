@@ -188,6 +188,7 @@ if (command === "setup") {
     NEXT_PUBLIC_SUPABASE_ANON_KEY: config.ANON_KEY,
     SUPABASE_SERVICE_ROLE_KEY: config.SERVICE_ROLE_KEY,
     OPENROUTER_API_KEY: "",
+    OPENROUTER_REASONING_EFFORT: "low",
   };
   delete env.BQ_AI_TEST_ENDPOINT;
   env.BQ_ISOLATED_QA = project;
@@ -209,6 +210,11 @@ if (command === "setup") {
       throw new Error("This local testing launcher permits only free models.");
     env.OPENROUTER_API_KEY = values.OPENROUTER_API_KEY;
     env.OPENROUTER_MODEL = model;
+    if (values.OPENROUTER_REASONING_EFFORT !== undefined) {
+      if (!["low", "none"].includes(values.OPENROUTER_REASONING_EFFORT))
+        throw new Error("Local reasoning effort must be low or none.");
+      env.OPENROUTER_REASONING_EFFORT = values.OPENROUTER_REASONING_EFFORT;
+    }
   }
   let cwd = root;
   let executable = process.execPath;

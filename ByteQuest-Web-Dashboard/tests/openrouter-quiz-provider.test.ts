@@ -184,6 +184,54 @@ test("rejects malformed provider JSON", async () => {
   );
 });
 
+test("can disable optional reasoning through server configuration", async () => {
+  const previousKey = process.env.OPENROUTER_API_KEY;
+  const previousEffort = process.env.OPENROUTER_REASONING_EFFORT;
+  try {
+    process.env.OPENROUTER_API_KEY = "test-only-key";
+    process.env.OPENROUTER_REASONING_EFFORT = "none";
+    const configured = getQuizAiConfiguration();
+    globalThis.fetch = async (_input, init) => {
+      const body = JSON.parse(String(init?.body));
+      assert.deepEqual(body.reasoning, { enabled: false, exclude: true });
+      return providerResponse(validQuestions);
+    };
+    assert.equal((await generateQuizDraftWithOpenRouter(request, configured)).length, 2);
+
+    process.env.OPENROUTER_REASONING_EFFORT = "unsupported";
+    globalThis.fetch = async (_input, init) => {
+      const body = JSON.parse(String(init?.body));
+      assert.deepEqual(body.reasoning, { effort: "low", exclude: true });
+      return providerResponse(validQuestions);
+    };
+    await generateQuizDraftWithOpenRouter(request, getQuizAiConfiguration());
+  } finally {
+    if (previousKey === undefined) delete process.env.OPENROUTER_API_KEY;
+    else process.env.OPENROUTER_API_KEY = previousKey;
+    if (previousEffort === undefined) delete process.env.OPENROUTER_REASONING_EFFORT;
+    else process.env.OPENROUTER_REASONING_EFFORT = previousEffort;
+  }
+});
+
+test("rejects output-limit responses before parsing, including empty and valid-looking content, without retrying", async () => {
+  for (const content of ["", JSON.stringify({ questions: validQuestions })]) {
+    let calls = 0;
+    globalThis.fetch = async () => {
+      calls++;
+      return new Response(JSON.stringify({
+        choices: [{ finish_reason: "length", message: { content, reasoning: "private-provider-reasoning" } }],
+        usage: { completion_tokens: 2000 },
+      }));
+    };
+    await assert.rejects(generateQuizDraftWithOpenRouter(request, configuration),
+      (error: unknown) => error instanceof QuizAiProviderError &&
+        error.code === "OPENROUTER_TRUNCATED_RESPONSE" && error.status === 502 &&
+        error.publicMessage.includes("output limit") &&
+        !error.publicMessage.includes("private-provider-reasoning"));
+    assert.equal(calls, 1);
+  }
+});
+
 test("classifies an abort while reading the provider body as a timeout", async () => {
   globalThis.fetch = async () =>
     ({
