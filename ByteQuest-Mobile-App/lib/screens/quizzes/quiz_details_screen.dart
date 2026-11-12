@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/learner_ui.dart';
 import '../../models/learner_quiz_model.dart';
+import '../../data/mission_content_data.dart';
 import '../../services/learner_quiz_service.dart';
 import 'quiz_taking_screen.dart';
 
@@ -103,7 +104,11 @@ class _QuizDetailsScreenState extends State<QuizDetailsScreen> {
             ),
             const SizedBox(height: 24),
             FilledButton.icon(
-              onPressed: !quiz.isAvailable || _starting ? null : _start,
+              onPressed: !quiz.isAvailable || _starting ||
+                      (quiz.state != LearnerQuizState.available &&
+                          quiz.state != LearnerQuizState.inProgress)
+                  ? null
+                  : _start,
               icon: _starting
                   ? const SizedBox.square(
                       dimension: 18,
@@ -114,11 +119,14 @@ class _QuizDetailsScreenState extends State<QuizDetailsScreen> {
                       : Icons.rocket_launch_outlined),
               label: Text(_starting
                   ? 'Opening quiz…'
-                  : quiz.state == LearnerQuizState.inProgress
-                      ? 'Continue quiz'
+                  : quiz.state == LearnerQuizState.completed ||
+                          quiz.state == LearnerQuizState.submitted
+                      ? MissionContentData.quizAttemptUsed
+                      : quiz.state == LearnerQuizState.inProgress
+                      ? MissionContentData.quizAttemptInProgress
                       : quiz.isAvailable
-                          ? 'Start quiz'
-                          : 'Quiz unavailable'),
+                          ? MissionContentData.quizAttemptAvailable
+                          : MissionContentData.quizAttemptUnavailable),
             ),
           ],
         ),

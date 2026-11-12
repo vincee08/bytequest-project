@@ -1,6 +1,8 @@
 import 'package:bytequest/core/theme/app_theme.dart';
 import 'package:bytequest/models/learner_quiz_model.dart';
 import 'package:bytequest/screens/quizzes/quiz_taking_screen.dart';
+import 'package:bytequest/screens/quizzes/quiz_details_screen.dart';
+import 'package:bytequest/data/mission_content_data.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -35,6 +37,8 @@ void main() {
     expect(summary('submitted').state, LearnerQuizState.submitted);
     expect(summary('completed').state, LearnerQuizState.completed);
     expect(summary(null, available: false).state, LearnerQuizState.unavailable);
+    expect(summary('in_progress', available: false).state,
+        LearnerQuizState.unavailable);
   });
 
   test('learner question contract contains no answer key field', () {
@@ -52,6 +56,27 @@ void main() {
 
     expect(question.savedAnswer, 'Router');
     expect(question.options, isNot(contains('secret answer')));
+  });
+
+  testWidgets('submitted briefing cannot offer another attempt', (tester) async {
+    final summary = LearnerQuizSummary.fromJson({
+      'assignment_id': 'assignment',
+      'quiz_version_id': 'version',
+      'quiz_id': 'quiz',
+      'title': 'Networking review',
+      'class_id': 'class',
+      'class_title': 'CSS NC II',
+      'is_available': true,
+      'attempt_status': 'completed',
+    });
+    await tester.pumpWidget(MaterialApp(
+      theme: AppTheme.lightTheme,
+      home: QuizDetailsScreen(quiz: summary),
+    ));
+    await tester.ensureVisible(find.byType(FilledButton));
+    expect(find.text(MissionContentData.quizAttemptUsed), findsOneWidget);
+    expect(find.text(MissionContentData.quizAttemptAvailable), findsNothing);
+    expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed, isNull);
   });
 
   for (final fixture in <({String type, List<String> options, String label})>[

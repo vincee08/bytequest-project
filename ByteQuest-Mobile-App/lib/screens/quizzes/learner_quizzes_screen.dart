@@ -4,6 +4,7 @@ import 'package:intl/intl.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/learner_ui.dart';
 import '../../models/learner_quiz_model.dart';
+import '../../data/mission_content_data.dart';
 import '../../services/learner_quiz_service.dart';
 import '../../services/learner_realtime_coordinator.dart';
 import 'quiz_details_screen.dart';
@@ -163,10 +164,10 @@ class _LearnerQuizzesScreenState extends State<LearnerQuizzesScreen>
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                _QuizStatus(label: _stateLabel(state), color: color),
               ],
             ),
+            const SizedBox(height: 10),
+            _QuizStatus(label: _stateLabel(state), color: color),
             const SizedBox(height: 14),
             Row(
               children: [
@@ -226,11 +227,11 @@ class _LearnerQuizzesScreenState extends State<LearnerQuizzesScreen>
   }
 
   String _stateLabel(LearnerQuizState state) => switch (state) {
-        LearnerQuizState.available => 'Available',
-        LearnerQuizState.inProgress => 'In progress',
-        LearnerQuizState.submitted => 'Awaiting result',
-        LearnerQuizState.completed => 'Completed',
-        LearnerQuizState.unavailable => 'Unavailable',
+        LearnerQuizState.available => MissionContentData.quizAttemptAvailable,
+        LearnerQuizState.inProgress => MissionContentData.quizAttemptInProgress,
+        LearnerQuizState.submitted => MissionContentData.quizAttemptUsed,
+        LearnerQuizState.completed => MissionContentData.quizAttemptUsed,
+        LearnerQuizState.unavailable => MissionContentData.quizAttemptUnavailable,
       };
 
   Color _stateColor(LearnerQuizState state) => switch (state) {

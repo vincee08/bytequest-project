@@ -54,6 +54,9 @@ class LearnerQuizSummary {
   });
 
   LearnerQuizState get state {
+    if (!isAvailable && attemptStatus == 'in_progress') {
+      return LearnerQuizState.unavailable;
+    }
     switch (attemptStatus) {
       case 'completed':
         return LearnerQuizState.completed;

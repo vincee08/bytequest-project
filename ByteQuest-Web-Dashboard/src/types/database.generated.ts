@@ -3767,8 +3767,16 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      publish_and_assign_quiz: {
+        Args: { p_quiz_version_id: string; p_class_ids: string[]; p_instructions?: string }
+        Returns: Json
+      }
+      reorder_quiz_items: {
+        Args: { p_quiz_version_id: string; p_item_ids: string[] }
+        Returns: undefined
+      }
       publish_quiz_version: {
-        Args: { p_quiz_version_id: string; p_reason: string }
+        Args: { p_quiz_version_id: string; p_reason?: string }
         Returns: {
           change_summary: string | null
           created_at: string

@@ -12,6 +12,10 @@ class HardwareItem {
 /// Mission Content Data
 /// Contains questions, components, steps, and scenarios for all missions
 class MissionContentData {
+  static const quizAttemptAvailable = 'Not started — 1 attempt available';
+  static const quizAttemptInProgress = 'In progress — Continue attempt';
+  static const quizAttemptUsed = 'Submitted — Attempt used';
+  static const quizAttemptUnavailable = 'Unavailable — Access restricted';
   static const loadingLabel = 'Working…';
   static const backLabel = 'Back';
   static const settingsLabel = 'Settings';
