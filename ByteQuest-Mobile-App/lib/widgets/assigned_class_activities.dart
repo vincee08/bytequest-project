@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-
 import '../core/theme/app_theme.dart';
 import '../core/widgets/learner_ui.dart';
 import '../data/mission_content_data.dart';
+import '../models/assigned_activity_model.dart';
+import '../models/home_activity_item.dart';
 import '../models/homework_model.dart';
 import '../models/learner_quiz_model.dart';
 import '../services/homework_service.dart';
@@ -13,13 +14,26 @@ import '../screens/homework/homework_details_screen.dart';
 import '../screens/quizzes/quiz_details_screen.dart';
 import '../screens/quizzes/quiz_result_screen.dart';
 
-/// Separate supplementary lists. Never changes official assessment counters.
+/// Shared compact class lists and Home dashboard. Official counts stay separate.
 class AssignedClassActivities extends StatefulWidget {
   const AssignedClassActivities(
-      {super.key, this.classId, this.quizService, this.homeworkService});
+      {super.key,
+      this.classId,
+      this.quizService,
+      this.homeworkService,
+      this.dashboard = false,
+      this.refreshToken = 0,
+      this.technical = const [],
+      this.technicalStatuses = const {},
+      this.onTechnicalOpen});
   final String? classId;
   final LearnerQuizService? quizService;
   final HomeworkService? homeworkService;
+  final bool dashboard;
+  final int refreshToken;
+  final List<AssignedActivity> technical;
+  final Map<String, String> technicalStatuses;
+  final Future<void> Function(AssignedActivity)? onTechnicalOpen;
   @override
   State<AssignedClassActivities> createState() =>
       _AssignedClassActivitiesState();
@@ -31,11 +45,13 @@ class _AssignedClassActivitiesState extends State<AssignedClassActivities>
         WidgetsBindingObserver {
   List<LearnerQuizSummary> _quizzes = [];
   List<HomeworkAssignment> _homework = [];
-  bool _loading = true;
-  bool _loadingNow = false;
-  bool _quizError = false;
-  bool _homeworkError = false;
+  bool _loading = true,
+      _loadingNow = false,
+      _quizError = false,
+      _homeworkError = false;
+  int _filter = 0;
   Timer? _poll;
+  AppLifecycleState _lifecycle = AppLifecycleState.resumed;
   @override
   Set<LearnerRealtimeDomain> get realtimeDomains => const {
         LearnerRealtimeDomain.quizzes,
@@ -49,8 +65,9 @@ class _AssignedClassActivitiesState extends State<AssignedClassActivities>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     unawaited(_load());
-    _poll = Timer.periodic(const Duration(seconds: 20), (_) {
-      if (mounted &&
+    _poll = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (_lifecycle == AppLifecycleState.resumed &&
+          mounted &&
           TickerMode.valuesOf(context).enabled &&
           ModalRoute.of(context)?.isCurrent == true) {
         unawaited(_load());
@@ -59,7 +76,14 @@ class _AssignedClassActivitiesState extends State<AssignedClassActivities>
   }
 
   @override
+  void didUpdateWidget(AssignedClassActivities oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.refreshToken != widget.refreshToken) unawaited(_load());
+  }
+
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lifecycle = state;
     if (state == AppLifecycleState.resumed) unawaited(_load());
   }
 
@@ -88,7 +112,12 @@ class _AssignedClassActivitiesState extends State<AssignedClassActivities>
             });
           }
         } catch (_) {
-          if (mounted) setState(() => _quizError = true);
+          if (mounted) {
+            setState(() {
+              _quizError = true;
+              _quizzes = [];
+            });
+          }
         }
       }(),
       () async {
@@ -102,7 +131,12 @@ class _AssignedClassActivitiesState extends State<AssignedClassActivities>
             });
           }
         } catch (_) {
-          if (mounted) setState(() => _homeworkError = true);
+          if (mounted) {
+            setState(() {
+              _homeworkError = true;
+              _homework = [];
+            });
+          }
         }
       }(),
     ]);
@@ -110,130 +144,263 @@ class _AssignedClassActivitiesState extends State<AssignedClassActivities>
     if (mounted) setState(() => _loading = false);
   }
 
+  List<HomeActivityItem> get _items => [
+        ..._quizzes.map(HomeActivityItem.quiz),
+        ..._homework.map(HomeActivityItem.homework),
+        if (widget.dashboard)
+          ...widget.technical.map((a) => HomeActivityItem.technical(
+              a, widget.technicalStatuses[a.id], DateTime.now().toUtc())),
+      ]..sort(HomeActivityItem.prioritize);
   @override
-  Widget build(BuildContext context) =>
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+  Widget build(BuildContext context) {
+    final items = _items;
+    final narrow = MediaQuery.sizeOf(context).width < 640;
+    final previewCount = narrow ? 2 : 3;
+    final attention = items.where((a) => a.outstanding).toList();
+    final shown = items
+        .where((a) => switch (_filter) {
+              1 => a.outstanding,
+              2 => a.kind == HomeActivityKind.quiz,
+              3 => a.kind == HomeActivityKind.homework,
+              4 => a.kind == HomeActivityKind.technical,
+              5 => a.completed,
+              _ => true,
+            })
+        .toList();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      if (widget.dashboard) ...[
+        LearnerSurface(
+            padding: const EdgeInsets.all(14),
+            color: AppTheme.softBlueAccent,
+            child: Wrap(spacing: 16, runSpacing: 8, children: [
+              Text(
+                  MissionContentData.homeSummary(_quizzes.length,
+                      _homework.length, widget.technical.length),
+                  style: AppTheme.labelLarge),
+              Text('${MissionContentData.homeToDo}: ${attention.length}',
+                  style: AppTheme.labelLarge),
+            ])),
+        const SizedBox(height: 16),
+        Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+          Expanded(
+              child: narrow
+                  ? DropdownButtonFormField<int>(
+                      key: ValueKey(_filter),
+                      initialValue: _filter,
+                      isExpanded: true,
+                      decoration: const InputDecoration(
+                          labelText: MissionContentData.homeActivityView),
+                      items: [
+                        for (final (index, label) in _filters.indexed)
+                          DropdownMenuItem(value: index, child: Text(label))
+                      ],
+                      onChanged: (value) {
+                        if (value != null) setState(() => _filter = value);
+                      },
+                    )
+                  : Wrap(spacing: 8, runSpacing: 8, children: [
+                      for (final (index, label) in _filters.indexed)
+                        ChoiceChip(
+                            label: Text(label),
+                            selected: _filter == index,
+                            onSelected: (_) => setState(() => _filter = index)),
+                    ])),
+          const SizedBox(width: 8),
+          IconButton(
+              tooltip: MissionContentData.classActivitiesRetry,
+              onPressed: _loadingNow ? null : _load,
+              icon: const Icon(Icons.refresh)),
+        ]),
+        const SizedBox(height: 16),
+      ],
+      if (!widget.dashboard)
         Align(
             alignment: Alignment.centerRight,
             child: TextButton.icon(
                 onPressed: _loadingNow ? null : _load,
-                icon: const Icon(Icons.refresh),
+                icon: const Icon(Icons.refresh, size: 18),
                 label: const Text(MissionContentData.classActivitiesRetry))),
-        if (_loading)
-          const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(MissionContentData.classActivitiesLoading))
-        else ...[
+      if (_loading)
+        const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text(MissionContentData.classActivitiesLoading))
+      else ...[
+        if (widget.dashboard && _filter == 0) ...[
           Semantics(
               header: true,
               container: true,
               child: LearnerSectionHeader(
-                  title:
-                      '${MissionContentData.assignedQuizzes} (${_quizzes.length})')),
-          const SizedBox(height: 10),
-          if (_quizError)
-            const Text(MissionContentData.classActivitiesUnavailable)
-          else if (_quizzes.isEmpty)
-            const Text(MissionContentData.quizzesEmpty)
+                  title: MissionContentData.homeAttention,
+                  actionLabel:
+                      attention.length > 1 ? MissionContentData.homeToDo : null,
+                  onAction: attention.length > 1
+                      ? () => setState(() => _filter = 1)
+                      : null)),
+          const SizedBox(height: 8),
+          if (attention.isEmpty)
+            const Text(MissionContentData.homeAttentionEmpty)
           else
-            ..._quizzes.map(_quizCard),
-          const SizedBox(height: 22),
-          Semantics(
-              header: true,
-              container: true,
-              child: LearnerSectionHeader(
-                  title:
-                      '${MissionContentData.homeworkAssignments} (${_homework.length})')),
-          const SizedBox(height: 10),
-          if (_homeworkError)
-            const Text(MissionContentData.classActivitiesUnavailable)
-          else if (_homework.isEmpty)
-            const Text(MissionContentData.homeworkEmpty)
-          else
-            ..._homework.map(_homeworkCard),
+            for (final item in attention.take(narrow ? 1 : 2))
+              Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Material(
+                      color: AppTheme.cardWhite,
+                      borderRadius: BorderRadius.circular(12),
+                      child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 4),
+                          leading: Icon(_icon(item.kind),
+                              color: AppTheme.primaryBlue),
+                          title: Text(item.title, style: AppTheme.labelLarge),
+                          subtitle: Text(
+                              '${_name(item.kind)} · ${MissionContentData.homeworkDue(manilaDate(item.deadline))}'),
+                          trailing: const Icon(Icons.chevron_right),
+                          onTap: () => _open(item)))),
+          const SizedBox(height: 16),
         ],
-      ]);
-
-  Widget _quizCard(LearnerQuizSummary q) {
-    final completed = q.state == LearnerQuizState.completed;
-    final submitted = q.state == LearnerQuizState.submitted;
-    final label = completed
-        ? MissionContentData.quizViewResult
-        : submitted
-            ? MissionContentData.quizAttemptUsed
-            : !q.isAvailable
-                ? MissionContentData.quizClosed
-                : q.state == LearnerQuizState.inProgress
-                    ? MissionContentData.quizContinue
-                    : MissionContentData.quizStart;
-    return Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Semantics(
-            container: true,
-            child: LearnerSurface(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  Text(q.title, style: AppTheme.titleMedium),
-                  const SizedBox(height: 4),
-                  Text(q.classTitle),
-                  Text(MissionContentData.homeworkDue(manilaDate(q.dueAt)),
-                      style: AppTheme.bodySmall),
-                  Text(q.closedReason == 'deadline_passed' && !completed
-                      ? MissionContentData.quizClosedDeadline
-                      : q.state == LearnerQuizState.inProgress
-                          ? MissionContentData.quizAttemptInProgress
-                          : completed
-                              ? MissionContentData.quizAttemptUsed
-                              : MissionContentData.quizOneAttempt),
-                  const SizedBox(height: 8),
-                  FilledButton(
-                      onPressed: submitted || (!completed && !q.isAvailable)
-                          ? null
-                          : () async {
-                              await Navigator.push(
-                                  context,
-                                  MaterialPageRoute<void>(
-                                      builder: (_) =>
-                                          completed && q.attemptId != null
-                                              ? QuizResultScreen(
-                                                  attemptId: q.attemptId!)
-                                              : QuizDetailsScreen(quiz: q)));
-                              if (mounted) await _load();
-                            },
-                      child: Text(label)),
-                ]))));
+        for (final kind in HomeActivityKind.values)
+          if ((kind != HomeActivityKind.technical || widget.dashboard) &&
+              (_filter < 2 || _filter == 5 || _filter == kind.index + 2)) ...[
+            _heading(
+                '${_section(kind)} (${items.where((a) => a.kind == kind).length})'),
+            const SizedBox(height: 10),
+            if (kind == HomeActivityKind.quiz && _quizError ||
+                kind == HomeActivityKind.homework && _homeworkError)
+              const Text(MissionContentData.classActivitiesUnavailable)
+            else if (!shown.any((a) => a.kind == kind))
+              Text(_filter == 1 || _filter == 5
+                  ? MissionContentData.homeNoMatch
+                  : kind == HomeActivityKind.quiz
+                      ? MissionContentData.quizzesEmpty
+                      : kind == HomeActivityKind.homework
+                          ? MissionContentData.homeworkEmpty
+                          : MissionContentData.technicalEmpty)
+            else
+              ResponsiveActivityGrid(
+                  children: (widget.dashboard && _filter == 0
+                          ? shown
+                              .where((a) => a.kind == kind)
+                              .take(previewCount)
+                          : shown.where((a) => a.kind == kind))
+                      .map((a) =>
+                          CompactActivityCard(item: a, onOpen: () => _open(a)))
+                      .toList()),
+            if (widget.dashboard &&
+                _filter == 0 &&
+                shown.where((a) => a.kind == kind).length > previewCount)
+              TextButton(
+                  onPressed: () => setState(() => _filter = kind.index + 2),
+                  child: const Text(MissionContentData.homeViewAll)),
+            const SizedBox(height: 20),
+          ],
+      ],
+    ]);
   }
 
-  Widget _homeworkCard(HomeworkAssignment h) => Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Semantics(
-          container: true,
-          child: LearnerSurface(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                Text(h.title, style: AppTheme.titleMedium),
-                const SizedBox(height: 4),
-                Text(h.classTitle),
-                Text(MissionContentData.homeworkDue(manilaDate(h.deadline)),
-                    style: AppTheme.bodySmall),
-                Text(h.statusLabel),
-                if (h.submission == null && h.deadlinePassed)
-                  const Text(MissionContentData.homeworkLateAllowed),
-                if ((h.submission?.latenessSeconds ?? 0) > 0)
-                  Text(MissionContentData.homeworkLateBy(
-                      latenessDuration(h.submission!.latenessSeconds))),
-                const SizedBox(height: 8),
-                OutlinedButton(
-                    onPressed: () async {
-                      await Navigator.push(
-                          context,
-                          MaterialPageRoute<void>(
-                              builder: (_) =>
-                                  HomeworkDetailsScreen(assignment: h)));
-                      if (mounted) await _load();
-                    },
-                    child: const Text(MissionContentData.homeworkView)),
-              ]))));
+  static const _filters = [
+    MissionContentData.homeAll,
+    MissionContentData.homeToDo,
+    MissionContentData.homeQuizzes,
+    MissionContentData.homeHomework,
+    MissionContentData.homeTechnical,
+    MissionContentData.homeCompleted
+  ];
+
+  Widget _heading(String title) => Semantics(
+      header: true, container: true, child: LearnerSectionHeader(title: title));
+  String _section(HomeActivityKind kind) => switch (kind) {
+        HomeActivityKind.quiz => MissionContentData.assignedQuizzes,
+        HomeActivityKind.homework => MissionContentData.homeworkAssignments,
+        HomeActivityKind.technical => MissionContentData.technicalActivities,
+      };
+  Future<void> _open(HomeActivityItem item) async {
+    if (!item.enabled) return;
+    final source = item.source;
+    if (source is AssignedActivity) {
+      await widget.onTechnicalOpen?.call(source);
+    } else {
+      await Navigator.push(
+          context,
+          MaterialPageRoute<void>(
+              builder: (_) => source is HomeworkAssignment
+                  ? HomeworkDetailsScreen(assignment: source)
+                  : (source as LearnerQuizSummary).state ==
+                              LearnerQuizState.completed &&
+                          source.attemptId != null
+                      ? QuizResultScreen(attemptId: source.attemptId!)
+                      : QuizDetailsScreen(quiz: source)));
+    }
+    if (mounted) await _load();
+  }
+}
+
+String _name(HomeActivityKind kind) => switch (kind) {
+      HomeActivityKind.quiz => MissionContentData.homeQuizzes,
+      HomeActivityKind.homework => MissionContentData.homeHomework,
+      HomeActivityKind.technical => MissionContentData.technicalActivities,
+    };
+IconData _icon(HomeActivityKind kind) => switch (kind) {
+      HomeActivityKind.quiz => Icons.quiz_outlined,
+      HomeActivityKind.homework => Icons.assignment_outlined,
+      HomeActivityKind.technical => Icons.build_outlined,
+    };
+
+class ResponsiveActivityGrid extends StatelessWidget {
+  const ResponsiveActivityGrid({super.key, required this.children});
+  final List<Widget> children;
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
+        // Intrinsic card height follows large text. No nested scrolling or clipping.
+        final columns = box.maxWidth >= 960
+            ? 3
+            : box.maxWidth >= 640
+                ? 2
+                : 1;
+        final width =
+            ((box.maxWidth - (columns - 1) * 12) / columns).clamp(0.0, 460.0);
+        return Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: children
+                .map((card) => SizedBox(width: width, child: card))
+                .toList());
+      });
+}
+
+class CompactActivityCard extends StatelessWidget {
+  const CompactActivityCard(
+      {super.key, required this.item, required this.onOpen});
+  final HomeActivityItem item;
+  final VoidCallback onOpen;
+  @override
+  Widget build(BuildContext context) => Semantics(
+      container: true,
+      child: LearnerSurface(
+          padding: const EdgeInsets.all(14),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Icon(_icon(item.kind), size: 20, color: AppTheme.primaryBlue),
+              const SizedBox(width: 8),
+              Expanded(child: Text(item.title, style: AppTheme.titleMedium))
+            ]),
+            const SizedBox(height: 6),
+            Text(item.classTitle, style: AppTheme.bodySmall),
+            Text(MissionContentData.homeworkDue(manilaDate(item.deadline)),
+                style: AppTheme.bodySmall),
+            const SizedBox(height: 8),
+            Text(item.status,
+                style:
+                    AppTheme.labelMedium.copyWith(color: AppTheme.primaryBlue)),
+            if (item.lateness != null)
+              Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(item.lateness!, style: AppTheme.bodySmall)),
+            const SizedBox(height: 10),
+            OutlinedButton(
+                onPressed: item.enabled ? onOpen : null,
+                style:
+                    OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+                child: Text(item.action)),
+          ])));
 }

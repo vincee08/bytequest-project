@@ -39,6 +39,9 @@ class HomeworkService {
   }
 
   Map<String, dynamic> _decode(http.Response response) {
+    if (response.statusCode == 403 || response.statusCode == 404) {
+      throw StateError('HOMEWORK_ACCESS_DENIED');
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError('HOMEWORK_REQUEST_FAILED');
     }

@@ -16,6 +16,7 @@ class ClassDetailsScreen extends StatefulWidget {
   final String classTitle;
   final List<AssignedActivity> assignments;
   final List<LearningResource> resources;
+  final String? focusedAssignmentId;
 
   const ClassDetailsScreen({
     super.key,
@@ -23,6 +24,7 @@ class ClassDetailsScreen extends StatefulWidget {
     required this.classTitle,
     required this.assignments,
     required this.resources,
+    this.focusedAssignmentId,
   });
 
   @override
@@ -60,37 +62,45 @@ class _ClassDetailsScreenState extends State<ClassDetailsScreen> {
               ),
             ),
             const SizedBox(height: 14),
-            _Summary(
-              assignments: _classAssignments.length,
-              resources: _classResources.length,
-            ),
-            const SizedBox(height: 22),
-            AssignedClassActivities(classId: widget.classId),
-            const SizedBox(height: 22),
-            const LearnerSectionHeader(
-              title: 'Assigned learning',
-              supportingText: 'Activities shared by your Instructor',
-            ),
-            const SizedBox(height: 10),
-            if (_classAssignments.isEmpty)
-              const LearnerSurface(
-                child:
-                    Text('No activities have been assigned in this class yet.'),
-              )
-            else
-              ..._classAssignments.map(_assignmentCard),
-            const SizedBox(height: 22),
-            const LearnerSectionHeader(
-              title: 'Class resources',
-              supportingText: 'Private files shared with this class',
-            ),
-            const SizedBox(height: 10),
-            if (_classResources.isEmpty)
-              const LearnerSurface(
-                child: Text('No learning resources have been shared yet.'),
-              )
-            else
-              ..._classResources.map(_resourceCard),
+            if (widget.focusedAssignmentId != null)
+              ..._classAssignments
+                  .where((a) => a.id == widget.focusedAssignmentId)
+                  .map(_assignmentCard),
+            if (widget.focusedAssignmentId == null) ...[
+              _Summary(
+                assignments: _classAssignments.length,
+                resources: _classResources.length,
+              ),
+              const SizedBox(height: 22),
+              AssignedClassActivities(classId: widget.classId),
+              const SizedBox(height: 22),
+              const LearnerSectionHeader(
+                title: 'Assigned learning',
+                supportingText: 'Activities shared by your Instructor',
+              ),
+              const SizedBox(height: 10),
+              if (_classAssignments.isEmpty)
+                const LearnerSurface(
+                  child: Text(
+                      'No activities have been assigned in this class yet.'),
+                )
+              else
+                ..._classAssignments
+                    .where((a) => a.id != widget.focusedAssignmentId)
+                    .map(_assignmentCard),
+              const SizedBox(height: 22),
+              const LearnerSectionHeader(
+                title: 'Class resources',
+                supportingText: 'Private files shared with this class',
+              ),
+              const SizedBox(height: 10),
+              if (_classResources.isEmpty)
+                const LearnerSurface(
+                  child: Text('No learning resources have been shared yet.'),
+                )
+              else
+                ..._classResources.map(_resourceCard),
+            ],
           ],
         ),
       ),

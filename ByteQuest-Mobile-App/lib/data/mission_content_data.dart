@@ -12,14 +12,70 @@ class HardwareItem {
 /// Mission Content Data
 /// Contains questions, components, steps, and scenarios for all missions
 class MissionContentData {
+  static const notificationsTitle = 'Notifications';
+  static const notificationsAll = 'All';
+  static const notificationsUnread = 'Unread';
+  static const notificationsMarkAll = 'Mark all read';
+  static const notificationsMarkRead = 'Mark as read';
+  static const notificationsRead = 'Read';
+  static const notificationsEmpty = 'No notifications';
+  static const notificationsEmptyHelp =
+      'New activity updates will appear here.';
+  static const notificationsUnreadEmpty = 'All caught up';
+  static const notificationsRefresh = 'Refresh notifications';
+  static const notificationsRetry = 'Try again';
+  static const notificationsFailed =
+      'Notifications could not be loaded. Try again.';
+  static const notificationsSaveFailed =
+      'Read status could not be saved. Try again.';
+  static const notificationsMore = 'Load more';
+  static const notificationsOpen = 'Open activity';
+  static const notificationsUpdate = 'Update';
+  static const activityNoAccess =
+      'This activity is no longer available to your account. Refresh your activities or contact your instructor.';
+  static const activityOpenFailed =
+      'The activity could not be opened. Check your connection and try again.';
+  static const homeGreeting = 'Hello';
+  static const homeSubtitle = 'Your learning, in one place';
+  static const homeLearner = 'Learner';
+  static const homeLoading = 'Loading learner dashboard';
+  static const homeFailed =
+      'Your technical learning record could not be loaded. Refresh to try again.';
+  static const homeAttention = 'Needs Your Attention';
+  static const homeAttentionEmpty = 'You have no outstanding activities.';
+  static const homeToDo = 'To Do';
+  static const homeAll = 'All Activities';
+  static const homeQuizzes = 'Quizzes';
+  static const homeHomework = 'Homework';
+  static const homeTechnical = 'Technical';
+  static const homeCompleted = 'Completed';
+  static const homeOpen = 'Open';
+  static const homeClosed = 'Closed';
+  static const homeUpcoming = 'Not yet open';
+  static const homeTechnicalOpen = 'View activity';
+  static const homeViewGrading = 'View Grading';
+  static const homeInReview = 'Awaiting instructor review';
+  static const homeReleased = 'Released results';
+  static const homeAssessment = 'Official assessment';
+  static const homePractice = 'Practice';
+  static const homeStarted = 'In progress';
+  static const homeAssigned = 'Assigned';
+  static const homeNoMatch = 'No activities in this view.';
+  static const homeViewAll = 'View all activities';
+  static const homeActivityView = 'Activity view';
+  static String homeSummary(int quizzes, int homework, int technical) =>
+      '$quizzes quizzes · $homework homework · $technical technical';
+  static String notificationBell(int unread) => 'Notifications, $unread unread';
   static const assignedQuizzes = 'Assigned Quizzes';
   static const technicalActivities = 'Technical activities';
   static const technicalAssigned = 'Technical tasks';
   static const technicalNext = 'Your next technical activity will appear here';
-  static const technicalEmpty = 'No technical activities assigned. Check your quizzes and homework below.';
+  static const technicalEmpty =
+      'No technical activities assigned.';
   static const homeworkAssignments = 'Homework Assignments';
   static const classActivitiesLoading = 'Loading class activities';
-  static const classActivitiesUnavailable = 'Class activities could not be loaded.';
+  static const classActivitiesUnavailable =
+      'Class activities could not be loaded.';
   static const classActivitiesRetry = 'Refresh activities';
   static const homeworkEmpty = 'No homework assigned';
   static const quizzesEmpty = 'No quizzes assigned';
@@ -28,24 +84,31 @@ class MissionContentData {
   static const homeworkInstructions = 'Instructions';
   static const homeworkFiles = 'Instructor attachments';
   static const homeworkAnswer = 'Written answer';
-  static const homeworkAnswerHint = 'Enter your completed answer, attach files, or both.';
+  static const homeworkAnswerHint =
+      'Enter your completed answer, attach files, or both.';
   static const homeworkAnswerFiles = 'Your completed files';
   static const homeworkAddFile = 'Attach completed file';
-  static const homeworkFileHelp = 'PDF, JPG, PNG, WebP, or TXT. Up to 10 MB per file; 5 files.';
+  static const homeworkFileHelp =
+      'PDF, JPG, PNG, WebP, or TXT. Up to 10 MB per file; 5 files.';
   static const homeworkReview = 'Review submission';
   static const homeworkReviewTitle = 'Review your homework';
-  static const homeworkReviewHelp = 'Check your answer and files. You can submit once. Your Instructor will review your work.';
+  static const homeworkReviewHelp =
+      'Check your answer and files. You can submit once. Your Instructor will review your work.';
   static const homeworkSubmit = 'Submit Assignment';
   static const homeworkAssigned = 'Assigned';
   static const homeworkSubmitted = 'Submitted for Grading';
   static const homeworkGraded = 'Graded';
-  static const homeworkLateAllowed = 'Deadline Passed — Late Submission Allowed';
+  static const homeworkLateAllowed =
+      'Deadline Passed — Late Submission Allowed';
   static const homeworkFeedback = 'Instructor feedback';
   static const homeworkNoDeadline = 'No deadline';
   static const homeworkNoAnswer = 'File submission';
-  static const homeworkOutside = 'Complete the homework outside ByteQuest, then return to submit your answer or files.';
-  static const homeworkFailed = 'Homework could not be saved. Refresh to check its status, then retry.';
-  static const homeworkFileFailed = 'File could not be uploaded. Check the file and retry.';
+  static const homeworkOutside =
+      'Complete the homework outside ByteQuest, then return to submit your answer or files.';
+  static const homeworkFailed =
+      'Homework could not be saved. Refresh to check its status, then retry.';
+  static const homeworkFileFailed =
+      'File could not be uploaded. Check the file and retry.';
   static const homeworkOpenFailed = 'File could not be opened. Try again.';
   static const homeworkTooLarge = 'Choose a nonempty file up to 10 MB.';
   static const homeworkFileLimit = 'You can attach up to 5 files.';
@@ -61,12 +124,14 @@ class MissionContentData {
   static const quizContinue = 'Continue quiz';
   static const quizViewResult = 'View Result';
   static const quizClosed = 'Closed';
-  static const quizExpiryHelp = 'Saved answers are preserved. Ask your Instructor to reopen this quiz to resume the same attempt.';
+  static const quizExpiryHelp =
+      'Saved answers are preserved. Ask your Instructor to reopen this quiz to resume the same attempt.';
   static const quizOneAttempt = 'One attempt per quiz';
   static String homeworkLateBy(String duration) => 'Late by $duration';
   static String homeworkDue(String date) => 'Deadline: $date';
   static String homeworkSubmittedAt(String date) => 'Submitted: $date';
-  static String homeworkEffectiveDeadline(String date) => 'Deadline at submission: $date';
+  static String homeworkEffectiveDeadline(String date) =>
+      'Deadline at submission: $date';
   static String homeworkScore(num score) => 'Score: $score/100';
   static const quizAttemptAvailable = 'Not started — 1 attempt available';
   static const quizAttemptInProgress = 'In progress — Continue attempt';

@@ -30,6 +30,7 @@ class LearnerQuizSummary {
   final DateTime? completedAt;
   final String? closedReason;
   final DateTime? serverNow;
+  final Map<String, String> eligibleAssignments;
 
   const LearnerQuizSummary({
     required this.assignmentId,
@@ -55,6 +56,7 @@ class LearnerQuizSummary {
     required this.completedAt,
     this.closedReason,
     this.serverNow,
+    this.eligibleAssignments = const {},
   });
 
   LearnerQuizState get state {
@@ -102,6 +104,10 @@ class LearnerQuizSummary {
       completedAt: date('completed_at'),
       closedReason: json['closed_reason'] as String?,
       serverNow: date('server_now'),
+      eligibleAssignments: {
+        for (final link in json['eligible_assignments'] as List? ?? const [])
+          link['assignment_id'] as String: link['class_id'] as String
+      },
     );
   }
 }

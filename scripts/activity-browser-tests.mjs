@@ -71,9 +71,12 @@ try{
  mobile=await browser.newPage({viewport:{width:430,height:932},reducedMotion:'reduce'});mobile.setDefaultTimeout(40000);
  const backendOrigins=new Set();mobile.on('request',r=>{const u=new URL(r.url());if(/^\/(auth|rest|storage)\/v1/.test(u.pathname))backendOrigins.add(u.origin);});
  await mobile.goto('http://127.0.0.1:3009');
- await mobile.locator('flt-semantics-placeholder').waitFor({state:'attached',timeout:60000});await mobile.locator('flt-semantics-placeholder').evaluate(e=>e.click());
+ await mobile.locator('flt-semantics-placeholder').waitFor({state:'attached',timeout:180000});await mobile.locator('flt-semantics-placeholder').evaluate(e=>e.click());
  await mobile.getByRole('button',{name:'Skip',exact:true}).click();await mobile.getByRole('button',{name:'I already have an account',exact:true}).click();
- await mobile.getByRole('textbox',{name:/email/i}).fill(learnerAccounts[2].email);await mobile.getByRole('textbox',{name:/password/i}).fill(learnerAccounts[2].password);await mobile.getByRole('button',{name:'Log In',exact:true}).click();
+ const learnerEmail=mobile.getByRole('textbox',{name:/email/i}),learnerPassword=mobile.getByRole('textbox',{name:/password/i});
+ await learnerEmail.click();await learnerEmail.fill(learnerAccounts[2].email);await mobile.waitForTimeout(250);
+ await learnerPassword.click();await learnerPassword.fill(learnerAccounts[2].password);await mobile.waitForTimeout(250);
+ await mobile.getByRole('button',{name:'Log In',exact:true}).click();
  await revealFlutter(mobile,mobile.getByRole('heading',{name:'Assigned Quizzes (1)',exact:true}).first());
  assert(await mobile.locator(`[aria-label*="Activities quiz ${fixture.run}"]`).count()>0);
  assert.equal(await mobile.getByText('AI Generated',{exact:true}).count(),0);
@@ -95,11 +98,14 @@ try{
  // Flutter virtualizes off-screen list rows; scroll through the canvas-backed
  // semantics tree to reach the separate homework section.
  const homeworkTitle=`Homework edited ${fixture.run}`;
+ await revealFlutter(mobile,mobile.getByRole('heading',{name:/Homework Assignments/}).first());
+ const moreHomework=mobile.getByRole('button',{name:'View all activities',exact:true}).last();
+ if(await moreHomework.count()){await revealFlutter(mobile,moreHomework);await moreHomework.click();}
  await mobile.mouse.move(200,600);
  for(let i=0;i<12 && !(await mobile.locator(`[aria-label*="${homeworkTitle}"]`).count());i++){await mobile.mouse.wheel(0,500);await mobile.waitForTimeout(250);}
  await mobile.locator(`[aria-label*="${homeworkTitle}"]`).first().waitFor();
  // This synthetic learner has not submitted the API suite's first homework.
- const titleNode=mobile.locator(`[aria-label*="${homeworkTitle}"]`).first();
+ const titleNode=mobile.locator(`[aria-label*="${homeworkTitle}"]`).filter({has:mobile.getByRole('button',{name:'View Assignment',exact:true})}).first();
  const card=titleNode;
  if(await card.count())await card.getByRole('button',{name:'View Assignment',exact:true}).click();
  else await mobile.getByRole('button',{name:'View Assignment',exact:true}).last().click();

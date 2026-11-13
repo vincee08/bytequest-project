@@ -32,6 +32,21 @@ class LearnerQuizService {
     return LearnerQuizAttempt.fromJson(Map<String, dynamic>.from(response));
   }
 
+  /// The availability projection intentionally returns one row per quiz.
+  /// A notification may reference another eligible class assignment of it.
+  Future<LearnerQuizSummary?> getNotificationQuiz(
+      String assignmentId, String classId) async {
+    final rows = await getAvailableQuizzes();
+    final exact = rows
+        .where((q) => q.assignmentId == assignmentId && q.classId == classId);
+    if (exact.isNotEmpty) return exact.first;
+    // References are emitted by the same authoritative RPC after checking
+    // current class membership, class status and publication/attempt history.
+    final canonical =
+        rows.where((q) => q.eligibleAssignments[assignmentId] == classId);
+    return canonical.isEmpty ? null : canonical.first;
+  }
+
   Future<void> saveAnswer({
     required String attemptId,
     required String itemId,

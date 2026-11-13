@@ -548,6 +548,20 @@ class AuthoritativeAssessmentService implements MissionEvidenceTransport {
     }).toList(growable: false);
   }
 
+  Future<Map<String, String>> getAssignmentStatuses() async {
+    final id = _supabase.auth.currentUser?.id;
+    if (id == null) throw StateError('AUTHENTICATION_REQUIRED');
+    final rows = await _supabase
+        .from('attempts')
+        .select('assignment_id,status,started_at')
+        .eq('learner_id', id)
+        .order('started_at');
+    return {
+      for (final row in rows)
+        row['assignment_id'] as String: row['status'] as String
+    };
+  }
+
   Future<Map<String, int>> getAttemptStatusCounts() async {
     final response = await _supabase.from('attempts').select('status');
     final counts = <String, int>{};

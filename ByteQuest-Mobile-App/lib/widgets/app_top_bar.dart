@@ -57,12 +57,13 @@ class AppTopBar extends StatelessWidget {
               if (showIcons) ...[
                 Semantics(
                   button: true,
-                  label: notificationCount == 0
-                      ? 'Notifications, none unread'
-                      : 'Notifications, $notificationCount unread',
+                  liveRegion: true,
+                  label: MissionContentData.notificationBell(notificationCount),
                   child: IconButton.filledTonal(
+                    constraints:
+                        const BoxConstraints(minWidth: 48, minHeight: 48),
                     onPressed: onNotificationTap,
-                    tooltip: 'Notifications',
+                    tooltip: MissionContentData.notificationsTitle,
                     icon: Badge(
                       isLabelVisible: notificationCount > 0,
                       label: Text(

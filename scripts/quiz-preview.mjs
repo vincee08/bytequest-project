@@ -252,6 +252,12 @@ if (command === "setup") {
     args = ["scripts/quiz-qa-end-sessions.mjs"];
   } else if (command === "ai-test") {
     args = ["scripts/quiz-ai-live-synthetic-test.mjs"];
+  } else if (command === "notification-tests") {
+    args = ["scripts/notification-api-tests.mjs", ...process.argv.slice(3)];
+  } else if (command === "notification-browser-tests") {
+    args = ["scripts/notification-browser-tests.mjs", ...process.argv.slice(3)];
+  } else if (command === "notification-owner-setup") {
+    args = ["scripts/notification-owner-setup.mjs"];
   } else if (command === "quiz-regression") {
     args = ["scripts/quiz-workflow-api-tests.mjs"];
   } else if (command === "reconcile-uploads") {
