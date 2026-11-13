@@ -246,6 +246,8 @@ if (command === "setup") {
     args = [command === "enrollment-tests" ? "scripts/learner-enrollment-tests.mjs" : "scripts/resource-ai-workflow-tests.mjs", ...process.argv.slice(3)];
   } else if (command === "owner-resources") {
     args = ["scripts/quiz-resource-owner-setup.mjs"];
+  } else if (["activity-tests", "activity-owner-setup", "activity-browser-tests"].includes(command)) {
+    args = [command === "activity-tests" ? "scripts/activity-api-tests.mjs" : command === "activity-owner-setup" ? "scripts/activity-owner-setup.mjs" : "scripts/activity-browser-tests.mjs", ...process.argv.slice(3)];
   } else if (command === "end-qa-sessions") {
     args = ["scripts/quiz-qa-end-sessions.mjs"];
   } else if (command === "ai-test") {
@@ -255,6 +257,7 @@ if (command === "setup") {
   } else if (command === "reconcile-uploads") {
     args = ["scripts/resource-upload-reconcile.mjs", ...process.argv.slice(3)];
   } else if (command === "learner") {
+    env.FLUTTER_WINDOWS = "false";
     const definePath = path.join(root, ".tmp", "quiz-local-web-defines.json");
     // Only public client configuration is written to the Flutter define file.
     fs.writeFileSync(
@@ -262,7 +265,7 @@ if (command === "setup") {
       JSON.stringify({
         BQ_SUPABASE_URL: config.API_URL,
         BQ_SUPABASE_ANON_KEY: config.PUBLISHABLE_KEY ?? config.ANON_KEY,
-        BQ_PRACTICE_API_URL: "http://127.0.0.1:3008",
+        BQ_PRACTICE_API_URL: "http://127.0.0.1:3008/api/learner/practice",
       }),
     );
     cwd = path.join(root, "ByteQuest-Mobile-App");
@@ -271,6 +274,7 @@ if (command === "setup") {
       ...(process.platform === "win32" ? ["/d", "/c", "flutter"] : []),
       "run",
       "--no-pub",
+      "--no-web-resources-cdn",
       "-d",
       "web-server",
       "--web-hostname",

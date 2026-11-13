@@ -134,6 +134,13 @@ class LearnerRealtimeCoordinator extends ChangeNotifier {
     });
     _listen(channel, 'quiz_assignments', const {LearnerRealtimeDomain.quizzes});
     _listen(channel, 'quiz_results', const {LearnerRealtimeDomain.quizzes});
+    _listen(channel, 'homework_assignments',
+        const {LearnerRealtimeDomain.learning});
+    _listenFiltered(channel,
+        table: 'homework_submissions',
+        column: 'learner_id',
+        value: userId,
+        domains: const {LearnerRealtimeDomain.learning});
     _listen(channel, 'criterion_results', const {
       LearnerRealtimeDomain.assessment,
       LearnerRealtimeDomain.progress,

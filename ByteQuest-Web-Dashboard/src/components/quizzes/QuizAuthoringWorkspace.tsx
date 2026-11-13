@@ -40,6 +40,8 @@ import {
 } from "@/lib/quizzes/authoring";
 import { QuestionEditor } from "./QuestionEditor";
 import { QuizPreview } from "./QuizPreview";
+import { QuizDeadlineControls } from './QuizDeadlineControls';
+import { manilaInputToUtc } from '@/lib/activities/dates';
 import { AiQuizPanel, type QuizGroundingCatalog } from "./AiQuizPanel";
 
 interface Version {
@@ -56,8 +58,11 @@ interface Assignment {
   versionId: string;
   status: string;
   classTitle: string;
+  dueAt?: string | null;
 }
 export interface QuizWorkspaceProps {
+  initialTab?: string;
+  serverNow?: string;
   quiz: {
     id: string;
     title: string;
@@ -99,9 +104,12 @@ export function QuizAuthoringWorkspace({
   versions,
   assignments,
   results,
+  initialTab,
+  serverNow,
 }: QuizWorkspaceProps) {
   const router = useRouter();
-  const [tab, setTab] = useState("questions");
+  const [tab, setTab] = useState(initialTab === 'publishing' ? 'publishing' : "questions");
+  const [quizDeadline, setQuizDeadline] = useState('');
   const [busy, setBusy] = useState<string | null>(null);
   const busyRef = useRef(false);
   const [feedback, setFeedback] = useState<{
@@ -334,6 +342,7 @@ export function QuizAuthoringWorkspace({
             p_quiz_version_id: version.id,
             p_class_ids: targets.map((item) => item.id),
             p_instructions: assignmentInstructions.trim() || undefined,
+            p_due_at: manilaInputToUtc(quizDeadline) ?? undefined,
           }),
         `Version ${version.versionNumber} published and assigned to ${targets.map((item) => item.title).join(", ")}.`,
       )
@@ -745,6 +754,7 @@ export function QuizAuthoringWorkspace({
           </section>
         </TabsContent>
         <TabsContent forceMount value="publishing" className={content}>
+          <section className={`${panel} mb-4 space-y-4`}><h2 className="font-semibold">Class deadlines and reopening</h2><QuizDeadlineControls quizTitle={quiz.title} serverNow={serverNow ?? new Date().toISOString()} assignments={assignments.filter(a => a.status === 'active' && versions.find(v => v.id === a.versionId)?.status === 'published').map(a => ({ id: a.id, classTitle: a.classTitle, dueAt: a.dueAt ?? null }))} /></section>
           <section className={panel}>
             <h2 className="font-semibold">
               {isDraft ? "Publish to classes" : "Class assignments"}
@@ -819,6 +829,7 @@ export function QuizAuthoringWorkspace({
                     disabled={!!quiz.archivedAt}
                   />
                 </div>
+                <div className="space-y-2"><Label htmlFor="publish-quiz-deadline">Deadline for new assignments (optional, Asia/Manila)</Label><Input id="publish-quiz-deadline" className="min-h-11" type="datetime-local" value={quizDeadline} onChange={event => setQuizDeadline(event.target.value)} disabled={busy !== null} /><p className="text-xs text-muted-foreground">At the deadline, answering and submission close. Set class-specific deadlines above after publication.</p></div>
               </div>
               <div className="space-y-3 rounded-lg bg-muted/30 p-4">
                 <h3 className="text-sm font-semibold">Publication readiness</h3>

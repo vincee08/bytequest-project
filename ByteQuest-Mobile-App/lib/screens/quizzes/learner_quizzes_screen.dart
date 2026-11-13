@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import '../../models/homework_model.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/learner_ui.dart';
@@ -167,7 +167,12 @@ class _LearnerQuizzesScreenState extends State<LearnerQuizzesScreen>
               ],
             ),
             const SizedBox(height: 10),
-            _QuizStatus(label: _stateLabel(state), color: color),
+            _QuizStatus(
+                label: quiz.closedReason == 'deadline_passed' &&
+                        state == LearnerQuizState.unavailable
+                    ? MissionContentData.quizClosedDeadline
+                    : _stateLabel(state),
+                color: color),
             const SizedBox(height: 14),
             Row(
               children: [
@@ -183,7 +188,7 @@ class _LearnerQuizzesScreenState extends State<LearnerQuizzesScreen>
                   const SizedBox(width: 5),
                   Expanded(
                     child: Text(
-                      'Due ${DateFormat.MMMd().add_jm().format(quiz.dueAt!.toLocal())}',
+                      MissionContentData.homeworkDue(manilaDate(quiz.dueAt)),
                       style: AppTheme.labelMedium,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -231,7 +236,8 @@ class _LearnerQuizzesScreenState extends State<LearnerQuizzesScreen>
         LearnerQuizState.inProgress => MissionContentData.quizAttemptInProgress,
         LearnerQuizState.submitted => MissionContentData.quizAttemptUsed,
         LearnerQuizState.completed => MissionContentData.quizAttemptUsed,
-        LearnerQuizState.unavailable => MissionContentData.quizAttemptUnavailable,
+        LearnerQuizState.unavailable =>
+          MissionContentData.quizAttemptUnavailable,
       };
 
   Color _stateColor(LearnerQuizState state) => switch (state) {

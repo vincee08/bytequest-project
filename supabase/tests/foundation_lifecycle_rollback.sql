@@ -50,13 +50,22 @@ insert into bytequest_test_context (
   mission_id
 )
 select
-  (select user_id from public.profiles where role = 'admin' and status = 'active' limit 1),
-  (select user_id from public.profiles where role = 'instructor' and status = 'active' limit 1),
-  (select user_id from public.profiles where role = 'learner' and status = 'active' order by user_id limit 1),
-  (select user_id from public.profiles where role = 'learner' and status = 'active' order by user_id offset 2 limit 1),
-  (select user_id from public.profiles where role = 'learner' and status = 'active' order by user_id offset 1 limit 1),
+  gen_random_uuid(),
+  gen_random_uuid(),
+  gen_random_uuid(),
+  gen_random_uuid(),
+  gen_random_uuid(),
   (select id from public.coc_modules order by created_at, id limit 1),
   (select id from public.missions order by created_at, id limit 1);
+
+-- Fresh identities avoid touching owner profiles or requiring an existing QA
+-- Admin. All Auth/profile fixtures are removed by this transaction's rollback.
+insert into auth.users(id,instance_id,aud,role,email,encrypted_password,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
+select id,'00000000-0000-0000-0000-000000000000'::uuid,'authenticated','authenticated',id||'@foundation-rollback.invalid','',
+  '{"provider":"email","providers":["email"]}'::jsonb,'{"full_name":"Foundation rollback fixture"}'::jsonb,now(),now()
+from bytequest_test_context cross join lateral(values(admin_id),(instructor_id),(learner_id),(other_learner_id),(secondary_instructor_id)) t(id);
+update public.profiles set role='admin' where user_id=(select admin_id from bytequest_test_context);
+update public.profiles set role='instructor' where user_id=(select instructor_id from bytequest_test_context);
 
 do $$
 declare

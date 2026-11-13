@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
+import '../../models/homework_model.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/learner_ui.dart';
@@ -78,8 +78,8 @@ class _QuizDetailsScreenState extends State<QuizDetailsScreen> {
                       if (quiz.dueAt != null)
                         _Fact(
                           icon: Icons.event_outlined,
-                          label:
-                              'Due ${DateFormat.MMMd().add_jm().format(quiz.dueAt!.toLocal())}',
+                          label: MissionContentData.homeworkDue(
+                              manilaDate(quiz.dueAt)),
                         ),
                     ],
                   ),
@@ -104,7 +104,8 @@ class _QuizDetailsScreenState extends State<QuizDetailsScreen> {
             ),
             const SizedBox(height: 24),
             FilledButton.icon(
-              onPressed: !quiz.isAvailable || _starting ||
+              onPressed: !quiz.isAvailable ||
+                      _starting ||
                       (quiz.state != LearnerQuizState.available &&
                           quiz.state != LearnerQuizState.inProgress)
                   ? null
@@ -123,10 +124,12 @@ class _QuizDetailsScreenState extends State<QuizDetailsScreen> {
                           quiz.state == LearnerQuizState.submitted
                       ? MissionContentData.quizAttemptUsed
                       : quiz.state == LearnerQuizState.inProgress
-                      ? MissionContentData.quizAttemptInProgress
-                      : quiz.isAvailable
-                          ? MissionContentData.quizAttemptAvailable
-                          : MissionContentData.quizAttemptUnavailable),
+                          ? MissionContentData.quizAttemptInProgress
+                          : quiz.isAvailable
+                              ? MissionContentData.quizAttemptAvailable
+                              : quiz.closedReason == 'deadline_passed'
+                                  ? MissionContentData.quizClosedDeadline
+                                  : MissionContentData.quizAttemptUnavailable),
             ),
           ],
         ),
@@ -177,7 +180,7 @@ class _Fact extends StatelessWidget {
           children: [
             Icon(icon, size: 17, color: AppTheme.textMedium),
             const SizedBox(width: 6),
-            Text(label, style: AppTheme.labelMedium),
+            Flexible(child: Text(label, style: AppTheme.labelMedium)),
           ],
         ),
       );

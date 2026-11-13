@@ -13,6 +13,8 @@ import '../../services/authoritative_assessment_service.dart';
 import '../../services/profile_service.dart';
 import '../../services/learner_realtime_coordinator.dart';
 import '../../widgets/app_top_bar.dart';
+import '../../widgets/assigned_class_activities.dart';
+import '../../data/mission_content_data.dart';
 import '../missions/missions_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../settings/settings_screen.dart';
@@ -192,7 +194,7 @@ class _DashboardScreenState extends State<DashboardScreen>
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
                         child: LearnerSectionHeader(
-                          title: 'Your activities',
+                          title: MissionContentData.technicalActivities,
                           supportingText: 'Assigned by your Instructor',
                           actionLabel: 'View all',
                           onAction: _openLearningHub,
@@ -205,13 +207,16 @@ class _DashboardScreenState extends State<DashboardScreen>
                           child: LearnerSurface(
                             child: _CompactEmpty(
                               icon: Icons.assignment_outlined,
-                              text:
-                                  'Your Instructor has not assigned an activity yet.',
+                              text: MissionContentData.technicalEmpty,
                             ),
                           ),
                         )
                       else
                         ..._assignments.take(3).map(_buildAssignmentCard),
+                      const SizedBox(height: 24),
+                      const Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 20),
+                          child: AssignedClassActivities()),
                       const SizedBox(height: 24),
                       const Padding(
                         padding: EdgeInsets.symmetric(horizontal: 20),
@@ -413,8 +418,7 @@ class _LearningOverview extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               Text(
-                nextAssignment?.title ??
-                    'Your next assignment will appear here',
+                nextAssignment?.title ?? MissionContentData.technicalNext,
                 style: AppTheme.headlineMedium.copyWith(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
@@ -455,7 +459,9 @@ class _LearningOverview extends StatelessWidget {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  _SummaryValue(label: 'Assigned', value: assigned),
+                  _SummaryValue(
+                      label: MissionContentData.technicalAssigned,
+                      value: assigned),
                   _SummaryValue(label: 'In review', value: awaitingReview),
                   _SummaryValue(label: 'Released', value: released),
                 ],

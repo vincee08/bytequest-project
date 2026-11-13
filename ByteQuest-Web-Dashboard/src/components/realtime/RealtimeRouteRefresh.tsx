@@ -16,6 +16,8 @@ const instructorTables = [
   "quiz_assignments",
   "quiz_attempts",
   "quiz_results",
+  "homework_assignments",
+  "homework_submissions",
   "learning_resources",
 ] as const;
 
@@ -28,6 +30,8 @@ const adminTables = [
   "quiz_assignments",
   "quiz_attempts",
   "learning_resources",
+  "homework_assignments",
+  "homework_submissions",
   "audit_events",
   "tesda_sources",
   "system_settings",

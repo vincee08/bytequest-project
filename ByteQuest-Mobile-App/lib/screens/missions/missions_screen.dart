@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 
 import '../../core/theme/app_theme.dart';
+import '../../core/config/supabase_config.dart';
 import '../../core/widgets/learner_ui.dart';
 import '../../core/widgets/learner_navigation_shell.dart';
 import '../../data/missions_data.dart';
@@ -40,6 +41,7 @@ class _MissionsScreenState extends State<MissionsScreen>
   final _resourceService = LearningResourceService();
   List<AssignedActivity> _assignments = const [];
   List<LearningResource> _resources = const [];
+  Map<String, String> _enrolledClasses = const {};
   bool _loading = true;
   String? _error;
   String? _startingAssignmentId;
@@ -106,11 +108,21 @@ class _MissionsScreenState extends State<MissionsScreen>
       final values = await Future.wait([
         _assessmentService.getAssignedActivities(),
         _resourceService.getAssignedResources(),
+        SupabaseConfig.client
+            .from('class_memberships')
+            .select('class_id,classes(id,title)')
+            .eq('learner_id', SupabaseConfig.currentUserId!)
+            .eq('status', 'active'),
       ]);
       if (!mounted) return;
       setState(() {
         _assignments = values[0] as List<AssignedActivity>;
         _resources = values[1] as List<LearningResource>;
+        _enrolledClasses = {
+          for (final row in values[2] as List)
+            if (row['classes'] != null)
+              row['class_id'] as String: row['classes']['title'] as String
+        };
         _loading = false;
       });
     } catch (error) {
@@ -650,6 +662,13 @@ class _MissionsScreenState extends State<MissionsScreen>
     }
 
     final classes = <String, _LearnerClassSummary>{};
+    for (final entry in _enrolledClasses.entries) {
+      classes[entry.key] = _LearnerClassSummary(
+          classId: entry.key,
+          title: entry.value,
+          assignmentCount: 0,
+          resourceCount: 0);
+    }
     for (final assignment in _assignments) {
       final current = classes[assignment.classId];
       classes[assignment.classId] = _LearnerClassSummary(

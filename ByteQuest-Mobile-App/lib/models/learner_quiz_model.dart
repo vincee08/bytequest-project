@@ -28,6 +28,8 @@ class LearnerQuizSummary {
   final int answeredCount;
   final DateTime? startedAt;
   final DateTime? completedAt;
+  final String? closedReason;
+  final DateTime? serverNow;
 
   const LearnerQuizSummary({
     required this.assignmentId,
@@ -51,6 +53,8 @@ class LearnerQuizSummary {
     required this.answeredCount,
     required this.startedAt,
     required this.completedAt,
+    this.closedReason,
+    this.serverNow,
   });
 
   LearnerQuizState get state {
@@ -96,6 +100,8 @@ class LearnerQuizSummary {
       answeredCount: (json['answered_count'] as num?)?.toInt() ?? 0,
       startedAt: date('started_at'),
       completedAt: date('completed_at'),
+      closedReason: json['closed_reason'] as String?,
+      serverNow: date('server_now'),
     );
   }
 }
@@ -134,6 +140,8 @@ class LearnerQuizQuestion {
 }
 
 class LearnerQuizAttempt {
+  final DateTime? dueAt;
+  final DateTime? serverNow;
   final String attemptId;
   final String status;
   final DateTime startedAt;
@@ -147,6 +155,8 @@ class LearnerQuizAttempt {
   final List<LearnerQuizQuestion> questions;
 
   const LearnerQuizAttempt({
+    this.dueAt,
+    this.serverNow,
     required this.attemptId,
     required this.status,
     required this.startedAt,
@@ -163,6 +173,8 @@ class LearnerQuizAttempt {
   factory LearnerQuizAttempt.fromJson(Map<String, dynamic> json) {
     final quiz = Map<String, dynamic>.from(json['quiz'] as Map? ?? const {});
     return LearnerQuizAttempt(
+      dueAt: DateTime.tryParse(json['due_at']?.toString() ?? ''),
+      serverNow: DateTime.tryParse(json['server_now']?.toString() ?? ''),
       attemptId: json['attempt_id'] as String,
       status: json['status'] as String? ?? 'in_progress',
       startedAt: DateTime.parse(json['started_at'] as String),

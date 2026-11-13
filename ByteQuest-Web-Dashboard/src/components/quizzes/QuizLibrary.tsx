@@ -14,10 +14,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { CreateQuizForm } from "./CreateQuizForm";
+import { QuizDeadlineControls, type QuizDeadlineAssignment } from './QuizDeadlineControls';
 
 export function QuizLibrary({
   quizzes,
   modules,
+  serverNow,
 }: {
   quizzes: {
     id: string;
@@ -27,8 +29,10 @@ export function QuizLibrary({
     status: string;
     version: number;
     questionCount: number;
+    deadlines?: QuizDeadlineAssignment[];
   }[];
   modules: { id: string; code: string; title: string }[];
+  serverNow?: string;
 }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("active");
@@ -134,6 +138,7 @@ export function QuizLibrary({
                     aria-hidden="true"
                   />
                 </Link>
+                {quiz.deadlines?.length ? <div className="px-4 pb-4"><QuizDeadlineControls quizTitle={quiz.title} assignments={quiz.deadlines} serverNow={serverNow ?? new Date().toISOString()} /></div> : null}
               </li>
             ))}
           </ul>

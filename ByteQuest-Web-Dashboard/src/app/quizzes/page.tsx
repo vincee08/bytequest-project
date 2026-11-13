@@ -13,6 +13,7 @@ export default async function QuizzesPage() {
     { data: versions, error: versionError },
     { data: items, error: itemError },
     { data: modules, error: moduleError },
+    { data: assignments, error: assignmentError },
   ] = await Promise.all([
     supabase
       .from("quizzes")
@@ -28,8 +29,9 @@ export default async function QuizzesPage() {
       .from("coc_modules")
       .select("id,coc_code,title")
       .order("order_index"),
+    supabase.from('quiz_assignments').select('id,quiz_version_id,due_at,classes(title)').eq('status', 'active'),
   ]);
-  if (quizError || versionError || itemError || moduleError)
+  if (quizError || versionError || itemError || moduleError || assignmentError)
     throw new Error("Quiz library could not be loaded.");
 
   const moduleById = new Map(
@@ -59,6 +61,7 @@ export default async function QuizzesPage() {
     <DashboardLayout>
       <div className="mx-auto max-w-7xl">
         <QuizLibrary
+          serverNow={new Date().toISOString()}
           modules={(modules ?? []).map((module) => ({
             id: module.id,
             code: module.coc_code,
@@ -87,6 +90,7 @@ export default async function QuizzesPage() {
               questionCount: current
                 ? (itemCountByVersion.get(current.id) ?? 0)
                 : 0,
+              deadlines: (assignments ?? []).filter(a => sorted.some(v => v.id === a.quiz_version_id && v.status === 'published') && !quiz.archived_at).map(a => ({ id: a.id, classTitle: a.classes?.title ?? 'Class', dueAt: a.due_at })),
             };
           })}
         />

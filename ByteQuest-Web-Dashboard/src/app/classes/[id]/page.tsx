@@ -22,6 +22,9 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { requireStaffProfile } from "@/lib/auth/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { activitiesClient } from "@/lib/activities/types";
+import { HomeworkManager } from "@/components/classes/HomeworkManager";
+import { QuizDeadlineControls } from "@/components/quizzes/QuizDeadlineControls";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +53,12 @@ export default async function ClassDetailPage({
     .maybeSingle();
 
   if (!classroom) notFound();
+
+  const [homeworkResult, quizAssignmentResult] = await Promise.all([
+    activitiesClient(supabase).from('homework_assignments').select('*').eq('class_id', id).order('created_at', { ascending: false }),
+    supabase.from('quiz_assignments').select('id,due_at,status,quiz_versions(status,quizzes(title))').eq('class_id', id).eq('status', 'active'),
+  ]);
+  if (homeworkResult.error || quizAssignmentResult.error) throw new Error('Class activities could not be loaded.');
 
   const [membershipResult, assignmentResult, activityResult, rubricResult, moduleResult, bypassResult, resourceResult] =
     await Promise.all([
@@ -115,8 +124,10 @@ export default async function ClassDetailPage({
   const activeBypassCount = (bypassResult.data ?? []).filter((row) => !row.revoked_at).length;
   const activeResourceCount = (resourceResult.data ?? []).filter((row) => row.status === "active").length;
   const classMetrics: Metric[] = [
+    { label: "Homework", value: (homeworkResult.data ?? []).filter(h => h.status === 'published').length, helper: "Published homework assignments", icon: BookOpenCheck, href: "#assignments" },
+    { label: "Assigned quizzes", value: (quizAssignmentResult.data ?? []).filter(a => a.quiz_versions?.status === 'published').length, helper: "Separate supplementary quizzes", icon: BookOpenCheck, href: "#assignments" },
     { label: "Active learners", value: activeLearners.length, helper: "Current active memberships", icon: Users, tone: "informational", href: "#learners", linkLabel: "View class learners", featured: true },
-    { label: "Active assignments", value: activeAssignmentCount, helper: "Published or open content in this class", icon: BookOpenCheck, href: "#assignments", linkLabel: "View class assignments" },
+    { label: "Technical assignments", value: activeAssignmentCount, helper: "COC practice and assessment activities", icon: BookOpenCheck, href: "#assignments", linkLabel: "View technical assignments" },
     { label: "Access bypasses", value: activeBypassCount, helper: "Practice access grants still active", icon: ShieldCheck, tone: "attention", href: "#bypasses", linkLabel: "View access bypasses" },
     { label: "Active resources", value: activeResourceCount, helper: "Private resources available to this class", icon: Files, tone: "positive", href: "#resources", linkLabel: "View class resources" },
   ];
@@ -173,10 +184,12 @@ export default async function ClassDetailPage({
           </TabsContent>
 
           <TabsContent id="assignments" value="assignments" className="space-y-5">
+            <HomeworkManager classId={id} classTitle={classroom.title} active={classroom.status === 'active'} homework={homeworkResult.data ?? []} />
+            <section className="space-y-4 rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">Assigned quizzes</h2><p className="text-sm text-muted-foreground">Supplementary quizzes have their own attempts and deadlines.</p><QuizDeadlineControls quizTitle={classroom.title} serverNow={new Date().toISOString()} assignments={(quizAssignmentResult.data ?? []).filter(a => a.quiz_versions?.status === 'published').map(a => ({ id: a.id, dueAt: a.due_at, classTitle: a.quiz_versions?.quizzes?.title ?? 'Quiz' }))} /><Button asChild variant="outline" className="min-h-11"><Link href="/quizzes">Manage quizzes</Link></Button></section>
             {classroom.status === "active" ? <section className="rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">Assign published content</h2><p className="mb-4 mt-1 text-sm text-muted-foreground">Assessment assignment remains gated by an approved source and matching approved rubric.</p><AssignActivityForm classId={id} activities={(activityResult.data ?? []).map((row) => ({ id: row.id, title: row.title, deliveryMode: row.delivery_mode }))} rubrics={(rubricResult.data ?? []).map((row) => ({ id: row.id, title: row.title, activityVersionId: row.activity_version_id }))} /></section> : null}
             <section className="overflow-hidden rounded-xl border border-border bg-card">
               <div className="border-b border-border px-5 py-4">
-                <h2 className="font-semibold">Assignment history</h2>
+                <h2 className="font-semibold">Technical assignment history</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Retry limits and prerequisites are configurable institutional rules, not TESDA numeric requirements.
                 </p>

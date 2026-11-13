@@ -8,10 +8,8 @@ import 'package:flutter/material.dart';
 class AppTheme {
   static const String fontFamily = 'Plus Jakarta Sans';
 
-  /// The app's typeface is declared by name so Flutter can use an installed
-  /// Plus Jakarta Sans font when available and fall back to the platform
-  /// system sans-serif without performing a runtime network request. This is
-  /// important for offline learners and deterministic widget tests.
+  /// The approved typeface is bundled through pubspec.yaml so Android and the
+  /// local web preview can render it without a runtime font download.
   static TextStyle _sans({
     double? fontSize,
     FontWeight? fontWeight,

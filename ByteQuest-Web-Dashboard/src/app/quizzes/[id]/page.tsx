@@ -21,7 +21,7 @@ export default async function QuizDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ version?: string }>;
+  searchParams: Promise<{ version?: string; tab?: string }>;
 }) {
   const profile = await requireStaffProfile(["instructor"]);
   const selected = (await searchParams).version;
@@ -96,7 +96,7 @@ export default async function QuizDetailPage({
     ? await Promise.all([
         supabase
           .from("quiz_assignments")
-          .select("id,class_id,quiz_version_id,status,classes(title)")
+          .select("id,class_id,quiz_version_id,status,due_at,classes(title)")
           .in("quiz_version_id", versionIds),
         supabase
           .from("quiz_attempts")
@@ -127,6 +127,8 @@ export default async function QuizDetailPage({
     <DashboardLayout>
       <div className="mx-auto max-w-7xl">
         <QuizAuthoringWorkspace
+          initialTab={(await searchParams).tab}
+          serverNow={new Date().toISOString()}
           key={currentVersion?.id}
           quiz={{
             id: quiz.id,
@@ -188,6 +190,7 @@ export default async function QuizDetailPage({
             versionId: item.quiz_version_id,
             status: item.status,
             classTitle: item.classes?.title ?? "Class",
+            dueAt: item.due_at,
           }))}
           results={(attemptResponse.data ?? []).map((item) => ({
             id: item.id,

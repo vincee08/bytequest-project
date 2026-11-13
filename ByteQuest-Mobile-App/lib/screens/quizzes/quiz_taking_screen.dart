@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+import '../../data/mission_content_data.dart';
+import '../../models/homework_model.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/learner_ui.dart';
@@ -16,7 +19,8 @@ class QuizTakingScreen extends StatefulWidget {
   State<QuizTakingScreen> createState() => _QuizTakingScreenState();
 }
 
-class _QuizTakingScreenState extends State<QuizTakingScreen> {
+class _QuizTakingScreenState extends State<QuizTakingScreen>
+    with WidgetsBindingObserver {
   final _service = LearnerQuizService();
   final _identificationController = TextEditingController();
   late final Map<String, String> _answers;
@@ -25,6 +29,13 @@ class _QuizTakingScreenState extends State<QuizTakingScreen> {
   bool _submitting = false;
   String? _error;
   late final PracticeOptionOrder _optionOrder;
+  Timer? _deadlineTimer;
+  Timer? _availabilityPoll;
+  DateTime? _dueAt;
+  bool _unavailable = false;
+  bool _checkingAvailability = false;
+  bool _closed = false;
+  bool get _locked => _closed || _unavailable;
 
   LearnerQuizQuestion get _question => widget.attempt.questions[_index];
   String? get _answer => _answers[_question.id];
@@ -47,10 +58,64 @@ class _QuizTakingScreenState extends State<QuizTakingScreen> {
       },
     );
     _syncTextAnswer();
+    WidgetsBinding.instance.addObserver(this);
+    _dueAt = widget.attempt.dueAt;
+    if (widget.attempt.dueAt != null && widget.attempt.serverNow != null) {
+      final remaining =
+          widget.attempt.dueAt!.difference(widget.attempt.serverNow!);
+      _closed = remaining <= Duration.zero;
+      if (!_closed) {
+        _deadlineTimer = Timer(remaining, () {
+          if (mounted) setState(() => _closed = true);
+        });
+      }
+    }
+    _availabilityPoll = Timer.periodic(
+        const Duration(seconds: 20), (_) => unawaited(_refreshAvailability()));
+  }
+
+  Future<void> _refreshAvailability() async {
+    if (_checkingAvailability || _submitting) return;
+    _checkingAvailability = true;
+    try {
+      final quizzes = await _service.getAvailableQuizzes();
+      if (!mounted) return;
+      final matches =
+          quizzes.where((q) => q.attemptId == widget.attempt.attemptId);
+      final quiz = matches.isEmpty ? null : matches.first;
+      _deadlineTimer?.cancel();
+      setState(() {
+        _unavailable = quiz == null ||
+            !quiz.isAvailable ||
+            quiz.attemptStatus != 'in_progress';
+        _closed = quiz?.closedReason == 'deadline_passed';
+        _dueAt = quiz?.dueAt;
+      });
+      if (quiz?.dueAt != null && quiz?.serverNow != null && quiz!.isAvailable) {
+        final remaining = quiz.dueAt!.difference(quiz.serverNow!);
+        if (remaining > Duration.zero) {
+          _deadlineTimer = Timer(remaining, () {
+            if (mounted) setState(() => _closed = true);
+          });
+        }
+      }
+    } catch (_) {
+      /* Backend availability checks remain authoritative. */
+    } finally {
+      _checkingAvailability = false;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_refreshAvailability());
   }
 
   @override
   void dispose() {
+    _deadlineTimer?.cancel();
+    _availabilityPoll?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     _identificationController.dispose();
     super.dispose();
   }
@@ -142,6 +207,21 @@ class _QuizTakingScreenState extends State<QuizTakingScreen> {
                   semanticLabel: 'Quiz question progress',
                 ),
               ),
+              if (_dueAt != null || _locked)
+                Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    child: Semantics(
+                        liveRegion: _closed,
+                        child: Text(_closed
+                            ? MissionContentData.quizClosedDeadline
+                            : _unavailable
+                                ? MissionContentData.quizAttemptUnavailable
+                                : MissionContentData.homeworkDue(
+                                    manilaDate(_dueAt))))),
+              if (_closed)
+                const Padding(
+                    padding: EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    child: Text(MissionContentData.quizExpiryHelp)),
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
@@ -195,7 +275,7 @@ class _QuizTakingScreenState extends State<QuizTakingScreen> {
       return LearnerSurface(
         child: TextField(
           controller: _identificationController,
-          enabled: !_submitting,
+          enabled: !_submitting && !_locked,
           maxLength: 2000,
           textInputAction: TextInputAction.done,
           decoration: const InputDecoration(
@@ -227,7 +307,7 @@ class _QuizTakingScreenState extends State<QuizTakingScreen> {
             child: _AnswerOption(
               label: option,
               selected: _answer == option,
-              enabled: !_saving && !_submitting,
+              enabled: !_saving && !_submitting && !_locked,
               onTap: () => _selectOption(option),
             ),
           ),
@@ -247,7 +327,7 @@ class _QuizTakingScreenState extends State<QuizTakingScreen> {
             child: Row(
               children: [
                 OutlinedButton.icon(
-                  onPressed: _index == 0 || _saving || _submitting
+                  onPressed: _index == 0 || _saving || _submitting || _locked
                       ? null
                       : _goPrevious,
                   icon: const Icon(Icons.arrow_back_rounded),
@@ -256,7 +336,8 @@ class _QuizTakingScreenState extends State<QuizTakingScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: FilledButton.icon(
-                    onPressed: _saving || _submitting ? null : _continue,
+                    onPressed:
+                        _saving || _submitting || _locked ? null : _continue,
                     icon: _submitting
                         ? const SizedBox.square(
                             dimension: 18,
@@ -289,6 +370,7 @@ class _QuizTakingScreenState extends State<QuizTakingScreen> {
   }
 
   Future<bool> _saveCurrent() async {
+    if (_locked) return false;
     final value = _question.type == 'identification'
         ? _identificationController.text.trim()
         : (_answer ?? '').trim();
@@ -397,7 +479,7 @@ class _QuizTakingScreenState extends State<QuizTakingScreen> {
   }
 
   Future<void> _submit() async {
-    if (_submitting) return;
+    if (_submitting || _locked) return;
     setState(() {
       _submitting = true;
       _error = null;

@@ -7,6 +7,7 @@ import '../../models/assigned_activity_model.dart';
 import '../../models/learning_resource_model.dart';
 import '../../models/mission_model.dart';
 import '../../services/authoritative_assessment_service.dart';
+import '../../widgets/assigned_class_activities.dart';
 import '../simulation/mission_launcher.dart';
 import '../resources/resource_viewer_screen.dart';
 
@@ -63,6 +64,8 @@ class _ClassDetailsScreenState extends State<ClassDetailsScreen> {
               assignments: _classAssignments.length,
               resources: _classResources.length,
             ),
+            const SizedBox(height: 22),
+            AssignedClassActivities(classId: widget.classId),
             const SizedBox(height: 22),
             const LearnerSectionHeader(
               title: 'Assigned learning',

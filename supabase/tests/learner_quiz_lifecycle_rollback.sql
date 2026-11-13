@@ -6,9 +6,9 @@ begin;
 
 create temporary table bytequest_quiz_test_context as
 select
-  (select user_id from public.profiles where role = 'instructor' and status = 'active' limit 1) instructor_id,
-  (select user_id from public.profiles where role = 'learner' and status = 'active' order by user_id limit 1) learner_a,
-  (select user_id from public.profiles where role = 'learner' and status = 'active' order by user_id offset 1 limit 1) learner_b,
+  gen_random_uuid() instructor_id,
+  gen_random_uuid() learner_a,
+  gen_random_uuid() learner_b,
   gen_random_uuid() class_id,
   gen_random_uuid() quiz_id,
   gen_random_uuid() version_id,
@@ -17,6 +17,13 @@ select
   gen_random_uuid() assignment_id,
   gen_random_uuid() start_key,
   gen_random_uuid() submission_key;
+
+-- Isolate list-count assertions from the owner's populated QA enrollments.
+insert into auth.users(id,instance_id,aud,role,email,encrypted_password,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
+select id,'00000000-0000-0000-0000-000000000000'::uuid,'authenticated','authenticated',id||'@quiz-lifecycle-rollback.invalid','',
+  '{"provider":"email","providers":["email"]}'::jsonb,'{"full_name":"Quiz lifecycle rollback fixture"}'::jsonb,now(),now()
+from bytequest_quiz_test_context cross join lateral(values(instructor_id),(learner_a),(learner_b)) t(id);
+update public.profiles set role='instructor' where user_id=(select instructor_id from bytequest_quiz_test_context);
 
 do $$
 begin

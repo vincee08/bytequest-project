@@ -3774,7 +3774,7 @@ export type Database = {
         }
       }
       publish_and_assign_quiz: {
-        Args: { p_quiz_version_id: string; p_class_ids: string[]; p_instructions?: string }
+        Args: { p_quiz_version_id: string; p_class_ids: string[]; p_instructions?: string; p_due_at?: string }
         Returns: Json
       }
       reorder_quiz_items: {
