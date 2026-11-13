@@ -1,5 +1,7 @@
 # Production accounts and release status — 2026-11-13
 
+> Latest: [Verified production Web rollout and requested debug APK](PRODUCTION_DEBUG_ROLLOUT_2026-11-13.md). The owner subsequently deferred SMTP and authorized the completed rollout. The statuses below are historical.
+
 > Follow-up: [Resolved local blockers and current SMTP release hold](PRODUCTION_RELEASE_BLOCKERS_2026-11-13.md). The original account conversion and backup evidence below are retained as history.
 
 **Overall: BLOCKED.** The two approved production account conversions are complete. The coordinated feature push, six production migrations, Vercel deployment and signed Android release did not run. This report records executed work, not deployment approval or a successful feature rollout.

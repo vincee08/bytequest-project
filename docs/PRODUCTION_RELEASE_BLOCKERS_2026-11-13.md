@@ -1,5 +1,7 @@
 # Production release follow-up — 2026-11-13
 
+> Latest: [Verified production Web rollout and requested debug APK](PRODUCTION_DEBUG_ROLLOUT_2026-11-13.md). The owner subsequently deferred SMTP and authorized the completed rollout. The hold and resumption instructions below are historical.
+
 **BLOCKED: production remains on hold at the owner's explicit instruction because SMTP delivery is not configured.** No push, production migration, Vercel deployment, Auth configuration change, production password reset, or Android distribution was performed in this follow-up. This report supersedes the unresolved-blocker descriptions in [the previous handoff](PRODUCTION_RELEASE_2026-11-13.md); its account conversion and backup history remain valid.
 
 ## Fixed blockers and verification
