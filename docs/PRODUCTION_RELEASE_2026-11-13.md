@@ -1,5 +1,7 @@
 # Production accounts and release status — 2026-11-13
 
+> Follow-up: [Resolved local blockers and current SMTP release hold](PRODUCTION_RELEASE_BLOCKERS_2026-11-13.md). The original account conversion and backup evidence below are retained as history.
+
 **Overall: BLOCKED.** The two approved production account conversions are complete. The coordinated feature push, six production migrations, Vercel deployment and signed Android release did not run. This report records executed work, not deployment approval or a successful feature rollout.
 
 The owner explicitly authorized production work and subsequently approved reviewing history and converting the existing accounts. That confirmation supersedes the earlier prohibition on changing these two existing learner roles. No password reset was authorized or performed for either existing account.

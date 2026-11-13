@@ -45,47 +45,27 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Reset link sent! Check your email.'),
+            content: Text(MissionContentData.recoveryEmailSent),
             backgroundColor: AppTheme.accentGreen,
             behavior: SnackBarBehavior.floating,
           ),
         );
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
 
-        // Parse error message to provide user-friendly feedback
-        String errorMessage = 'Failed to send reset link. Please try again.';
-        final errorStr = e.toString().toLowerCase();
-
-        if (errorStr.contains('user not found') ||
-            errorStr.contains('not found')) {
-          errorMessage = 'No account found with this email address.';
-        } else if (errorStr.contains('invalid email')) {
-          errorMessage = 'Please enter a valid email address.';
-        } else if (errorStr.contains('network') ||
-            errorStr.contains('connection')) {
-          errorMessage =
-              'Network error. Please check your internet connection and try again.';
-        } else if (errorStr.contains('no host specified')) {
-          errorMessage = 'Configuration error. Please contact support.';
-        }
-
         // Show error message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(errorMessage),
+            content: const Text(MissionContentData.recoveryEmailUnavailable),
             backgroundColor: AppTheme.errorRed,
             behavior: SnackBarBehavior.floating,
             duration: const Duration(seconds: 4),
           ),
         );
-
-        // Log technical error for debugging
-        debugPrint('Password reset error: $e');
       }
     }
   }
@@ -146,7 +126,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 Center(
                   child: Text(
                     _emailSent
-                        ? 'We have sent a password reset link to your email address. Please check your inbox.'
+                        ? MissionContentData.recoveryEmailSent
                         : 'Enter your email address and we\'ll send you a link to reset your password.',
                     textAlign: TextAlign.center,
                     style: AppTheme.bodyLarge.copyWith(

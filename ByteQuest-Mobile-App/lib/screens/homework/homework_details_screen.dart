@@ -30,6 +30,8 @@ class _HomeworkDetailsScreenState extends State<HomeworkDetailsScreen>
   final _answer = TextEditingController();
   final _selectedFiles = <String>{};
   bool _busy = false;
+  bool _uploadingFile = false;
+  double? _uploadProgress;
   bool _refreshing = false;
   bool _draftTouched = false;
   String? _error;
@@ -233,6 +235,14 @@ class _HomeworkDetailsScreenState extends State<HomeworkDetailsScreen>
                             : MissionContentData.homeworkAddFile)),
                     const SizedBox(height: 8),
                     const Text(MissionContentData.homeworkFileHelp),
+                    if (_uploadingFile) ...[
+                      const SizedBox(height: 8),
+                      Semantics(
+                          liveRegion: true,
+                          label: MissionContentData.homeworkUploading,
+                          child:
+                              LinearProgressIndicator(value: _uploadProgress)),
+                    ],
                     const SizedBox(height: 20),
                     FilledButton(
                         onPressed: _busy ? null : _review,
@@ -298,7 +308,15 @@ class _HomeworkDetailsScreenState extends State<HomeworkDetailsScreen>
       final uploaded = await _service.upload(
           assignmentId: _assignment.id,
           filename: file.name,
-          bytes: await file.readAsBytes());
+          bytes: await file.readAsBytes(),
+          onProgress: (progress) {
+            if (mounted) {
+              setState(() {
+                _uploadingFile = true;
+                _uploadProgress = progress;
+              });
+            }
+          });
       _selectedFiles.add(uploaded.id);
       await _saveDraft();
       final rows = await _service.getAssignments(id: _assignment.id);
@@ -308,7 +326,12 @@ class _HomeworkDetailsScreenState extends State<HomeworkDetailsScreen>
         setState(() => _error = MissionContentData.homeworkFileFailed);
       }
     } finally {
-      if (mounted) setState(() => _busy = false);
+      if (mounted) {
+        setState(() {
+          _busy = false;
+          _uploadingFile = false;
+        });
+      }
     }
   }
 

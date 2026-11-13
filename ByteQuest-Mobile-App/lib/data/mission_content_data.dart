@@ -70,8 +70,7 @@ class MissionContentData {
   static const technicalActivities = 'Technical activities';
   static const technicalAssigned = 'Technical tasks';
   static const technicalNext = 'Your next technical activity will appear here';
-  static const technicalEmpty =
-      'No technical activities assigned.';
+  static const technicalEmpty = 'No technical activities assigned.';
   static const homeworkAssignments = 'Homework Assignments';
   static const classActivitiesLoading = 'Loading class activities';
   static const classActivitiesUnavailable =
@@ -118,6 +117,10 @@ class MissionContentData {
   static const homeworkClose = 'Close assignment';
   static const homeworkSubmitting = 'Saving submission…';
   static const homeworkUploading = 'Uploading file…';
+  static const recoveryEmailSent =
+      'If an account exists, recovery instructions have been sent. Open the link in your browser, choose a new password, then return to ByteQuest to sign in.';
+  static const recoveryEmailUnavailable =
+      'Recovery email could not be sent. Check your connection and try again, or contact the administrator.';
   static const homeworkCancel = 'Keep editing';
   static const quizClosedDeadline = 'Quiz Closed — Deadline Passed';
   static const quizStart = 'Start quiz';

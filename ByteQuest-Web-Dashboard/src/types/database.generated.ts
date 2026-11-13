@@ -2485,6 +2485,12 @@ export type Database = {
         Update: { state?: string; updated_at?: string }
         Relationships: []
       }
+      file_upload_intents: {
+        Row: { id: string; actor_id: string; purpose: string; target_id: string; bucket: string; object_path: string; spec: Json; state: string; expires_at: string; lease_id: string | null; lease_until: string | null; result: Json | null; created_at: string; updated_at: string }
+        Insert: { id: string; actor_id: string; purpose: string; target_id: string; bucket: string; object_path: string; spec: Json; expires_at: string; state?: string }
+        Update: { state?: string; lease_id?: string | null; lease_until?: string | null; result?: Json | null }
+        Relationships: []
+      }
       support_concerns: {
         Row: {
           class_id: string | null

@@ -100,12 +100,8 @@ export function LoginForm() {
 
     setResetting(true);
     try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.resetPasswordForEmail(
-        parsedEmail.data,
-        { redirectTo: `${window.location.origin}/login` },
-      );
-      if (error) throw error;
+      const response = await fetch('/api/auth/recovery', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'request',email:parsedEmail.data})});
+      if (!response.ok) throw new Error('Recovery email could not be sent.');
       toast.success("If the account exists, a reset link has been sent.");
     } catch {
       toast.error("The reset request could not be completed.");

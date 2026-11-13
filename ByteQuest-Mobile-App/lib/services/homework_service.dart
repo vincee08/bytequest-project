@@ -3,13 +3,27 @@ import 'dart:typed_data';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
-import 'package:http_parser/http_parser.dart';
+import 'package:crypto/crypto.dart';
 
 import '../core/config/supabase_config.dart';
 import '../models/homework_model.dart';
 
 class HomeworkService {
   static const _configuredUrl = String.fromEnvironment('BQ_PRACTICE_API_URL');
+
+  bool _duplicateUpload(http.Response response) {
+    if (response.statusCode == 409) return true;
+    if (response.statusCode != 400) return false;
+    try {
+      final error = jsonDecode(response.body);
+      return error is Map &&
+          error['statusCode'].toString() == '409' &&
+          (error['code'] == 'KeyAlreadyExists' ||
+              error['error'] == 'Duplicate');
+    } catch (_) {
+      return false;
+    }
+  }
 
   Uri _uri(String path, [Map<String, String>? query]) {
     final configured = _configuredUrl.isNotEmpty
@@ -102,7 +116,8 @@ class HomeworkService {
   Future<HomeworkFile> upload(
       {required String assignmentId,
       required String filename,
-      required Uint8List bytes}) async {
+      required Uint8List bytes,
+      void Function(double?)? onProgress}) async {
     if (bytes.isEmpty || bytes.length > 10485760) {
       throw StateError('FILE_SIZE_INVALID');
     }
@@ -115,16 +130,56 @@ class HomeworkService {
       'txt': 'text/plain'
     }[filename.split('.').last.toLowerCase()];
     if (mime == null) throw StateError('FILE_TYPE_INVALID');
-    final request = http.MultipartRequest(
-        'POST', _uri('files', {'assignment': assignmentId}))
-      ..headers.addAll(await _headers())
-      ..files.add(http.MultipartFile.fromBytes('file', bytes,
-          filename: filename, contentType: MediaType.parse(mime)));
-    final response = await http.Response.fromStream(
-            await request.send().timeout(const Duration(seconds: 35)))
-        .timeout(const Duration(seconds: 35));
+    Future<Map<String, dynamic>> action(Map<String, dynamic> body) async =>
+        _decode(await http
+            .post(_uri('files').replace(path: '/api/uploads'),
+                headers: {
+                  ...await _headers(),
+                  'Content-Type': 'application/json'
+                },
+                body: jsonEncode(body))
+            .timeout(const Duration(seconds: 150)));
+    onProgress?.call(0);
+    final prepared = await action({
+      'action': 'prepare',
+      'purpose': 'homework',
+      'target_id': assignmentId,
+      'filename': filename,
+      'mime': mime,
+      'size': bytes.length,
+      'sha256': sha256.convert(bytes).toString()
+    });
+    if (prepared['complete'] != true) {
+      if (prepared['uploaded'] != true) {
+        final storage = Uri.parse(prepared['signed_url'] as String);
+        final project = Uri.parse(SupabaseConfig.projectUrl);
+        if (storage.origin != project.origin ||
+            !storage.path.startsWith('/storage/v1/object/upload/sign/')) {
+          throw StateError('UPLOAD_ENDPOINT_INVALID');
+        }
+        // Indeterminate progress represents the actual native network transfer;
+        // verification begins only after Storage acknowledges the request.
+        onProgress?.call(null);
+        final response = await http
+            .put(storage,
+                headers: {'Content-Type': mime, 'x-upsert': 'false'},
+                body: bytes)
+            .timeout(const Duration(seconds: 180));
+        if ((response.statusCode < 200 || response.statusCode >= 300) &&
+            !_duplicateUpload(response)) {
+          throw StateError('DIRECT_UPLOAD_FAILED');
+        }
+      }
+      onProgress?.call(0.95);
+      final complete = await action(
+          {'action': 'complete', 'upload_id': prepared['upload_id']});
+      onProgress?.call(1);
+      return HomeworkFile.fromJson(
+          Map<String, dynamic>.from(complete['record'] as Map));
+    }
+    onProgress?.call(1);
     return HomeworkFile.fromJson(
-        Map<String, dynamic>.from(_decode(response)['file'] as Map));
+        Map<String, dynamic>.from(prepared['record'] as Map));
   }
 
   Future<Uri> fileUrl(String id) async {

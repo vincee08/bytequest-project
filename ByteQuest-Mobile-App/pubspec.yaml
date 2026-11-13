@@ -1,7 +1,7 @@
 name: bytequest
 description: A Gamified Simulation Platform with Automated Skill Evaluation for NC II Computer Systems Servicing
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -29,6 +29,7 @@ dependencies:
   url_launcher: ^6.3.2
   uuid: ^4.5.1
   http: ^1.2.0
+  crypto: 3.0.7
   file_picker: 13.3.3
   http_parser: ^4.1.2
   

@@ -7,6 +7,22 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class SupabaseConfig {
   static const _runtimeUrl = String.fromEnvironment('BQ_SUPABASE_URL');
   static const _runtimeAnonKey = String.fromEnvironment('BQ_SUPABASE_ANON_KEY');
+  static String get projectUrl =>
+      _runtimeUrl.isNotEmpty ? _runtimeUrl : dotenv.env['SUPABASE_URL'] ?? '';
+  static String get recoveryUrl {
+    const configured = String.fromEnvironment('BQ_PRACTICE_API_URL');
+    final base = Uri.tryParse(configured.isNotEmpty
+        ? configured
+        : dotenv.env['PRACTICE_API_URL'] ?? '');
+    if (base == null ||
+        !base.hasAuthority ||
+        (base.scheme != 'https' &&
+            !(base.scheme == 'http' &&
+                ['127.0.0.1', 'localhost', '10.0.2.2'].contains(base.host)))) {
+      throw StateError('RECOVERY_API_NOT_CONFIGURED');
+    }
+    return base.resolve('/api/auth/recovery').toString();
+  }
 
   // Private constructor to prevent instantiation
   SupabaseConfig._();

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from 'react';
+import { directUpload } from '@/lib/uploads/client';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -42,6 +43,7 @@ export function HomeworkWorkspace({ homework: h, classTitle, active, files, subm
     }, 20000);
     return () => clearInterval(timer);
   }, [draft, dirty, router]);
+  const [uploadProgress,setUploadProgress]=useState<number|null>(null);
   const submission = submissions.find(s => s.learner_id === selected);
   const run = async (work: () => Promise<unknown>, text: string) => { if (busyRef.current) return; busyRef.current = true; setBusy(true); setError(''); setMessage(''); try { await work(); setMessage(text); router.refresh(); } catch (err) { setError(err instanceof Error ? err.message : 'The action could not be saved.'); } finally { busyRef.current = false; setBusy(false); } };
   return <div className="space-y-5"><Link className="inline-flex min-h-11 items-center text-sm text-primary" href={`/classes/${h.class_id}?tab=assignments`}>← {classTitle} / Assignments</Link>
@@ -57,7 +59,8 @@ export function HomeworkWorkspace({ homework: h, classTitle, active, files, subm
         </fieldset>
       </form>
       <div className="space-y-2 border-t border-border pt-4"><h3 className="text-sm font-semibold">Instruction attachments</h3>{files.filter(f => f.kind === 'instruction').map(file => <FileLink key={file.id} file={file} />)}
-        {draft && active ? <><Label htmlFor="instruction-file">Add supporting file (PDF, image, or TXT; up to 10 MB; 5 files)</Label><Input id="instruction-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.txt" disabled={busy} className="min-h-11" onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (!file) return; if (file.size > 10485760) { setError('Choose a file up to 10 MB.'); return; } void run(async () => { const form = new FormData(); form.set('file', file); const response = await fetch(`/api/activities/files?assignment=${h.id}`, { method: 'POST', body: form, signal: AbortSignal.timeout(35000) }); const data = await response.json(); if (!response.ok) throw new Error(data.error); }, 'Instruction file attached.'); }} /></> : null}
+        {draft && active ? <><Label htmlFor="instruction-file">Add supporting file (PDF, image, or TXT; up to 10 MB; 5 files)</Label><Input id="instruction-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.txt" disabled={busy} className="min-h-11" onChange={e => { const file = e.target.files?.[0]; e.target.value = ''; if (!file) return; if (file.size > 10485760) { setError('Choose a file up to 10 MB.'); return; } void run(async () => { setUploadProgress(0); try { await directUpload(file, {purpose:'homework',target_id:h.id},setUploadProgress); } finally { setUploadProgress(null); } }, 'Instruction file attached.'); }} /></> : null}
+        {uploadProgress !== null ? <div role="status" aria-live="polite"><progress aria-label="File upload progress" className="w-full" value={uploadProgress} max={100} /><p className="text-xs">{uploadProgress >= 95 ? 'Verifying file...' : `Uploading ${uploadProgress}%`}</p></div> : null}
       </div>
       {draft && active ? <div className="border-t border-border pt-4"><p className="mb-3 text-sm text-muted-foreground">Review the instructions, files, target class and deadline. Publication makes this homework visible to active learners.</p><Button className="min-h-11" disabled={busy || dirty} onClick={() => void run(() => homeworkRequest({ action: 'publish', assignment_id: h.id }), 'Homework published to the class.')}>Publish Assignment</Button>{dirty ? <p className="mt-2 text-xs text-muted-foreground">Save draft changes before publishing.</p> : null}</div> : null}
     </section>

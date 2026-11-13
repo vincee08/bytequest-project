@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
 import { parseEnv } from "node:util";
+import { randomBytes } from "node:crypto";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const workspace = path.join(root, ".tmp", "quiz-preview");
@@ -57,7 +58,7 @@ function verifyConfig() {
   )
     throw new Error("Dedicated quiz QA configuration required.");
 }
-if (command === "setup") {
+if (command === "setup" || command === "setup-recovery") {
   fs.mkdirSync(path.join(workspace, "supabase", "migrations"), {
     recursive: true,
   });
@@ -69,6 +70,8 @@ if (command === "setup") {
     .replaceAll("573", "589")
     .replaceAll("http://127.0.0.1:3000", "http://127.0.0.1:3008");
   fs.writeFileSync(configPath, config);
+  fs.mkdirSync(path.join(workspace, "supabase", "templates"), {recursive:true});
+  fs.copyFileSync(path.join(root,"supabase","templates","recovery.html"),path.join(workspace,"supabase","templates","recovery.html"));
   for (const file of fs.readdirSync(
     path.join(root, "supabase", "migrations"),
   )) {
@@ -99,12 +102,12 @@ if (command === "setup") {
   );
   // `start` leaves an already-running partial stack untouched. Stop preserves
   // its named data volumes; never use --no-backup or a database reset.
-  if (database.stdout.trim() === "true" && storage.stdout.trim() !== "true")
+  if (command === "setup-recovery" || (database.stdout.trim() === "true" && storage.stdout.trim() !== "true"))
     cli(["stop"]);
   cli([
     "start",
     "-x",
-    "realtime,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor",
+    "realtime,imgproxy,postgres-meta,studio,edge-runtime,logflare,vector,supavisor",
   ]);
   console.log(
     "Dedicated quiz QA stack ready at http://127.0.0.1:58921. No original stack or hosted project changed.",
@@ -191,6 +194,9 @@ if (command === "setup") {
     OPENROUTER_REASONING_EFFORT: "low",
   };
   delete env.BQ_AI_TEST_ENDPOINT;
+  const cronFile=path.join(workspace,'cleanup-secret');
+  if(!fs.existsSync(cronFile))fs.writeFileSync(cronFile,randomBytes(32).toString('hex'),{flag:'wx'});
+  env.CRON_SECRET=fs.readFileSync(cronFile,'utf8');
   env.BQ_ISOLATED_QA = project;
   if (command === "test-start")
     env.BQ_AI_TEST_ENDPOINT = "http://127.0.0.1:3007/chat/completions";
@@ -226,7 +232,7 @@ if (command === "setup") {
       "quiz-preview-accounts.json",
     );
     args = ["scripts/quiz-workflow-api-tests.mjs"];
-  } else if (["resource-tests", "enrollment-tests"].includes(command)) {
+  } else if (["resource-tests", "enrollment-tests", "release-gates"].includes(command)) {
     if (!env.BQ_PLAYWRIGHT_MODULE && process.platform === "win32") {
       const cache = path.join(process.env.LOCALAPPDATA, "npm-cache", "_npx");
       for (const entry of fs.readdirSync(cache)) {
@@ -243,7 +249,7 @@ if (command === "setup") {
         }
       }
     }
-    args = [command === "enrollment-tests" ? "scripts/learner-enrollment-tests.mjs" : "scripts/resource-ai-workflow-tests.mjs", ...process.argv.slice(3)];
+    args = [command === 'release-gates' ? 'scripts/release-gates-qa.mjs' : command === "enrollment-tests" ? "scripts/learner-enrollment-tests.mjs" : "scripts/resource-ai-workflow-tests.mjs", ...process.argv.slice(3)];
   } else if (command === "owner-resources") {
     args = ["scripts/quiz-resource-owner-setup.mjs"];
   } else if (["activity-tests", "activity-owner-setup", "activity-browser-tests"].includes(command)) {

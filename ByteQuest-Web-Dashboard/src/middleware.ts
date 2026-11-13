@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/types/database.generated";
 
-const PUBLIC_PATHS = new Set(["/login", "/signup"]);
+const PUBLIC_PATHS = new Set(["/login", "/signup", "/auth/recover"]);
 const ADMIN_PREFIXES = ["/admin", "/users", "/logs", "/settings", "/tesda-sources"];
 const INSTRUCTOR_PREFIXES = [
   "/instructor",
@@ -46,6 +46,8 @@ function redirectWithCookies(
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
   const pathname = request.nextUrl.pathname;
+  // Recovery must also work while another account is signed in.
+  if (pathname === "/auth/recover") return response;
 
   // API routes own their authentication and return machine-readable errors.
   // Redirecting them here turns 401/403 responses into HTML login pages.

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { directUpload } from "@/lib/uploads/client";
 import { useRouter } from "next/navigation";
 import { Download, FileUp, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -12,53 +13,6 @@ import {
   isAllowedLearningResourceMime,
   MAX_LEARNING_RESOURCE_BYTES,
 } from "@/lib/resources/policy";
-
-function uploadWithProgress(
-  url: string,
-  body: FormData,
-  onProgress: (value: number) => void,
-) {
-  return new Promise<void>((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", url);
-    xhr.timeout = 180_000;
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable)
-        onProgress(Math.round((event.loaded / event.total) * 100));
-    };
-    xhr.onerror = () =>
-      reject(
-        new Error(
-          "The connection was interrupted. Retry the same file; duplicate copies are prevented.",
-        ),
-      );
-    xhr.ontimeout = () =>
-      reject(
-        new Error(
-          "Upload confirmation timed out. Retry the same file and details to check its status.",
-        ),
-      );
-    xhr.onload = () => {
-      let payload: { error?: string } = {};
-      try {
-        payload = JSON.parse(xhr.responseText);
-      } catch {
-        /* A proxy may return HTML. */
-      }
-      if (xhr.status >= 200 && xhr.status < 300) resolve();
-      else
-        reject(
-          new Error(
-            payload.error ||
-              (xhr.status === 413
-                ? "The file must be no more than 50 MB."
-                : "The upload service is unavailable. Try again shortly."),
-          ),
-        );
-    };
-    xhr.send(body);
-  });
-}
 
 export interface LearningResourceItem {
   id: string;
@@ -125,15 +79,7 @@ export function LearningResourceManager({
     setUploading(true);
     setProgress(0);
     try {
-      const body = new FormData();
-      body.set("file", file);
-      body.set("title", title.trim());
-      body.set("description", description.trim());
-      await uploadWithProgress(
-        `/api/classes/${classId}/resources`,
-        body,
-        setProgress,
-      );
+      await directUpload(file, {purpose: 'resource', target_id: classId, title: title.trim(), description: description.trim()}, setProgress);
 
       setTitle("");
       setDescription("");
