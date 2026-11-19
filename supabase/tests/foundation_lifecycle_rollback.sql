@@ -1117,6 +1117,21 @@ set provisional_revision_id = (
     and sr.revision_type = 'automated_provisional'::public.score_revision_type
 );
 
+-- Objective 4 (Evaluate -> Finalize -> Release): the owning instructor records
+-- the evaluation through the service-only step (evaluated -> under_review)
+-- before finalization; confirming unchanged appends no revision.
+grant select on bytequest_test_context to service_role;
+set local role service_role;
+select public.record_attempt_evaluation(
+  instructor_id,
+  attempt_id,
+  '{}'::jsonb,
+  null,
+  'Rollback-only evaluation confirmation'
+)
+from bytequest_test_context;
+reset role;
+
 select set_config(
   'request.jwt.claim.sub',
   (select instructor_id::text from bytequest_test_context),
@@ -1379,6 +1394,7 @@ select jsonb_build_object(
     'cross_instructor_mutation_blocked',
     'instructor_role_escalation_blocked',
     'admin_routine_finalization_blocked',
+    'instructor_evaluation_step_before_finalization',
     'instructor_finalization',
     'release_idempotency',
     'append_only_revisions',
