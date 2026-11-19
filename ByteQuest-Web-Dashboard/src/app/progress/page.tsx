@@ -63,7 +63,9 @@ export default async function ProgressPage({ searchParams }: { searchParams: Pro
         <PageHeader
           title="Learner monitoring"
           description="Search learners in your classes by name, email, student ID or class. Review enrollment-scoped activity, assessment state and released competency outcomes. XP remains separate from official evaluation."
-          actions={classOptions.length ? <Button asChild variant="outline" className="min-h-11"><Link href={`/classes/${filters.classId ?? classOptions[0].id}/import`}><FileSpreadsheet className="mr-2 h-4 w-4" aria-hidden="true" />Import a roster</Link></Button> : null}
+          actions={filters.classId && classOptions.some((row) => row.id === filters.classId)
+            ? <Button asChild variant="outline" className="min-h-11"><Link href={`/classes/${filters.classId}/import`}><FileSpreadsheet className="mr-2 h-4 w-4" aria-hidden="true" />Import a roster into this class</Link></Button>
+            : null}
         />
         <DirectorySearchControls
           action="/progress"
