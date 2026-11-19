@@ -3,6 +3,11 @@ import '../screens/simulation/runtime/mission_phase_completion_policy.dart';
 import '../screens/simulation/runtime/mission_runtime_models.dart';
 import 'mission_content_data.dart';
 
+/// Phases played on the COC1 M2 assembly bench, which replaces the card
+/// panels with the bench, its hotspots and its tray.
+bool _isBench(MissionPhaseDefinition phase) =>
+    phase.presentation['bench_steps'] is List;
+
 /// Learner instructions for the rendered interaction, with no evaluator answers.
 /// The catalog remains the source of objectives and required equipment actions.
 final class MissionPhaseGuidance {
@@ -141,6 +146,45 @@ final class MissionPhaseGuidance {
     if (operations.isNotEmpty && family != InteractionFamily.review) {
       steps.add(MissionContentData.guidanceEquipmentOperations);
     }
+    if (_isBench(phase) && family != InteractionFamily.review) {
+      // The assembly bench is worked where the parts are and from the tray
+      // below it; it has none of the card panels named above.
+      steps
+        ..clear()
+        ..addAll(switch (family) {
+          InteractionFamily.inspect => [
+              MissionContentData.benchGuidanceInspect,
+              MissionContentData.guidanceReadInspection,
+            ],
+          InteractionFamily.place => [
+              MissionContentData.benchGuidanceSelectPart,
+              MissionContentData.benchGuidanceRotatePart,
+              MissionContentData.benchGuidanceDropPart,
+              MissionContentData.guidancePlaceFinish,
+            ],
+          InteractionFamily.connect => [
+              MissionContentData.benchGuidanceSelectCable,
+              MissionContentData.benchGuidanceDragCable,
+              MissionContentData.guidanceCheckConnection,
+            ],
+          _ => [
+              MissionContentData.guidanceRunTest,
+              MissionContentData.guidanceReadTest,
+              if (presentation['requires_interpretation'] == true)
+                MissionContentData.guidanceInterpretTest,
+              if (hasPlacement ||
+                  connection.isNotEmpty ||
+                  operations.isNotEmpty)
+                MissionContentData.benchGuidanceFixFaults,
+            ],
+        })
+        ..addAll([
+          if (family == InteractionFamily.place && connection.isNotEmpty)
+            MissionContentData.benchGuidanceSelectCable,
+          if (operations.isNotEmpty && family != InteractionFamily.testRun)
+            MissionContentData.benchGuidanceOperate,
+        ]);
+    }
 
     final progress = <String>[];
     void addCount(
@@ -222,11 +266,14 @@ final class MissionPhaseGuidance {
     final ready = family == InteractionFamily.review
         ? state.pendingEvidence.isEmpty
         : MissionPhaseCompletionPolicy.canAdvance(phase, state);
+    // On the bench, the power-on phase's fix parts are a repair, not an
+    // inspect-and-place task: it reads as the test it is.
+    final placementTask = hasPlacement && !_isBench(phase);
     return MissionPhaseGuidance._(
       interactionLabel:
-          _label(family, hasPlacement, isIdentification, canDragPlacement),
+          _label(family, placementTask, isIdentification, canDragPlacement),
       summary: '${phase.title}: '
-          '${_summary(phase, family, hasPlacement, isIdentification)}',
+          '${_summary(phase, family, placementTask, isIdentification)}',
       steps: List.unmodifiable(steps),
       hint: _hint(family, isIdentification),
       progress: List.unmodifiable(progress),
@@ -365,6 +412,7 @@ final class MissionActionGuide {
         ? MissionEquipmentSimulator.map(p['equipment'])
         : <String, dynamic>{};
     final steps = <MissionGuideStep>[];
+    final bench = _isBench(phase);
     final primaryDone = state.interactionCompletedPhaseIds.contains(phase.id);
     void add(String text, bool done, MissionGuideTarget target,
             {String? controlKey, String? workspaceMode, String? objectId}) =>
@@ -398,7 +446,9 @@ final class MissionActionGuide {
                       {'id': id, 'label': id}
                   ]
                 : objects,
-            MissionContentData.guideInspectItem,
+            bench
+                ? MissionContentData.guideBenchInspect
+                : MissionContentData.guideInspectItem,
             (id) =>
                 state.hotspotStates[id] != null &&
                 state.hotspotStates[id] != HotspotVisualState.neutral,
@@ -421,10 +471,12 @@ final class MissionActionGuide {
       case InteractionFamily.connect:
         items(
             p['sources'],
-            (label) => MissionContentData.guideConnect(
-                label,
-                state.mode == MissionRuntimeMode.practice &&
-                    !state.missionId.startsWith('coc4')),
+            (label) => bench
+                ? MissionContentData.guideBenchConnect(label)
+                : MissionContentData.guideConnect(
+                    label,
+                    state.mode == MissionRuntimeMode.practice &&
+                        !state.missionId.startsWith('coc4')),
             (id) =>
                 state.connectedNodePairs.any((pair) => pair.startsWith('$id>')),
             MissionGuideTarget.connect,
@@ -456,11 +508,13 @@ final class MissionActionGuide {
       case InteractionFamily.place:
         items(
             p['items'],
-            (label) => MissionContentData.guidePlace(
-                label,
-                state.mode == MissionRuntimeMode.practice &&
-                    p['allow_drag'] != false &&
-                    !phase.id.startsWith('coc4')),
+            (label) => bench
+                ? MissionContentData.guideBenchPlace(label)
+                : MissionContentData.guidePlace(
+                    label,
+                    state.mode == MissionRuntimeMode.practice &&
+                        p['allow_drag'] != false &&
+                        !phase.id.startsWith('coc4')),
             state.placements.containsKey,
             MissionGuideTarget.place,
             workspaceMode: state.mode == MissionRuntimeMode.practice &&
@@ -546,7 +600,9 @@ final class MissionActionGuide {
       final path = condition['path'] as String? ?? '';
       if (_coveredByPrimary(path, family)) continue;
       add(
-          _conditionText(path, phase, equipment),
+          bench
+              ? _benchConditionText(path, phase, equipment)
+              : _conditionText(path, phase, equipment),
           MissionEquipmentSimulator.conditionMet(condition, state),
           _targetForPath(path),
           controlKey: _conditionControlKey(path, phase, equipment),
@@ -744,6 +800,43 @@ final class MissionActionGuide {
             ? MissionContentData.guideOperationDecision
             : _settingInstruction(id, equipment),
       _ => MissionContentData.guideCheckRequirements,
+    };
+  }
+
+  /// Work-order checks on the assembly bench, worded for its hotspots and
+  /// tray instead of the card panels.
+  static String _benchConditionText(String path, MissionPhaseDefinition phase,
+      Map<String, dynamic> equipment) {
+    final dot = path.indexOf('.');
+    final kind = dot < 0 ? path : path.substring(0, dot);
+    final id = dot < 0 ? '' : path.substring(dot + 1);
+    String? label(Object? raw, bool Function(Map<String, dynamic>) match) {
+      for (final item in MissionEquipmentSimulator.maps(raw)) {
+        if (match(item)) return item['label'] as String? ?? id;
+      }
+      return null;
+    }
+
+    final operation = switch (kind) {
+      'operation' => label(equipment['operations'], (item) => item['id'] == id),
+      'setting' => label(
+          equipment['operations'],
+          (item) =>
+              MissionEquipmentSimulator.map(item['effects']).containsKey(id)),
+      _ => null,
+    };
+    return switch (kind) {
+      'inspected' => MissionContentData.guideBenchInspect(
+          label(phase.presentation['objects'], (item) => item['id'] == id) ??
+              id.replaceAll('_', ' ')),
+      'placed' => MissionContentData.guideBenchPlace(label(
+              MissionEquipmentSimulator.map(equipment['placement'])['items'],
+              (item) => item['id'] == id) ??
+          id.replaceAll('_', ' ')),
+      'link' => MissionContentData.guideBenchConnectPorts,
+      'operation' || 'setting' when operation != null =>
+        MissionContentData.guideBenchOperation(operation),
+      _ => _conditionText(path, phase, equipment),
     };
   }
 

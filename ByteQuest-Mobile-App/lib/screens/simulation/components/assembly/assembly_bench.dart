@@ -122,6 +122,16 @@ class _AssemblyBenchState extends State<AssemblyBench> {
 
   String _orientation(BenchPart part) => '${_turnsFor(part) % 4 * 90}';
 
+  /// Quarter turns a part is shown at. An installed part sits in its seating
+  /// orientation, the only one the equipment rules accept, also after a
+  /// restart; the nearest equivalent turn avoids a spin on seating.
+  int _displayTurns(BenchPart part) {
+    final turns = _turnsFor(part);
+    final seating = int.tryParse(part.seatingOrientation ?? '');
+    if (!part.placed || seating == null) return turns;
+    return turns - (turns - seating ~/ 90) % 4;
+  }
+
   BenchView _view(AssemblyBenchModel model) {
     final selectedOnBoard = _selectedPart != null &&
             (_itemSpec(_selectedPart!)['category'] == 'ddr4_dimm' ||
@@ -270,6 +280,29 @@ class _AssemblyBenchState extends State<AssemblyBench> {
     return {step!.focusId!};
   }
 
+  /// Where the guide outline goes on the bench: a focused part outlines the
+  /// slots it physically fits and a focused cable its compatible headers, in
+  /// the coordinates of the current view; levers, latches and screws outline
+  /// their own spot. A part in the tray has no spot of its own on the bench.
+  Set<String> _focusTargets(AssemblyBenchModel model, Set<String> focus) {
+    final targets = <String>{};
+    for (final id in focus) {
+      final part = model.part(id);
+      if (part != null) {
+        if (!part.placed) {
+          targets.addAll(model
+              .compatibleSlots(id, _itemSpec(id), widget.state.placements)
+              .map((slot) => slot.id));
+        }
+      } else if (model.cable(id) != null) {
+        targets.addAll(model.compatibleHeaders(id).map((header) => header.id));
+      } else {
+        targets.add(id);
+      }
+    }
+    return targets;
+  }
+
   Set<String> _compatible(AssemblyBenchModel model) {
     if (_assessment) return const {};
     if (_selectedPart != null && model.part(_selectedPart)?.placed != true) {
@@ -295,8 +328,16 @@ class _AssemblyBenchState extends State<AssemblyBench> {
     final view = _view(model);
     final focus = _guideFocus(model);
     final compatible = _compatible(model);
+    final outlined = {...compatible, ..._focusTargets(model, focus)};
     final reducedMotion = MediaQuery.disableAnimationsOf(context) ||
         widget.state.reducedMotion;
+    // The part in hand, when it carries an orientation marker.
+    final selected = model.part(_selectedPart);
+    final keyed = selected != null &&
+            !selected.placed &&
+            AssemblyBenchLayout.markers.containsKey(selected.id)
+        ? selected
+        : null;
     final viewTitle = switch (view) {
       BenchView.mat => MissionContentData.benchMatView,
       BenchView.board => MissionContentData.benchBoardView,
@@ -358,6 +399,7 @@ class _AssemblyBenchState extends State<AssemblyBench> {
                 selectedCable: _selectedCable,
                 compatible: compatible,
                 focus: focus,
+                outlined: outlined,
                 onTapSlot: (slot) => _tapSlot(slot, snap: true),
                 onTapHeader: _tapHeader,
                 onDropPart: (part, slot) =>
@@ -368,13 +410,36 @@ class _AssemblyBenchState extends State<AssemblyBench> {
                 onInspect: (object) => unawaited(_inspect(object)),
               ),
             ),
-              // The floating step header never blocks a drop or a tap.
-              if (!roomy)
+              // The floating step header and the preview of the part in hand
+              // never block a drop or a tap.
+              if (!roomy || keyed != null)
                 Positioned(
-                    top: 54,
-                    left: 6,
-                    right: 6,
-                    child: IgnorePointer(child: header)),
+                  top: 54,
+                  left: 6,
+                  right: 6,
+                  child: IgnorePointer(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (!roomy) header,
+                        if (keyed != null)
+                          Align(
+                            alignment: Alignment.topRight,
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: _PartPreview(
+                                part: keyed,
+                                turns: _turnsFor(keyed),
+                                reducedMotion: reducedMotion,
+                                compact: !roomy,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
               if (information != null && information != _dismissed)
                 Positioned(
                   left: 6,
@@ -397,7 +462,7 @@ class _AssemblyBenchState extends State<AssemblyBench> {
             selectedCable: _selectedCable,
             compatible: compatible,
             focus: focus,
-            turnsFor: _turnsFor,
+            turnsFor: _displayTurns,
             closeUp: canToggle ? view == BenchView.board : null,
             onToggleView: () =>
                 setState(() => _closeUp = view != BenchView.board),
@@ -593,6 +658,7 @@ class _BenchCanvas extends StatelessWidget {
     required this.selectedCable,
     required this.compatible,
     required this.focus,
+    required this.outlined,
     required this.onTapSlot,
     required this.onTapHeader,
     required this.onDropPart,
@@ -611,6 +677,11 @@ class _BenchCanvas extends StatelessWidget {
   final String? selectedCable;
   final Set<String> compatible;
   final Set<String> focus;
+
+  /// Slots, headers and operation spots outlined on the canvas (compatible
+  /// targets and the practice guide focus), drawn in canvas units so the
+  /// outline follows the camera at any zoom, pan and viewport size.
+  final Set<String> outlined;
   final ValueChanged<String> onTapSlot;
   final ValueChanged<String> onTapHeader;
   final void Function(String part, String slot) onDropPart;
@@ -651,6 +722,31 @@ class _BenchCanvas extends StatelessWidget {
               focused: focus.contains(object.id),
               onTap: () => onInspect(object),
             ),
+          ));
+        }
+        // The wrist strap lies beside the mat; the strap and the mat's
+        // ground stud are labelled in both modes. Labels name the object,
+        // never the step.
+        final strap = AssemblyBenchLayout.operation('wear_wrist_strap', view);
+        if (strap != null) {
+          children.add(Positioned.fromRect(
+            rect: strap.deflate(12),
+            child: const IgnorePointer(
+              child: Image(
+                image: AssetImage(AssemblyBenchLayout.strapAsset),
+                fit: BoxFit.contain,
+              ),
+            ),
+          ));
+        }
+        for (final label in MissionContentData.benchHotspotLabels.entries) {
+          final rect = AssemblyBenchLayout.hotspotLabel(label.key);
+          if (rect == null) continue;
+          children.add(Positioned.fromRect(
+            rect: rect,
+            child: _SceneLabel(
+                key: ValueKey('bench-hotspot-label-${label.key}'),
+                text: label.value),
           ));
         }
       case BenchView.board:
@@ -723,7 +819,15 @@ class _BenchCanvas extends StatelessWidget {
           child: _Seated(
             key: ValueKey('bench-seat-${entry.key}-${entry.value}'),
             reducedMotion: reducedMotion,
-            child: Image(image: AssetImage(asset), fit: BoxFit.contain),
+            // The rules seat a keyed part only at its seating orientation
+            // (0°), so its marker sits over the mark on the bench.
+            child: AssemblyBenchLayout.markers.containsKey(entry.key)
+                ? _PartImage(
+                    id: entry.key,
+                    asset: asset,
+                    turns: 0,
+                    reducedMotion: reducedMotion)
+                : Image(image: AssetImage(asset), fit: BoxFit.contain),
           ),
         ));
       }
@@ -734,7 +838,7 @@ class _BenchCanvas extends StatelessWidget {
             painter: _WiringPainter(
               view: view,
               links: state.connectedNodePairs,
-              highlighted: {...compatible, ...focus},
+              highlighted: outlined,
             ),
           ),
         ),
@@ -1334,7 +1438,8 @@ class _PartChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final image = _PartImage(
-      part: part,
+      id: part.id,
+      asset: part.asset,
       turns: turns,
       reducedMotion: reducedMotion,
       size: 40,
@@ -1382,7 +1487,8 @@ class _PartChip extends StatelessWidget {
                 width: 96,
                 height: 96,
                 child: _PartImage(
-                    part: part,
+                    id: part.id,
+                    asset: part.asset,
                     turns: turns,
                     reducedMotion: true,
                     size: 96),
@@ -1408,33 +1514,194 @@ class _PartChip extends StatelessWidget {
   }
 }
 
-/// A part photograph turned by [turns] quarter turns (animated 200 ms).
+/// A part photograph turned by [turns] quarter turns (animated 200 ms). A
+/// keyed part carries its orientation marker inside the rotation, so the
+/// marker turns with the part wherever the part is shown. Without [size]
+/// the square photograph fills the largest square that fits.
 class _PartImage extends StatelessWidget {
   const _PartImage({
+    required this.id,
+    required this.asset,
+    required this.turns,
+    required this.reducedMotion,
+    this.size,
+  });
+
+  final String id;
+  final String? asset;
+  final int turns;
+  final bool reducedMotion;
+  final double? size;
+
+  @override
+  Widget build(BuildContext context) {
+    final size = this.size;
+    if (size == null) {
+      return Center(
+        child: AspectRatio(
+          aspectRatio: 1,
+          child: LayoutBuilder(
+              builder: (context, box) => _turned(box.biggest.shortestSide)),
+        ),
+      );
+    }
+    return SizedBox(width: size, height: size, child: _turned(size));
+  }
+
+  Widget _turned(double extent) {
+    final marker = AssemblyBenchLayout.markers[id];
+    Widget photo = asset == null
+        ? const Icon(Icons.memory_outlined)
+        : Image(image: AssetImage(asset!), fit: BoxFit.contain);
+    if (marker != null && marker.baseTurns != 0) {
+      photo = RotatedBox(quarterTurns: marker.baseTurns, child: photo);
+    }
+    return AnimatedRotation(
+      key: ValueKey('bench-rotation-$id'),
+      turns: turns / 4,
+      duration:
+          reducedMotion ? Duration.zero : AppTheme.simulationTransitionDuration,
+      child: marker == null
+          ? photo
+          : Stack(fit: StackFit.expand, children: [
+              photo,
+              if (marker.kind == BenchMarkerKind.fan)
+                const CustomPaint(painter: BenchFanRingPainter()),
+              Positioned(
+                left: marker.box.left * extent,
+                top: marker.box.top * extent,
+                width: marker.box.width * extent,
+                height: marker.box.height * extent,
+                child: CustomPaint(
+                  key: ValueKey('bench-marker-$id'),
+                  painter: BenchMarkerPainter(marker.kind),
+                ),
+              ),
+            ]),
+    );
+  }
+}
+
+/// Where a keyed part's marker is at [turns] quarter turns from 0°, e.g.
+/// "Triangle: top-left · 90°". It describes the part, never the fit.
+String? benchMarkerDescription(String partId, int turns) {
+  final marker = AssemblyBenchLayout.markers[partId];
+  if (marker == null) return null;
+  final index = turns % 4;
+  final (name, positions) = switch (marker.kind) {
+    BenchMarkerKind.triangle => (
+        MissionContentData.benchMarkerTriangle,
+        MissionContentData.benchMarkerCorners
+      ),
+    BenchMarkerKind.notch => (
+        MissionContentData.benchMarkerNotch,
+        MissionContentData.benchMarkerEdges
+      ),
+    BenchMarkerKind.fan => (
+        MissionContentData.benchMarkerFan,
+        MissionContentData.benchMarkerFacings
+      ),
+  };
+  return MissionContentData.benchMarkerDescription(
+      name, positions[index], index * 90);
+}
+
+/// Larger view of the keyed part in hand: its photograph and marker at the
+/// current rotation, and where the marker is now. Announced on rotation. A
+/// short bench gets a compact row, so it stays clear of the note below.
+class _PartPreview extends StatelessWidget {
+  const _PartPreview({
     required this.part,
     required this.turns,
     required this.reducedMotion,
-    required this.size,
+    required this.compact,
   });
 
   final BenchPart part;
   final int turns;
   final bool reducedMotion;
-  final double size;
+  final bool compact;
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-        width: size,
-        height: size,
-        child: AnimatedRotation(
-          key: ValueKey('bench-rotation-${part.id}'),
-          turns: turns / 4,
-          duration: reducedMotion
-              ? Duration.zero
-              : AppTheme.simulationTransitionDuration,
-          child: part.asset == null
-              ? const Icon(Icons.memory_outlined)
-              : Image(image: AssetImage(part.asset!), fit: BoxFit.contain),
+  Widget build(BuildContext context) {
+    final description = benchMarkerDescription(part.id, turns) ?? '';
+    final image = _PartImage(
+      id: part.id,
+      asset: part.asset,
+      turns: turns,
+      reducedMotion: reducedMotion,
+      size: compact ? 48 : 96,
+    );
+    final text = Text(
+      description,
+      key: const ValueKey('bench-part-preview-description'),
+      textAlign: compact ? TextAlign.start : TextAlign.center,
+      maxLines: compact ? 2 : 3,
+      overflow: TextOverflow.ellipsis,
+      style: AppTheme.labelSmall.copyWith(color: AppTheme.navy),
+    );
+    return Semantics(
+      liveRegion: true,
+      label: MissionContentData.benchPreviewSemantics(part.label, description),
+      excludeSemantics: true,
+      child: Container(
+        key: const ValueKey('bench-part-preview'),
+        width: compact ? null : 120,
+        padding: const EdgeInsets.all(6),
+        decoration: BoxDecoration(
+          color: AppTheme.cardWhite,
+          borderRadius: AppTheme.radiusSm,
+          border: Border.all(color: AppTheme.borderMedium),
+        ),
+        child: compact
+            ? Row(mainAxisSize: MainAxisSize.min, children: [
+                image,
+                const SizedBox(width: 8),
+                ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 112),
+                    child: text),
+              ])
+            : Column(mainAxisSize: MainAxisSize.min, children: [
+                image,
+                const SizedBox(height: 4),
+                text,
+              ]),
+      ),
+    );
+  }
+}
+
+/// A small name plate on the bench canvas, scaled with the camera like the
+/// silkscreen; it never takes a tap from the hotspot beside it.
+class _SceneLabel extends StatelessWidget {
+  const _SceneLabel({super.key, required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => IgnorePointer(
+        child: Center(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: AppTheme.cardWhite,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: AppTheme.borderMedium, width: 2),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  text,
+                  maxLines: 1,
+                  style: const TextStyle(
+                      fontSize: 30,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.navy),
+                ),
+              ),
+            ),
+          ),
         ),
       );
 }
