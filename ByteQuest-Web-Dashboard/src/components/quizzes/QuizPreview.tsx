@@ -10,7 +10,11 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { itemTypeLabels, type QuizItem } from "@/lib/quizzes/authoring";
+
+const wordCount = (text: string) =>
+  text.trim() ? text.trim().split(/\s+/).length : 0;
 
 export function QuizPreview({
   title,
@@ -26,6 +30,8 @@ export function QuizPreview({
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const item = items[index];
+  const setAnswer = (value: string) =>
+    setAnswers((current) => ({ ...current, [item.id]: value }));
   return (
     <Dialog
       open
@@ -51,17 +57,36 @@ export function QuizPreview({
               Question {index + 1} of {items.length} ·{" "}
               {itemTypeLabels[item.itemType]}
             </p>
+            {item.scenario ? (
+              <p className="whitespace-pre-wrap rounded-md bg-muted/40 p-3 text-sm">
+                <span className="font-medium">Scenario:</span> {item.scenario}
+              </p>
+            ) : null}
             <p className="whitespace-pre-wrap font-medium">{item.prompt}</p>
-            {item.itemType === "identification" ? (
+            {item.itemType === "scenario_essay" ? (
+              <div className="space-y-2">
+                <Textarea
+                  aria-label="Preview essay answer"
+                  rows={6}
+                  value={answers[item.id] ?? ""}
+                  onChange={(event) => setAnswer(event.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {wordCount(answers[item.id] ?? "")} words
+                  {item.minWords || item.maxWords
+                    ? ` · suggested ${item.minWords ?? "any"}–${item.maxWords ?? "any"} words`
+                    : ""}{" "}
+                  · scored on{" "}
+                  {(item.rubric ?? [])
+                    .map((row) => `${row.criterion} (${row.maxPoints})`)
+                    .join(", ")}
+                </p>
+              </div>
+            ) : item.itemType === "identification" ? (
               <Input
                 aria-label="Preview answer"
                 value={answers[item.id] ?? ""}
-                onChange={(event) =>
-                  setAnswers((current) => ({
-                    ...current,
-                    [item.id]: event.target.value,
-                  }))
-                }
+                onChange={(event) => setAnswer(event.target.value)}
               />
             ) : (
               <fieldset className="space-y-2">
@@ -79,12 +104,7 @@ export function QuizPreview({
                       name={`preview-${item.id}`}
                       value={option}
                       checked={answers[item.id] === option}
-                      onChange={() =>
-                        setAnswers((current) => ({
-                          ...current,
-                          [item.id]: option,
-                        }))
-                      }
+                      onChange={() => setAnswer(option)}
                     />
                     <span className="min-w-0 break-words">{option}</span>
                   </label>

@@ -1,6 +1,17 @@
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { QuizLibrary } from "@/components/quizzes/QuizLibrary";
+import {
+  QuizLibrary,
+  type LibraryQuizWithDeadlines,
+} from "@/components/quizzes/QuizLibrary";
 import { requireStaffProfile } from "@/lib/auth/server";
+import { libraryStatus } from "@/lib/quizzes/library";
+import { loadCurriculumCatalog } from "@/lib/quizzes/server";
+import {
+  quizDb,
+  type QuizCurriculumRow,
+  type QuizModuleRow,
+  type QuizVersionSettingsRow,
+} from "@/lib/quizzes/types";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -8,91 +19,136 @@ export const dynamic = "force-dynamic";
 export default async function QuizzesPage() {
   await requireStaffProfile(["instructor"]);
   const supabase = await createServerSupabaseClient();
+  const db = quizDb(supabase);
   const [
     { data: quizzes, error: quizError },
+    { data: curriculum, error: curriculumError },
     { data: versions, error: versionError },
+    { data: settings, error: settingsError },
     { data: items, error: itemError },
-    { data: modules, error: moduleError },
+    { data: links, error: linkError },
     { data: assignments, error: assignmentError },
+    catalog,
   ] = await Promise.all([
     supabase
       .from("quizzes")
       .select("id,title,topic,description,coc_module_id,updated_at,archived_at")
       .order("updated_at", { ascending: false }),
+    db.from("quizzes").select("id,focus,quiz_type,difficulty,topic_id"),
     supabase
       .from("quiz_versions")
       .select("id,quiz_id,version_number,status,published_at"),
+    db.from("quiz_versions").select("id,time_limit_minutes,result_release_mode"),
     supabase
       .from("quiz_items")
-      .select("id,quiz_version_id,review_status,removed_at"),
+      .select("id,quiz_version_id,item_type,review_status,removed_at"),
+    db.from("quiz_modules").select("quiz_id,module_id"),
     supabase
-      .from("coc_modules")
-      .select("id,coc_code,title")
-      .order("order_index"),
-    supabase.from('quiz_assignments').select('id,quiz_version_id,due_at,classes(title)').eq('status', 'active'),
+      .from("quiz_assignments")
+      .select("id,quiz_version_id,due_at,classes(title)")
+      .eq("status", "active"),
+    loadCurriculumCatalog(supabase),
   ]);
-  if (quizError || versionError || itemError || moduleError || assignmentError)
+  if (
+    quizError ||
+    curriculumError ||
+    versionError ||
+    settingsError ||
+    itemError ||
+    linkError ||
+    assignmentError
+  )
     throw new Error("Quiz library could not be loaded.");
 
-  const moduleById = new Map(
-    (modules ?? []).map((module) => [module.id, module]),
+  const now = Date.now();
+  const curriculumById = new Map(
+    ((curriculum ?? []) as QuizCurriculumRow[]).map((row) => [row.id, row]),
   );
-  const versionByQuiz = new Map<
-    string,
-    NonNullable<typeof versions>[number][]
-  >();
-  (versions ?? []).forEach((version) =>
-    versionByQuiz.set(version.quiz_id, [
-      ...(versionByQuiz.get(version.quiz_id) ?? []),
-      version,
-    ]),
+  const settingsById = new Map(
+    ((settings ?? []) as QuizVersionSettingsRow[]).map((row) => [row.id, row]),
   );
-  const itemCountByVersion = new Map<string, number>();
-  (items ?? [])
-    .filter((item) => !item.removed_at)
-    .forEach((item) =>
-      itemCountByVersion.set(
-        item.quiz_version_id,
-        (itemCountByVersion.get(item.quiz_version_id) ?? 0) + 1,
-      ),
+  const modulesByQuiz = new Map<string, string[]>();
+  for (const link of (links ?? []) as QuizModuleRow[]) {
+    modulesByQuiz.set(link.quiz_id, [
+      ...(modulesByQuiz.get(link.quiz_id) ?? []),
+      link.module_id,
+    ]);
+  }
+  const moduleById = new Map(catalog.modules.map((module) => [module.id, module]));
+  const cocById = new Map(catalog.cocs.map((coc) => [coc.id, coc]));
+
+  const library: LibraryQuizWithDeadlines[] = (quizzes ?? []).map((quiz) => {
+    const quizVersions = (versions ?? [])
+      .filter((version) => version.quiz_id === quiz.id)
+      .sort((a, b) => b.version_number - a.version_number);
+    const current =
+      quizVersions.find((version) => version.status === "draft") ??
+      quizVersions.find((version) => version.status === "published") ??
+      quizVersions[0];
+    const published = quizVersions.find((version) => version.status === "published");
+    const activeItems = (items ?? []).filter(
+      (item) => item.quiz_version_id === current?.id && !item.removed_at,
     );
+    const publishedAssignments = (assignments ?? []).filter(
+      (assignment) => assignment.quiz_version_id === published?.id,
+    );
+    const mapping = curriculumById.get(quiz.id);
+    const moduleIds = [...(modulesByQuiz.get(quiz.id) ?? [])].sort(
+      (a, b) =>
+        (moduleById.get(a)?.sequenceOrder ?? 0) -
+        (moduleById.get(b)?.sequenceOrder ?? 0),
+    );
+    const upcoming = publishedAssignments
+      .map((assignment) => assignment.due_at)
+      .filter((due): due is string => !!due && new Date(due).getTime() > now)
+      .sort();
+    return {
+      id: quiz.id,
+      title: quiz.title,
+      topic: quiz.topic,
+      cocId: quiz.coc_module_id,
+      coc: quiz.coc_module_id
+        ? (cocById.get(quiz.coc_module_id)?.code.toUpperCase() ?? "COC")
+        : "General",
+      moduleIds,
+      moduleCodes: moduleIds.map((id) => moduleById.get(id)?.code ?? "Module"),
+      topicId: mapping?.topic_id ?? null,
+      quizType: mapping?.quiz_type ?? null,
+      mapped: !!quiz.coc_module_id && !!mapping?.focus,
+      status: libraryStatus({
+        archived: !!quiz.archived_at,
+        hasPublished: !!published,
+        assignmentDueDates: publishedAssignments.map((assignment) => assignment.due_at),
+        now,
+      }),
+      hasDraft: quizVersions.some((version) => version.status === "draft"),
+      version: current?.version_number ?? 1,
+      questionCount: activeItems.length,
+      essayCount: activeItems.filter(
+        (item) => (item.item_type as string) === "scenario_essay",
+      ).length,
+      timeLimitMinutes: current
+        ? (settingsById.get(current.id)?.time_limit_minutes ?? null)
+        : null,
+      updatedAt: quiz.updated_at,
+      nextDueAt: upcoming[0] ?? null,
+      deadlines: quiz.archived_at
+        ? []
+        : publishedAssignments.map((assignment) => ({
+            id: assignment.id,
+            classTitle: assignment.classes?.title ?? "Class",
+            dueAt: assignment.due_at,
+          })),
+    };
+  });
 
   return (
     <DashboardLayout>
       <div className="mx-auto max-w-7xl">
         <QuizLibrary
           serverNow={new Date().toISOString()}
-          modules={(modules ?? []).map((module) => ({
-            id: module.id,
-            code: module.coc_code,
-            title: module.title,
-          }))}
-          quizzes={(quizzes ?? []).map((quiz) => {
-            const sorted = [...(versionByQuiz.get(quiz.id) ?? [])].sort(
-              (a, b) => b.version_number - a.version_number,
-            );
-            const current =
-              sorted.find((version) => version.status === "draft") ??
-              sorted.find((version) => version.status === "published") ??
-              sorted[0];
-            return {
-              id: quiz.id,
-              title: quiz.title,
-              topic: quiz.topic,
-              coc: quiz.coc_module_id
-                ? (moduleById.get(quiz.coc_module_id)?.coc_code.toUpperCase() ??
-                  "General")
-                : "General",
-              status: quiz.archived_at
-                ? "archived"
-                : (current?.status ?? "draft"),
-              version: current?.version_number ?? 1,
-              questionCount: current
-                ? (itemCountByVersion.get(current.id) ?? 0)
-                : 0,
-              deadlines: (assignments ?? []).filter(a => sorted.some(v => v.id === a.quiz_version_id && v.status === 'published') && !quiz.archived_at).map(a => ({ id: a.id, classTitle: a.classes?.title ?? 'Class', dueAt: a.due_at })),
-            };
-          })}
+          catalog={catalog}
+          quizzes={library}
         />
       </div>
     </DashboardLayout>
