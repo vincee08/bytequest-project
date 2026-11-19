@@ -131,7 +131,10 @@ class _PerformanceSectionState extends State<PerformanceSection>
     final generation = ++_generation;
     if (!initial && mounted) setState(() => _loading = true);
     try {
-      final snapshot = await _service.fetchMyPerformance();
+      // Only the full section lists quizzes by title; both calls run together.
+      final titles = widget.compact ? null : _quizTitles();
+      var snapshot = await _service.fetchMyPerformance();
+      if (titles != null) snapshot = snapshot.withQuizTitles(await titles);
       if (!mounted || generation != _generation) return;
       setState(() {
         _snapshot = snapshot;
@@ -145,6 +148,17 @@ class _PerformanceSectionState extends State<PerformanceSection>
         _failed = true;
         _loading = false;
       });
+    }
+  }
+
+  /// Titles are labels only: when they cannot be read the rows keep their
+  /// fallback label and the section still shows every score.
+  Future<Map<String, String>> _quizTitles() async {
+    try {
+      return await _service.fetchQuizTitles();
+    } catch (error) {
+      debugPrint('Quiz titles unavailable: $error');
+      return const {};
     }
   }
 

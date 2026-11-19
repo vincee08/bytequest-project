@@ -1,6 +1,7 @@
 /// Learner performance projection returned by the `get_my_performance()`
-/// SECURITY INVOKER RPC (supabase/migrations/20261119170300). Every value is
-/// the learner's own RLS-visible data; assessment results are released only.
+/// SECURITY INVOKER RPC (supabase/migrations/20261119170300, last changed in
+/// 20261119170500). Every value is the learner's own RLS-visible data;
+/// assessment results and instructor-release quiz results are released only.
 class PerformanceSnapshot {
   const PerformanceSnapshot({
     required this.progress,
@@ -24,7 +25,6 @@ class PerformanceSnapshot {
   final PerformanceSummary summary;
   final DateTime updatedAt;
 
-  /// True when the learner has no recorded activity of any kind yet.
   /// Anything the compact Progress-screen summary can average or count.
   bool get hasScoredWork =>
       quizzes.isNotEmpty ||
@@ -32,6 +32,7 @@ class PerformanceSnapshot {
       assessments.isNotEmpty ||
       competency.isNotEmpty;
 
+  /// False when the learner has no recorded activity of any kind yet.
   bool get hasActivity =>
       progress.completedItems > 0 ||
       competency.isNotEmpty ||
@@ -40,6 +41,21 @@ class PerformanceSnapshot {
       assessments.isNotEmpty ||
       practice.runs > 0 ||
       practice.missionsVerified > 0;
+
+  /// Quiz titles by attempt id, read in one call from the learner's quiz list.
+  PerformanceSnapshot withQuizTitles(Map<String, String> titles) {
+    if (titles.isEmpty) return this;
+    return PerformanceSnapshot(
+      progress: progress,
+      competency: competency,
+      quizzes: [for (final quiz in quizzes) quiz.withTitle(titles[quiz.attemptId])],
+      homework: homework,
+      assessments: assessments,
+      practice: practice,
+      summary: summary,
+      updatedAt: updatedAt,
+    );
+  }
 
   factory PerformanceSnapshot.fromJson(Map<String, dynamic> json) {
     final scores = _map(json['scores']);
@@ -151,14 +167,40 @@ class QuizScore {
     required this.correctCount,
     required this.questionCount,
     required this.submittedAt,
+    this.score,
+    this.maxScore,
+    this.released = false,
   });
 
   final String attemptId;
+
+  /// Not part of get_my_performance (learners cannot read quiz titles under
+  /// RLS); filled from the learner's quiz list by [PerformanceSnapshot.withQuizTitles].
   final String? title;
   final double? percent;
   final int? correctCount;
   final int? questionCount;
   final DateTime? submittedAt;
+
+  /// Points when the result records them (released instructor-release
+  /// results and point-scored immediate results); null otherwise.
+  final double? score;
+  final double? maxScore;
+
+  /// An instructor-release result the instructor has released.
+  final bool released;
+
+  QuizScore withTitle(String? value) => QuizScore(
+        attemptId: attemptId,
+        title: value ?? title,
+        percent: percent,
+        correctCount: correctCount,
+        questionCount: questionCount,
+        submittedAt: submittedAt,
+        score: score,
+        maxScore: maxScore,
+        released: released,
+      );
 
   factory QuizScore.fromJson(Map<String, dynamic> json) => QuizScore(
         attemptId: json['attempt_id'] as String? ?? '',
@@ -167,6 +209,9 @@ class QuizScore {
         correctCount: _nullableInt(json['correct_count']),
         questionCount: _nullableInt(json['question_count']),
         submittedAt: _date(json['submitted_at']),
+        score: _double(json['score']),
+        maxScore: _double(json['max_score']),
+        released: json['released'] == true,
       );
 }
 

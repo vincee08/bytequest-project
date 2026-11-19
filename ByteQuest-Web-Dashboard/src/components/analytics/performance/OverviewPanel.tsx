@@ -21,6 +21,7 @@ const COMPLETION_CONFIG = {
 
 const STAGE_CONFIG = {
   technical: { label: "Technical assessments", color: "hsl(var(--chart-1))" },
+  quiz: { label: "Quizzes (instructor release)", color: "hsl(var(--chart-2))" },
   homework: { label: "Homework", color: "hsl(var(--chart-4))" },
 } satisfies ChartConfig;
 
@@ -48,7 +49,7 @@ export function OverviewPanel({
   const footer = `${population} · ${period}`;
   const sources = [
     { source: "Assessments (released)", applicable: data.assessments.applicable, average: data.assessments.avg_percent, basis: `${data.assessments.released} released results` },
-    { source: "Quizzes", applicable: data.quizzes.applicable, average: data.quizzes.avg_percent, basis: `${data.quizzes.scored} scored attempts` },
+    { source: "Quizzes", applicable: data.quizzes.applicable, average: data.quizzes.avg_percent, basis: `${data.quizzes.scored} scored attempts (instructor-release quizzes once released)` },
     { source: "Homework (released)", applicable: data.homework.applicable, average: data.homework.avg_percent, basis: `${data.homework.released} released grades (share of each maximum score)` },
     { source: "Learning progress", applicable: data.learning_progress.applicable, average: data.learning_progress.avg_percent, basis: `${data.learning_progress.items_total} required items` },
   ];
@@ -171,20 +172,21 @@ function EvaluationPanel({ data }: { data: AnalyticsOverview }) {
   const total = stages.reduce((sum, stage) => sum + data.evaluation.total[stage], 0);
   return (
     <Panel title="Evaluation status (Evaluate → Finalize → Release)"
-      description={`Technical assessments and homework submitted in the period, by their current stage (same stages as the Evaluation Center). Only released results enter the averages above.`}>
+      description="Technical assessments, instructor-release quizzes and homework submitted in the period, by their current stage (same stages as the Evaluation Center). Only released results enter the averages above.">
       {total ? (
         <div className="grid gap-5 p-4 sm:p-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,1fr)]">
-          <CountBarChart data={stages.map((stage) => ({ stage: STAGE_LABELS[stage], technical: data.evaluation.technical[stage], homework: data.evaluation.homework[stage] }))}
-            config={STAGE_CONFIG} categoryKey="stage" series={["technical", "homework"]} stacked categoryLabel="Stage" valueLabel="Items"
+          <CountBarChart data={stages.map((stage) => ({ stage: STAGE_LABELS[stage], technical: data.evaluation.technical[stage], quiz: data.evaluation.quiz[stage], homework: data.evaluation.homework[stage] }))}
+            config={STAGE_CONFIG} categoryKey="stage" series={["technical", "quiz", "homework"]} stacked categoryLabel="Stage" valueLabel="Items"
             ariaLabel="Submitted work by evaluation stage" height={240} />
           <table className="w-full self-start text-left text-xs">
             <caption className="sr-only">Submitted work by evaluation stage</caption>
-            <thead className="text-muted-foreground"><tr><th className="py-1.5 font-medium">Stage</th><th className="py-1.5 text-right font-medium">Technical</th><th className="py-1.5 text-right font-medium">Homework</th><th className="py-1.5 text-right font-medium">Total</th></tr></thead>
+            <thead className="text-muted-foreground"><tr><th className="py-1.5 font-medium">Stage</th><th className="py-1.5 text-right font-medium">Technical</th><th className="py-1.5 text-right font-medium">Quizzes</th><th className="py-1.5 text-right font-medium">Homework</th><th className="py-1.5 text-right font-medium">Total</th></tr></thead>
             <tbody className="divide-y divide-border tabular-nums">
               {stages.map((stage) => (
                 <tr key={stage}>
                   <td className="py-2 font-medium text-foreground">{STAGE_LABELS[stage]}</td>
                   <td className="py-2 text-right">{data.evaluation.technical[stage]}</td>
+                  <td className="py-2 text-right">{data.evaluation.quiz[stage]}</td>
                   <td className="py-2 text-right">{data.evaluation.homework[stage]}</td>
                   <td className="py-2 text-right font-semibold">{data.evaluation.total[stage]}</td>
                 </tr>
@@ -192,7 +194,7 @@ function EvaluationPanel({ data }: { data: AnalyticsOverview }) {
             </tbody>
           </table>
         </div>
-      ) : <EmptyState title="No submitted work in this period" description="Assessment attempts and homework appear here once learners submit them." />}
+      ) : <EmptyState title="No submitted work in this period" description="Assessment attempts, instructor-release quizzes and homework appear here once learners submit them." />}
     </Panel>
   );
 }
