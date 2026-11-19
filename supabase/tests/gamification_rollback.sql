@@ -2,7 +2,7 @@
 -- Every award comes from a real source record, exactly once, and is written
 -- only by trusted server roles. Rollback-only: all fixtures are discarded.
 begin;
-select plan(58);
+select plan(65);
 
 create temporary table gam_ctx (
   teacher uuid not null default gen_random_uuid(),
@@ -10,6 +10,7 @@ create temporary table gam_ctx (
   learner_a uuid not null default gen_random_uuid(),
   learner_b uuid not null default gen_random_uuid(),
   learner_c uuid not null default gen_random_uuid(),
+  learner_d uuid not null default gen_random_uuid(),
   class_a uuid not null default gen_random_uuid(),
   action_id bigint,
   topic_a uuid not null default gen_random_uuid(),
@@ -43,7 +44,7 @@ select id,'00000000-0000-0000-0000-000000000000'::uuid,'authenticated','authenti
   '{"provider":"email","providers":["email"]}'::jsonb, jsonb_build_object('full_name', name), now(), now()
 from gam_ctx cross join lateral (values
   (teacher, 'Gamification Teacher'), (other_teacher, 'Other Teacher'),
-  (learner_a, 'Ana Reyes'), (learner_b, 'Ben Santos'), (learner_c, 'Carla Mendoza')) t(id, name);
+  (learner_a, 'Ana Reyes'), (learner_b, 'Ben Santos'), (learner_c, 'Carla Mendoza'), (learner_d, 'Dan Lopez')) t(id, name);
 update public.profiles set role = 'instructor'
 where user_id in (select teacher from gam_ctx union all select other_teacher from gam_ctx);
 
@@ -446,6 +447,66 @@ select is((select string_agg(format('%s:%s', e.event_type, (e.source_id = c.topi
   from public.learner_point_events e join gam_ctx c on e.learner_id = c.learner_b
   where e.source_id <> 'direct-service-insert'),
   'topic_completed:true', 'an inactive rule awards nothing while active rules keep awarding');
+
+-- ---------------------------------------------------------------------------
+-- Fail open: a gamification fault never blocks the learning record that fired
+-- it. A failed award rolls back as a unit (no partial point row) and the
+-- backfill repairs it later, still exactly once.
+-- ---------------------------------------------------------------------------
+-- Achievement evaluation fails: the record and its points commit, the
+-- achievement waits for repair.
+alter table public.user_achievements add constraint gamification_test_block_achievements check (false) not valid;
+set local role service_role;
+insert into public.practice_mission_completions (learner_id, mission_id, contract_version, evidence_through_id, verified_at)
+select learner_d, 'coc2_m2', 'fail-open', action_id, '2026-05-01 08:00:00+00' from gam_ctx;
+reset role;
+select is((select format('%s|%s|%s',
+    (select count(*) from public.practice_mission_completions where learner_id = c.learner_d and mission_id = 'coc2_m2'),
+    (select count(*) from public.learner_point_events where learner_id = c.learner_d and source_id = 'coc2_m2'),
+    (select count(*) from public.user_achievements where user_id = c.learner_d)) from gam_ctx c),
+  '1|1|0', 'when achievements cannot be evaluated the mission and its points commit and the achievement waits');
+alter table public.user_achievements drop constraint gamification_test_block_achievements;
+select is((private.gamification_backfill()->>'achievements')::integer, 1, 'the backfill re-evaluates the deferred achievement');
+select is((select la.earned_at from public.learner_achievements la join gam_ctx c on la.learner_id = c.learner_d
+  where la.code = 'first_mission'), '2026-05-01 08:00:00+00'::timestamptz,
+  'the repaired achievement keeps the time its rule became true');
+
+-- The award itself fails (a constraint, then missing table access): the record
+-- commits and no point row is left behind.
+alter table public.learner_point_events add constraint gamification_test_block_points check (source_id <> 'coc2_m1');
+set local role service_role;
+insert into public.practice_mission_completions (learner_id, mission_id, contract_version, evidence_through_id, verified_at)
+select learner_d, 'coc2_m1', 'fail-open', action_id, '2026-05-02 08:00:00+00' from gam_ctx;
+reset role;
+select is((select format('%s|%s',
+    (select count(*) from public.practice_mission_completions where learner_id = c.learner_d and mission_id = 'coc2_m1'),
+    (select count(*) from public.learner_point_events where learner_id = c.learner_d and source_id = 'coc2_m1')) from gam_ctx c),
+  '1|0', 'a failed award never blocks the verified mission and leaves no partial point row');
+revoke select on public.gamification_point_rules from service_role;
+set local role service_role;
+insert into public.learner_module_completions (learner_id, module_id, completed_at)
+select learner_d, (select id from public.curriculum_modules where coc_code = 'coc1' and code = 'LO1.3'), '2026-05-03 08:00:00+00'
+from gam_ctx;
+reset role;
+grant select on public.gamification_point_rules to service_role;
+select is((select format('%s|%s',
+    (select count(*) from public.learner_module_completions where learner_id = c.learner_d),
+    (select count(*) from public.learner_point_events where learner_id = c.learner_d and event_type = 'module_completed')) from gam_ctx c),
+  '1|0', 'a writer without access to the rules still records the module completion');
+
+-- The backfill is fail open per record and repairs every missed award once.
+select is(private.gamification_backfill()->>'skipped', '1',
+  'the backfill skips a still-failing record with a warning instead of aborting');
+alter table public.learner_point_events drop constraint gamification_test_block_points;
+select private.gamification_backfill();
+select private.gamification_backfill();
+select is((select format('%s|%s|%s',
+    (select string_agg(e.source_id, ',' order by e.awarded_at) from public.learner_point_events e
+      where e.learner_id = c.learner_d and e.event_type = 'practice_mission_verified'),
+    (select count(*) from public.learner_point_events e where e.learner_id = c.learner_d),
+    (select string_agg(la.code, ',' order by la.code) from public.learner_achievements la where la.learner_id = c.learner_d))
+  from gam_ctx c),
+  'coc2_m2,coc2_m1|3|first_mission,first_module', 'repaired awards and achievements are recorded exactly once');
 
 select * from finish();
 rollback;
