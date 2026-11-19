@@ -11,7 +11,9 @@ import 'package:bytequest/screens/simulation/runtime/mission_evidence_gateway.da
 import 'package:bytequest/screens/simulation/runtime/mission_runtime_controller.dart';
 import 'package:bytequest/screens/simulation/runtime/mission_runtime_models.dart';
 import 'package:bytequest/services/progress_resume_service.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -615,8 +617,8 @@ void main() {
     await _tapKey(tester, 'bench-part-cpu');
     expect(
         _description(tester),
-        MissionContentData.benchMarkerDescription(
-            MissionContentData.benchMarkerTriangle, 'top-left', 90));
+        MissionContentData.benchMarkerPosition(
+            MissionContentData.benchMarkerTriangle, 'top-left'));
     expect(
         _markerSide(
             tester, find.byKey(const ValueKey('bench-part-preview')), 'cpu'),
@@ -741,4 +743,444 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     }
   });
+
+  // Final fix C1: on a phone a finger swipe on the tray scrolls it; a part
+  // or cable is dragged only by a deliberate move up toward the bench, and a
+  // tap still selects. No test here scrolls the tray programmatically.
+  group('tray touch gestures at 360x640', () {
+    const phone = Size(360, 640);
+
+    ScrollPosition trayPosition(WidgetTester tester) => tester
+        .state<ScrollableState>(find.descendant(
+            of: find.byKey(const ValueKey('assembly-bench-tray-scroll')),
+            matching: find.byType(Scrollable)))
+        .position;
+
+    Rect trayRect(WidgetTester tester) =>
+        tester.getRect(find.byKey(const ValueKey('assembly-bench-tray')));
+
+    bool anyGhost() => find
+        .byWidgetPredicate((widget) =>
+            widget.key is ValueKey<String> &&
+            (widget.key! as ValueKey<String>)
+                .value
+                .startsWith('bench-drag-ghost-'))
+        .evaluate()
+        .isNotEmpty;
+
+    /// A slow finger swipe (no fling) from [start] by [delta], in small steps.
+    Future<bool> swipe(WidgetTester tester, Offset start, Offset delta) async {
+      final gesture =
+          await tester.startGesture(start, kind: PointerDeviceKind.touch);
+      var ghost = false;
+      const steps = 12;
+      for (var i = 1; i <= steps; i++) {
+        await gesture.moveTo(start + delta * (i / steps));
+        await tester.pump(const Duration(milliseconds: 16));
+        ghost = ghost || anyGhost();
+      }
+      await gesture.up();
+      await tester.pumpAndSettle();
+      return ghost;
+    }
+
+    /// The centre of a tray chip that starts a drag (a part or cable tile)
+    /// and lies fully inside the tray, else of any visible tray control.
+    Offset chipStart(WidgetTester tester) {
+      final tray = trayRect(tester);
+      Offset? fallback;
+      for (final element in find
+          .byWidgetPredicate((widget) =>
+              widget.key is ValueKey<String> &&
+              RegExp(r'^bench-(part|cable|operation|inspect-chip|slot-chip|header-chip)-')
+                  .hasMatch((widget.key! as ValueKey<String>).value))
+          .evaluate()) {
+        final box = element.renderObject as RenderBox?;
+        if (box == null || !box.hasSize) continue;
+        final rect = box.localToGlobal(Offset.zero) & box.size;
+        if (rect.left < tray.left + 2 || rect.right > tray.right - 2) continue;
+        if (rect.top < tray.top || rect.bottom > tray.bottom) continue;
+        final key = (element.widget.key! as ValueKey<String>).value;
+        if (key.startsWith('bench-part-') || key.startsWith('bench-cable-')) {
+          return rect.center;
+        }
+        fallback ??= rect.center;
+      }
+      return fallback ?? tray.center;
+    }
+
+    /// Swipes the tray, always starting on a chip, until [key] lies fully
+    /// inside it; every swipe must scroll and must never pick a part up.
+    Future<void> swipeTo(WidgetTester tester, String key) async {
+      for (var i = 0; i < 30; i++) {
+        final tray = trayRect(tester);
+        final rect = tester.getRect(find.byKey(ValueKey(key)));
+        if (rect.left >= tray.left && rect.right <= tray.right) return;
+        final before = trayPosition(tester).pixels;
+        final left = rect.right > tray.right;
+        final ghost =
+            await swipe(tester, chipStart(tester), Offset(left ? -140 : 140, 0));
+        expect(ghost, isFalse, reason: 'a sideways swipe never drags a part');
+        expect(trayPosition(tester).pixels, isNot(before),
+            reason: 'a swipe that starts on a chip scrolls the tray ($key)');
+      }
+      fail('$key never became reachable by swiping');
+    }
+
+    testWidgets('a horizontal swipe on a part tile scrolls the tray',
+        (tester) async {
+      final harness = await _pump(tester, _stateAt(2), size: phone);
+      final actions = harness.transport.actions.length;
+      final start = tester.getCenter(find.byKey(const ValueKey('bench-part-cpu')));
+      expect(trayRect(tester).contains(start), isTrue);
+      final ghost = await swipe(tester, start, const Offset(-200, 0));
+      expect(ghost, isFalse, reason: 'the swipe must not pick the CPU up');
+      expect(trayPosition(tester).pixels, greaterThan(100));
+      expect(harness.transport.actions, hasLength(actions),
+          reason: 'a scroll records no evidence');
+      expect(find.byKey(const ValueKey('bench-rotate')), findsNothing,
+          reason: 'a swipe does not select the part either');
+    });
+
+    testWidgets('every cable of the cabling phase is reachable and selectable',
+        (tester) async {
+      await _pump(tester, _stateAt(4), size: phone);
+      for (final cable in const [
+        'atx_24pin',
+        'eps_8pin',
+        'sata_power',
+        'sata_data',
+        'front_panel',
+      ]) {
+        await swipeTo(tester, 'bench-cable-$cable');
+        await tester.tap(find.byKey(ValueKey('bench-cable-$cable')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('bench-cancel')), findsOneWidget,
+            reason: 'tapping $cable selects it');
+        expect(find.textContaining('selected'), findsWidgets);
+        await swipeTo(tester, 'bench-cancel');
+        await tester.tap(find.byKey(const ValueKey('bench-cancel')));
+        await tester.pumpAndSettle();
+      }
+    });
+
+    testWidgets('every cable and the screwdriver are reachable in the POST phase',
+        (tester) async {
+      await _pump(tester, _stateAt(5), size: phone);
+      for (final key in const [
+        'bench-cable-cooler_fan',
+        'bench-cable-atx_24pin',
+        'bench-cable-eps_8pin',
+        'bench-cable-sata_power',
+        'bench-cable-sata_data',
+        'bench-cable-front_panel',
+        'bench-operation-pick_screwdriver',
+      ]) {
+        await swipeTo(tester, key);
+      }
+      // Swiping back the other way reaches the first tile again.
+      await swipeTo(tester, 'assembly-bench-toggle-view');
+    });
+
+    testWidgets('a deliberate drag up from a tile still seats the part',
+        (tester) async {
+      final harness = await _pump(tester, _stateAt(2), size: phone);
+      await swipeTo(tester, 'bench-operation-open_cpu_lever');
+      await tester.tap(find.byKey(const ValueKey('bench-operation-open_cpu_lever')));
+      await tester.pumpAndSettle();
+      expect(harness.controller.state.equipmentState['cpu_lever'], 'open');
+      // A touch tap selects the processor; rotate it to the socket mark.
+      await swipeTo(tester, 'bench-part-cpu');
+      await tester.tap(find.byKey(const ValueKey('bench-part-cpu')));
+      await tester.pumpAndSettle();
+      for (var i = 0; i < 3; i++) {
+        await tester.tap(find.byKey(const ValueKey('bench-rotate')));
+        await tester.pumpAndSettle();
+      }
+      final start = tester.getCenter(find.byKey(const ValueKey('bench-part-cpu')));
+      final gesture =
+          await tester.startGesture(start, kind: PointerDeviceKind.touch);
+      for (var i = 1; i <= 6; i++) {
+        await gesture.moveTo(start + Offset(0, -8.0 * i));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(find.byKey(const ValueKey('bench-drag-ghost-cpu')), findsOneWidget,
+          reason: 'moving up toward the bench picks the part up');
+      final socket =
+          tester.getCenter(find.byKey(const ValueKey('bench-slot-cpu_socket')));
+      await gesture.moveTo(socket);
+      await tester.pump(const Duration(milliseconds: 16));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(harness.controller.state.placements['cpu'], 'cpu_socket');
+      expect(harness.lastValue('placement_attempted')?['input_method'], 'drag');
+    });
+
+    testWidgets('a deliberate drag up from a cable tile still connects it',
+        (tester) async {
+      final harness = await _pump(tester, _stateAt(4), size: phone);
+      final start =
+          tester.getCenter(find.byKey(const ValueKey('bench-cable-atx_24pin')));
+      final gesture =
+          await tester.startGesture(start, kind: PointerDeviceKind.touch);
+      for (var i = 1; i <= 6; i++) {
+        await gesture.moveTo(start + Offset(0, -8.0 * i));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      expect(find.byKey(const ValueKey('bench-drag-ghost-atx_24pin')),
+          findsOneWidget);
+      await gesture.moveTo(tester
+          .getCenter(find.byKey(const ValueKey('bench-header-board_atx24'))));
+      await tester.pump(const Duration(milliseconds: 16));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(harness.controller.state.connectedNodePairs,
+          contains('atx_24pin>board_atx24'));
+    });
+  });
+
+  // Final fix I3: TalkBack activates tray tiles and buttons (ACTION_CLICK is
+  // the semantic tap), not only the canvas hotspots.
+  testWidgets('screen-reader taps select, rotate, install and connect',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    final harness = await _pump(tester, _stateAt(2));
+    SemanticsNode node(String key) =>
+        tester.getSemantics(find.byKey(ValueKey(key)).first);
+    Future<void> semanticTap(String key) async {
+      final finder = find.byKey(ValueKey(key)).first;
+      await tester.ensureVisible(finder);
+      await tester.pumpAndSettle();
+      final target = node(key);
+      expect(target.getSemanticsData().hasAction(SemanticsAction.tap), isTrue,
+          reason: '$key has a semantic tap action');
+      target.owner!.performAction(target.id, SemanticsAction.tap);
+      await tester.pumpAndSettle();
+    }
+
+    await semanticTap('bench-operation-open_cpu_lever');
+    expect(harness.controller.state.equipmentState['cpu_lever'], 'open');
+    await semanticTap('bench-part-cpu');
+    expect(find.byKey(const ValueKey('bench-rotate')), findsOneWidget,
+        reason: 'the processor is selected');
+    for (var i = 0; i < 3; i++) {
+      await semanticTap('bench-rotate');
+    }
+    await semanticTap('bench-slot-chip-cpu_socket');
+    expect(harness.controller.state.placements['cpu'], 'cpu_socket');
+    expect(harness.lastValue('placement_attempted')?['orientation'], '0');
+
+    await semanticTap('bench-cable-cooler_fan');
+    expect(find.byKey(const ValueKey('bench-header-chip-cpu_fan_header')),
+        findsOneWidget, reason: 'the fan cable is selected');
+    await semanticTap('bench-header-chip-cpu_fan_header');
+    expect(harness.controller.state.connectedNodePairs,
+        contains('cooler_fan>cpu_fan_header'));
+
+    await semanticTap('bench-part-ram_1');
+    await semanticTap('bench-cancel');
+    expect(find.byKey(const ValueKey('bench-cancel')), findsNothing);
+    semantics.dispose();
+  });
+
+  testWidgets('the view toggle and inspection tiles take a semantic tap',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    for (final (phase, key) in const [
+      (1, 'bench-inspect-chip-cpu'),
+      (5, 'assembly-bench-toggle-view'),
+    ]) {
+      final harness = await _pump(tester, _stateAt(phase));
+      final target = tester.getSemantics(find.byKey(ValueKey(key)));
+      expect(target.getSemanticsData().hasAction(SemanticsAction.tap), isTrue,
+          reason: key);
+      target.owner!.performAction(target.id, SemanticsAction.tap);
+      await tester.pumpAndSettle();
+      if (phase == 1) {
+        expect(harness.controller.state.hotspotStates['cpu'],
+            HotspotVisualState.selected);
+      } else {
+        expect(find.byKey(const ValueKey('bench-scene-board-coc1_m2_p5')),
+            findsOneWidget, reason: 'the close-up opened');
+      }
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+    semantics.dispose();
+  });
+
+  // Re-review 4 O2: the tile itself names where the marker is.
+  testWidgets('a keyed tile announces its marker position', (tester) async {
+    final semantics = tester.ensureSemantics();
+    for (final mode in MissionRuntimeMode.values) {
+      await _pump(tester, _stateAt(2, mode: mode));
+      final label = tester
+          .getSemantics(find.byKey(const ValueKey('bench-part-cpu')))
+          .label;
+      expect(
+          label,
+          contains(MissionContentData.benchMarkerPosition(
+              MissionContentData.benchMarkerTriangle, 'top-left')),
+          reason: mode.name);
+      expect(label, isNot(contains('°')));
+      expect(label, isNot(contains('degree')));
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+    semantics.dispose();
+  });
+
+  // Final fix I2: in assessment the readout states only where the marker is;
+  // no angle that equals the seating orientation is ever shown or announced.
+  testWidgets('assessment never shows or announces the part angle',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    await _pump(tester, _stateAt(2, mode: MissionRuntimeMode.assessment));
+    await _tapKey(tester, 'bench-part-cpu');
+    for (final corner in const [
+      'top-left',
+      'top-right',
+      'bottom-right',
+      'bottom-left',
+    ]) {
+      if (corner != 'top-left') await _tapKey(tester, 'bench-rotate');
+      expect(
+          _description(tester),
+          MissionContentData.benchMarkerPosition(
+              MissionContentData.benchMarkerTriangle, corner));
+      final rotate = tester
+          .getSemantics(find.byKey(const ValueKey('bench-rotate')))
+          .label;
+      final preview = tester
+          .getSemantics(find.byKey(const ValueKey('bench-part-preview')))
+          .label;
+      for (final text in [_description(tester), rotate, preview]) {
+        expect(text, isNot(contains('°')), reason: text);
+        expect(text, isNot(matches(RegExp(r'\d+ degrees?$|turned \d'))),
+            reason: text);
+      }
+      expect(rotate, contains(corner));
+    }
+    semantics.dispose();
+  });
+
+  testWidgets('practice keeps the angle beside the marker position',
+      (tester) async {
+    await _pump(tester, _stateAt(2));
+    await _tapKey(tester, 'bench-part-cpu');
+    expect(
+        _description(tester),
+        MissionContentData.benchMarkerDescription(
+            MissionContentData.benchMarkerTriangle, 'top-left', 90));
+  });
+
+  // Flutter-sim m5: assessment never coaches the next move.
+  testWidgets('assessment shows a neutral note when a part is picked up',
+      (tester) async {
+    await _pump(tester, _stateAt(2, mode: MissionRuntimeMode.assessment));
+    await _tapKey(tester, 'bench-part-cooler');
+    final note = tester
+        .widget<Text>(find.byKey(const ValueKey('assembly-bench-information')))
+        .data!;
+    expect(note, MissionContentData.benchSelectedNeutral('CPU cooler'));
+    expect(note, isNot(contains('rotate')));
+    expect(note, isNot(contains('tap where')));
+  });
+
+  // Flutter-sim m1: an occupied slot's tile says what it holds and does not
+  // spend an attempt.
+  testWidgets('an occupied slot tile names its module and is disabled',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    final harness =
+        await _pump(tester, _stateAt(2, mode: MissionRuntimeMode.assessment));
+    await _tapKey(tester, 'bench-operation-open_dimm_latches');
+    await _tapKey(tester, 'bench-part-ram_1');
+    await _tapKey(tester, 'bench-rotate');
+    await _tapKey(tester, 'bench-rotate');
+    await _tapKey(tester, 'bench-slot-chip-dimm_a2');
+    expect(harness.controller.state.placements['ram_1'], 'dimm_a2');
+    await _tapKey(tester, 'bench-part-ram_2');
+    final chip = find.byKey(const ValueKey('bench-slot-chip-dimm_a2'));
+    await tester.ensureVisible(chip);
+    await tester.pumpAndSettle();
+    expect(tester.getSemantics(chip).label,
+        MissionContentData.benchSlotSemantics('DIMM_A2', 'Memory module 1'));
+    expect(_enabled(tester, 'bench-slot-chip-dimm_a2'), isFalse);
+    final before = harness.transport.actions.length;
+    await tester.tap(chip);
+    await tester.pumpAndSettle();
+    expect(harness.transport.actions, hasLength(before),
+        reason: 'no refused attempt is recorded');
+    semantics.dispose();
+  });
+
+  // Final fix I4: memory slot targets never overlap, in any view.
+  test('memory slot targets never overlap each other', () {
+    const dimms = ['dimm_a1', 'dimm_a2', 'dimm_b1', 'dimm_b2'];
+    for (final view in const [BenchView.board, BenchView.chassis]) {
+      for (var i = 0; i < dimms.length; i++) {
+        for (var j = i + 1; j < dimms.length; j++) {
+          final a = AssemblyBenchLayout.target(dimms[i], view)!;
+          final b = AssemblyBenchLayout.target(dimms[j], view)!;
+          // Neighbours share an edge (one pitch wide each); any overlap is
+          // floating-point rounding only (the old case view overlapped by
+          // about 56 canvas units).
+          expect(a.intersect(b).width, lessThanOrEqualTo(1e-6),
+              reason: '${dimms[i]} and ${dimms[j]} in ${view.name}');
+          expect(a.contains(AssemblyBenchLayout.slot(dimms[i], view)!.center),
+              isTrue);
+        }
+      }
+    }
+  });
+
+  for (final size in const [
+    Size(360, 640),
+    Size(412, 915),
+    Size(640, 360),
+    Size(1280, 800),
+  ]) {
+    testWidgets('a module dragged in the case view lands in the aimed slot '
+        'at $size', (tester) async {
+      final harness = await _pump(tester, _stateAt(5), size: size);
+      await _tapKey(tester, 'bench-operation-open_dimm_latches');
+      await _tapKey(tester, 'bench-part-ram_1');
+      await _tapKey(tester, 'bench-remove');
+      expect(harness.controller.state.placements.containsKey('ram_1'), isFalse);
+      await _tapKey(tester, 'bench-part-ram_1');
+      await _tapKey(tester, 'bench-rotate');
+      await _tapKey(tester, 'bench-rotate');
+      await _tapKey(tester, 'bench-cancel');
+      expect(find.byKey(const ValueKey('bench-scene-chassis-coc1_m2_p5')),
+          findsOneWidget, reason: 'the drag starts in the case view');
+      final chip = find.byKey(const ValueKey('bench-part-ram_1'));
+      await tester.ensureVisible(chip);
+      await tester.pumpAndSettle();
+      final start = tester.getCenter(chip);
+      final gesture =
+          await tester.startGesture(start, kind: PointerDeviceKind.touch);
+      for (var i = 1; i <= 6; i++) {
+        await gesture.moveTo(start + Offset(0, -8.0 * i));
+        await tester.pump(const Duration(milliseconds: 16));
+      }
+      final slot = find.byKey(const ValueKey('bench-slot-dimm_a2'));
+      final aimed = tester.getCenter(slot);
+      for (final other in const ['dimm_a1', 'dimm_b1', 'dimm_b2']) {
+        expect(
+            tester
+                .getRect(find.byKey(ValueKey('bench-slot-$other')))
+                .contains(aimed),
+            isFalse,
+            reason: '$other does not cover the centre of DIMM_A2');
+      }
+      await gesture.moveTo(aimed);
+      await tester.pump(const Duration(milliseconds: 16));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(harness.controller.state.placements['ram_1'], 'dimm_a2');
+      expect(harness.lastValue('placement_attempted')?['destination_id'],
+          'dimm_a2');
+      expect(harness.lastValue('placement_attempted')?['simulation_valid'],
+          isNot(false));
+    });
+  }
 }

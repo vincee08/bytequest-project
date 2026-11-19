@@ -64,6 +64,9 @@ class AssemblyBench extends StatefulWidget {
 class _AssemblyBenchState extends State<AssemblyBench> {
   String? _selectedPart;
   String? _selectedCable;
+
+  /// The tray tile being dragged right now (a part or cable id).
+  BenchDrag? _dragging;
   final Map<String, int> _turns = {};
   bool _closeUp = false;
   bool _applying = false;
@@ -85,6 +88,7 @@ class _AssemblyBenchState extends State<AssemblyBench> {
     if (oldWidget.phase.id != widget.phase.id) {
       _selectedPart = null;
       _selectedCable = null;
+      _dragging = null;
       _closeUp = false;
       _inspected = null;
       _hint = null;
@@ -101,6 +105,9 @@ class _AssemblyBenchState extends State<AssemblyBench> {
             widget.state.connectedNodePairs.length) {
       _selectedCable = null;
     }
+    // A disabled bench rebuilds its tiles without a drag, so a drag that
+    // was cut short never keeps the close-up open.
+    if (!widget.enabled) _dragging = null;
   }
 
   Map<String, dynamic> get _equipment =>
@@ -132,13 +139,30 @@ class _AssemblyBenchState extends State<AssemblyBench> {
     return turns - (turns - seating ~/ 90) % 4;
   }
 
+  /// Memory modules, the cooler and its fan cable go on the motherboard,
+  /// whose slots and headers are told apart only in the close-up.
+  bool _onBoard(String? partId, String? cableId) =>
+      partId != null &&
+          (_itemSpec(partId)['category'] == 'ddr4_dimm' ||
+              partId == 'cooler') ||
+      cableId == 'cooler_fan';
+
   BenchView _view(AssemblyBenchModel model) {
-    final selectedOnBoard = _selectedPart != null &&
-            (_itemSpec(_selectedPart!)['category'] == 'ddr4_dimm' ||
-                _selectedPart == 'cooler') ||
-        _selectedCable == 'cooler_fan';
+    final dragging = _dragging;
+    // A part in hand, selected or being dragged from the tray, brings the
+    // close-up, so a module dragged in the case view lands in the slot the
+    // learner aims at instead of a neighbour drawn a few pixels away.
+    final inHand = _onBoard(_selectedPart, _selectedCable) ||
+        dragging != null &&
+            _onBoard(dragging.kind == 'part' ? dragging.id : null,
+                dragging.kind == 'cable' ? dragging.id : null);
     return AssemblyBenchLayout.viewFor(widget.phase.id,
-        closeUp: _closeUp || selectedOnBoard);
+        closeUp: _closeUp || inHand);
+  }
+
+  void _dragChanged(BenchDrag? drag) {
+    if (!mounted) return;
+    setState(() => _dragging = drag);
   }
 
   void _reportMode() {
@@ -160,6 +184,8 @@ class _AssemblyBenchState extends State<AssemblyBench> {
     setState(() {
       _applying = true;
       _hint = hint;
+      // The drop (or a tap) ends any drag in hand.
+      _dragging = null;
       // A new action may repeat an earlier message; show it again.
       _dismissed = null;
     });
@@ -237,7 +263,9 @@ class _AssemblyBenchState extends State<AssemblyBench> {
           ? null
           : part.placed
               ? MissionContentData.benchInstalledSelected(part.label)
-              : MissionContentData.benchPartSelected(part.label);
+              : _assessment
+                  ? MissionContentData.benchSelectedNeutral(part.label)
+                  : MissionContentData.benchPartSelected(part.label);
     });
   }
 
@@ -248,7 +276,9 @@ class _AssemblyBenchState extends State<AssemblyBench> {
       _selectedCable = _selectedCable == cable.id ? null : cable.id;
       _hint = _selectedCable == null
           ? null
-          : MissionContentData.benchCableSelected(cable.label);
+          : _assessment
+              ? MissionContentData.benchSelectedNeutral(cable.label)
+              : MissionContentData.benchCableSelected(cable.label);
     });
   }
 
@@ -433,6 +463,7 @@ class _AssemblyBenchState extends State<AssemblyBench> {
                                 turns: _turnsFor(keyed),
                                 reducedMotion: reducedMotion,
                                 compact: !roomy,
+                                assessment: _assessment,
                               ),
                             ),
                           ),
@@ -468,6 +499,7 @@ class _AssemblyBenchState extends State<AssemblyBench> {
                 setState(() => _closeUp = view != BenchView.board),
             onSelectPart: _selectPart,
             onSelectCable: _selectCable,
+            onDragChanged: _dragChanged,
             onRotate: _rotate,
             onRemove: (part) => unawaited(_remove(part.id)),
             onCancel: _clearSelection,
@@ -1163,6 +1195,7 @@ class _BenchTray extends StatelessWidget {
     required this.onToggleView,
     required this.onSelectPart,
     required this.onSelectCable,
+    required this.onDragChanged,
     required this.onRotate,
     required this.onRemove,
     required this.onCancel,
@@ -1181,6 +1214,7 @@ class _BenchTray extends StatelessWidget {
   final Set<String> compatible;
   final Set<String> focus;
   final int Function(BenchPart part) turnsFor;
+  final ValueChanged<BenchDrag?> onDragChanged;
 
   /// Non-null where the learner can switch between the case and the
   /// motherboard close-up (the power-on test bench).
@@ -1226,6 +1260,7 @@ class _BenchTray extends StatelessWidget {
         reducedMotion: reducedMotion,
         onTap: () => onSelectPart(part),
         onDoubleTap: part.rotatable && !part.placed ? () => onRotate(part) : null,
+        onDragChanged: onDragChanged,
       ));
       if (part.placed) {
         children.add(_TrayButton(
@@ -1237,23 +1272,37 @@ class _BenchTray extends StatelessWidget {
         ));
       } else {
         if (part.rotatable) {
+          final position =
+              benchMarkerDescription(part.id, turnsFor(part), angle: false);
           children.add(_TrayButton(
             key: const ValueKey('bench-rotate'),
             icon: Icons.rotate_right_rounded,
             label: MissionContentData.benchRotateLabel,
-            semantics: MissionContentData.benchRotateSemantics(
-                part.label, '${turnsFor(part) % 4 * 90}'),
+            // Assessment names only where the marker is; an angle would
+            // read the same at the one seating orientation of every part.
+            semantics: assessment && position != null
+                ? MissionContentData.benchRotatePositionSemantics(
+                    part.label, position)
+                : MissionContentData.benchRotateSemantics(
+                    part.label, '${turnsFor(part) % 4 * 90}'),
             onPressed: enabled ? () => onRotate(part) : null,
           ));
         }
         for (final slot in model.slots) {
+          // A slot that already holds a part says so and takes no install,
+          // like the slot on the bench, so it never spends an attempt.
+          final occupant = model.parts
+              .where((candidate) => candidate.placedAt == slot.id)
+              .map((candidate) => candidate.label)
+              .firstOrNull;
           children.add(_TrayButton(
             key: ValueKey('bench-slot-chip-${slot.id}'),
             icon: Icons.download_rounded,
             label: MissionContentData.benchInstallChip(slot.label),
-            semantics: MissionContentData.benchSlotSemantics(slot.label, null),
+            semantics: MissionContentData.benchSlotSemantics(slot.label, occupant),
             emphasised: !assessment && compatible.contains(slot.id),
-            onPressed: enabled ? () => onTapSlot(slot.id) : null,
+            onPressed:
+                enabled && occupant == null ? () => onTapSlot(slot.id) : null,
           ));
         }
       }
@@ -1271,6 +1320,7 @@ class _BenchTray extends StatelessWidget {
         enabled: enabled,
         focused: false,
         onTap: () => onSelectCable(cable),
+        onDragChanged: onDragChanged,
       ));
       for (final header in model.headers) {
         children.add(_TrayButton(
@@ -1312,6 +1362,7 @@ class _BenchTray extends StatelessWidget {
           focused: focus.contains(part.id),
           reducedMotion: reducedMotion,
           onTap: () => onSelectPart(part),
+          onDragChanged: onDragChanged,
         ));
       }
       for (final cable in model.cables) {
@@ -1321,6 +1372,7 @@ class _BenchTray extends StatelessWidget {
           enabled: enabled,
           focused: focus.contains(cable.id),
           onTap: () => onSelectCable(cable),
+          onDragChanged: onDragChanged,
         ));
       }
       for (final operation in model.operations) {
@@ -1393,6 +1445,9 @@ class _TrayButton extends StatelessWidget {
         enabled: onPressed != null,
         label: semantics,
         excludeSemantics: true,
+        // The child button's own semantics are excluded for the clearer
+        // label, so the wrapper carries the tap a screen reader sends.
+        onTap: onPressed,
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 220),
           child: OutlinedButton.icon(
@@ -1423,6 +1478,7 @@ class _PartChip extends StatelessWidget {
     required this.focused,
     required this.reducedMotion,
     required this.onTap,
+    required this.onDragChanged,
     this.onDoubleTap,
   });
 
@@ -1433,6 +1489,7 @@ class _PartChip extends StatelessWidget {
   final bool focused;
   final bool reducedMotion;
   final VoidCallback onTap;
+  final ValueChanged<BenchDrag?> onDragChanged;
   final VoidCallback? onDoubleTap;
 
   @override
@@ -1476,10 +1533,17 @@ class _PartChip extends StatelessWidget {
         ),
       ]),
     );
+    final drag = BenchDrag('part', part.id);
     final draggable = !part.placed && enabled
         ? Draggable<BenchDrag>(
-            data: BenchDrag('part', part.id),
+            data: drag,
             maxSimultaneousDrags: 1,
+            // The bench is above the tray: only a move up picks the part up,
+            // so a sideways swipe on a tile scrolls the tray (a phone shows
+            // only two or three tiles at a time).
+            affinity: Axis.vertical,
+            onDragStarted: () => onDragChanged(drag),
+            onDragEnd: (_) => onDragChanged(null),
             feedback: Material(
               type: MaterialType.transparency,
               child: SizedBox(
@@ -1498,12 +1562,18 @@ class _PartChip extends StatelessWidget {
             child: chip,
           )
         : chip;
+    final position = benchMarkerDescription(part.id, turns, angle: false);
+    final label = MissionContentData.benchPartSemantics(part.label, part.placed);
     return Semantics(
       button: true,
       selected: selected,
       enabled: enabled,
-      label: MissionContentData.benchPartSemantics(part.label, part.placed),
+      // The tile names where its marker is now (never an angle or a fit).
+      label: position == null || part.placed
+          ? label
+          : MissionContentData.benchPartMarkerSemantics(label, position),
       excludeSemantics: true,
+      onTap: enabled ? onTap : null,
       child: GestureDetector(
         key: ValueKey('bench-part-${part.id}'),
         onTap: enabled ? onTap : null,
@@ -1583,8 +1653,10 @@ class _PartImage extends StatelessWidget {
 }
 
 /// Where a keyed part's marker is at [turns] quarter turns from 0°, e.g.
-/// "Triangle: top-left · 90°". It describes the part, never the fit.
-String? benchMarkerDescription(String partId, int turns) {
+/// "Triangle: top-left · 90°". It describes the part, never the fit. Without
+/// [angle] (assessment) only the position is given: every keyed part seats
+/// at 0°, so the angle alone would tell the learner when to stop turning.
+String? benchMarkerDescription(String partId, int turns, {bool angle = true}) {
   final marker = AssemblyBenchLayout.markers[partId];
   if (marker == null) return null;
   final index = turns % 4;
@@ -1602,8 +1674,10 @@ String? benchMarkerDescription(String partId, int turns) {
         MissionContentData.benchMarkerFacings
       ),
   };
-  return MissionContentData.benchMarkerDescription(
-      name, positions[index], index * 90);
+  return angle
+      ? MissionContentData.benchMarkerDescription(
+          name, positions[index], index * 90)
+      : MissionContentData.benchMarkerPosition(name, positions[index]);
 }
 
 /// Larger view of the keyed part in hand: its photograph and marker at the
@@ -1615,16 +1689,19 @@ class _PartPreview extends StatelessWidget {
     required this.turns,
     required this.reducedMotion,
     required this.compact,
+    required this.assessment,
   });
 
   final BenchPart part;
   final int turns;
   final bool reducedMotion;
   final bool compact;
+  final bool assessment;
 
   @override
   Widget build(BuildContext context) {
-    final description = benchMarkerDescription(part.id, turns) ?? '';
+    final description =
+        benchMarkerDescription(part.id, turns, angle: !assessment) ?? '';
     final image = _PartImage(
       id: part.id,
       asset: part.asset,
@@ -1713,6 +1790,7 @@ class _CableChip extends StatelessWidget {
     required this.enabled,
     required this.focused,
     required this.onTap,
+    required this.onDragChanged,
   });
 
   final BenchCable cable;
@@ -1720,6 +1798,7 @@ class _CableChip extends StatelessWidget {
   final bool enabled;
   final bool focused;
   final VoidCallback onTap;
+  final ValueChanged<BenchDrag?> onDragChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -1758,19 +1837,25 @@ class _CableChip extends StatelessWidget {
       ]),
     );
     final header = cable.linkedTo;
+    final drag = BenchDrag('cable', cable.id);
     return Semantics(
       button: true,
       selected: selected,
       enabled: enabled,
       label: MissionContentData.benchCableSemantics(cable.label, header),
       excludeSemantics: true,
+      onTap: enabled ? onTap : null,
       child: GestureDetector(
         key: ValueKey('bench-cable-${cable.id}'),
         onTap: enabled ? onTap : null,
         child: enabled
             ? Draggable<BenchDrag>(
-                data: BenchDrag('cable', cable.id),
+                data: drag,
                 maxSimultaneousDrags: 1,
+                // Like a part tile: up drags, sideways scrolls the tray.
+                affinity: Axis.vertical,
+                onDragStarted: () => onDragChanged(drag),
+                onDragEnd: (_) => onDragChanged(null),
                 feedback: Material(
                   type: MaterialType.transparency,
                   child: SizedBox(

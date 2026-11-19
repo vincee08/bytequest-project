@@ -791,6 +791,19 @@ class MissionContentData {
   static String benchMarkerDescription(
           String marker, String position, int degrees) =>
       '$marker: $position · $degrees°';
+
+  /// Where the marker is, without an angle. Assessment uses only this: the
+  /// seating angle is the same for every keyed part, so an angle would be an
+  /// answer key; matching the marker to the mark on the bench is the task.
+  static String benchMarkerPosition(String marker, String position) =>
+      '$marker: $position';
+  static String benchRotatePositionSemantics(String part, String position) =>
+      'Rotate $part by 90 degrees. $position.';
+  static String benchPartMarkerSemantics(String semantics, String position) =>
+      '$semantics $position.';
+
+  /// Assessment note when a part or cable is picked up: no next-step hint.
+  static String benchSelectedNeutral(String label) => '$label selected.';
   static String benchPreviewSemantics(String part, String description) =>
       '$part in hand. $description.';
 
