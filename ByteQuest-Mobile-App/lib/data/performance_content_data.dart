@@ -104,8 +104,10 @@ class PerformanceContentData {
   static const compactEmpty =
       'Averages and criteria appear after your first submitted quiz or released homework or assessment result.';
   static String ofTotal(int value, int total) => '$value of $total';
+  // Only scored quizzes count: one awaiting instructor evaluation has no
+  // score yet, so "submitted" would undercount what the learner sent.
   static String quizCount(int count) =>
-      count == 1 ? '1 submitted quiz' : '$count submitted quizzes';
+      count == 1 ? '1 scored quiz' : '$count scored quizzes';
   static String releasedGrades(int count) =>
       count == 1 ? '1 released grade' : '$count released grades';
   static String summarySemantics(String label, String value, String detail) =>

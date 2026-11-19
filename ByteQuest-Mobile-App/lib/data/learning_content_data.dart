@@ -161,6 +161,10 @@ abstract final class LearningContentData {
   static const quizScoresEmpty = 'No class quiz has been completed yet.';
   static const quizScoresFailed = 'Quiz scores could not be loaded.';
   static String quizScore(int correct, int total) => '$correct/$total correct';
+
+  /// A points-based result, as the quiz result screen shows it (12 / 13).
+  static String quizPoints(String score, String max) => '$score / $max points';
+  static const quizAwaitingEvaluation = 'Awaiting instructor evaluation';
   static String quizStatusCounts(int completed, int open) =>
       '$completed completed · $open open';
   static const quizScorePending = 'Score not available';
