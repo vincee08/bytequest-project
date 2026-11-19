@@ -162,12 +162,15 @@ final class MissionRuntimeController {
     });
   }
 
-  /// Actions after the latest `practice_progress_discarded` marker. The
-  /// practice transport already drops earlier actions; an attempt transport
-  /// (class practice) returns its whole timeline, so the marker is honoured
-  /// here for every transport.
-  static List<AcknowledgedMissionEvidenceAction> _afterLatestDiscard(
+  /// In practice mode, the actions after the latest
+  /// `practice_progress_discarded` marker. The practice transport already
+  /// drops earlier actions; a class-practice attempt transport returns its
+  /// whole timeline, so the marker is honoured here as well. Assessment never
+  /// honours a marker: the server evaluates every recorded action, and the
+  /// app restores them all.
+  List<AcknowledgedMissionEvidenceAction> _afterLatestDiscard(
       List<AcknowledgedMissionEvidenceAction> records) {
+    if (_initialState.mode != MissionRuntimeMode.practice) return records;
     final marker = records.lastIndexWhere(
         (record) => record.action.actionType == progressDiscardedActionType);
     return marker < 0 ? records : records.sublist(marker + 1);

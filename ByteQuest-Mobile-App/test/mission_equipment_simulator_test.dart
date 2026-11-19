@@ -363,6 +363,34 @@ void main() {
         true);
   });
 
+  test(
+      'a missed thermal compound found at POST costs one fault; taking the '
+      'cooler off to fix it is the repair', () {
+    final definition = MissionSimulationDefinitions.byId('coc1_m2');
+    final driver = EquipmentPracticeDriver(definition)
+      ..complete(definition.phases[0]);
+    final board = definition.phases[1];
+    for (final step in practiceScripts[board.id]!) {
+      if (step.$2 == 'apply_thermal_compound') continue;
+      driver.act(board, step.$1, step.$2, step.$3);
+    }
+    driver
+      ..complete(definition.phases[2])
+      ..complete(definition.phases[3]);
+    final post = definition.phases[4];
+    driver.act(post, 'test_started', 'coc1_m2_post', {'test_status': 'running'});
+    driver.act(post, 'test_completed', 'coc1_m2_post',
+        {'test_status': 'completed'});
+    driver.act(post, 'placement_removed', 'cooler', {'item_id': 'cooler'});
+    driver.act(post, 'equipment_operation', 'apply_thermal_compound');
+    driver.act(post, 'placement_attempted', 'cooler_mount',
+        {'item_id': 'cooler', 'destination_id': 'cooler_mount'});
+    final counts = driver.state.equipmentState['counts'] as Map;
+    expect(counts['faults'], 1);
+    expect(counts['repairs'], 1);
+    expect(counts['corrections'], isNull);
+  });
+
   test('missing cables and wrong DIMMs pass their phase but fail the POST',
       () {
     final definition = MissionSimulationDefinitions.byId('coc1_m2');

@@ -416,6 +416,8 @@ void main() {
       final readings = MissionEquipmentSimulator.maps(
           MissionEquipmentSimulator.map(value['measured_result'])['readings']);
       expect(readings, hasLength(12));
+      expect(value['simulation_feedback'], MissionContentData.assessmentTestRecorded,
+          reason: 'the test line in assessment is neutral');
       for (final reading in readings) {
         expect(reading['operating'], isFalse, reason: '${reading['id']}');
         _expectNoCoc1M2Target(
@@ -643,6 +645,13 @@ void main() {
         .map((text) => text.data ?? '')
         .join('|');
 
+    // Every text on screen, order-independent (the list labels move).
+    List<String> screenTexts() => tester
+        .widgetList<Text>(find.byType(Text))
+        .map((text) => text.data ?? text.textSpan?.toPlainText() ?? '')
+        .toList()
+      ..sort();
+
     const right = ['boot_media', 'select_disk', 'copy_files', 'configure_device'];
     const wrong = ['select_disk', 'boot_media', 'copy_files', 'configure_device'];
 
@@ -650,10 +659,13 @@ void main() {
     expect(confirmEnabled(), isTrue);
     await arrange(wrong);
     final wrongState = (continueEnabled(), confirmEnabled(), status());
+    final wrongTexts = screenTexts();
     await arrange(right);
     final rightState = (continueEnabled(), confirmEnabled(), status());
     expect(rightState, wrongState,
         reason: 'an unconfirmed right order looks like a wrong one');
+    expect(screenTexts(), wrongTexts,
+        reason: 'no workspace or technical message tells right from wrong');
     expect(rightState.$1, isFalse,
         reason: 'Continue needs a confirmed order');
     expect(find.text(MissionContentData.sequenceConstraintFeedback),
@@ -661,14 +673,18 @@ void main() {
 
     await confirm();
     final confirmedRight = (continueEnabled(), status());
+    expect(confirmEnabled(), isFalse,
+        reason: 'the confirmed order cannot be confirmed again unchanged');
     await arrange(wrong);
     expect(continueEnabled(), isFalse,
         reason: 'moving the list again withdraws the confirmed answer');
+    expect(confirmEnabled(), isTrue);
     await confirm();
     final confirmedWrong = (continueEnabled(), status());
     expect(confirmedWrong, confirmedRight,
         reason: 'a confirmed wrong order looks like a confirmed right one');
     expect(confirmedWrong.$1, isTrue);
+    expect(confirmEnabled(), isFalse);
 
     final confirmed = harness.transport.actions
         .where((action) => action.value['confirmed'] == true)

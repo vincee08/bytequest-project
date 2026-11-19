@@ -177,16 +177,21 @@ List<Map<String, dynamic>> _caseOperations() => [
 /// One POST check. [counts] names the assessment step a failing check charges
 /// (a key in that step's counted targets). Every completed POST charges each
 /// step with a failing check once, so a mistake fixed after a failed POST
-/// still counts; reseating the parts it examines is the repair, not another
-/// correction.
+/// still counts; reseating the parts it examines, and the parts its fix must
+/// take out ([repairs]), is the repair, not another correction.
 Map<String, dynamic> _postCheck(
         String id,
         String label,
         List<Map<String, dynamic>> requires,
         String counts,
         String nominal,
-        String fault) =>
-    {..._reading(id, label, requires, nominal, fault), 'counts': counts};
+        String fault,
+        {List<String> repairs = const []}) =>
+    {
+      ..._reading(id, label, requires, nominal, fault),
+      'counts': counts,
+      if (repairs.isNotEmpty) 'repairs': repairs,
+    };
 
 List<Map<String, dynamic>> _postChecks() => [
       _postCheck(
@@ -244,7 +249,10 @@ List<Map<String, dynamic>> _postChecks() => [
           [_eq('setting.thermal_compound', true)],
           'step:cooling',
           'CPU temperature stable at 38 °C.',
-          'CPU over-temperature warning — 96 °C within 20 seconds of power-on.'),
+          'CPU over-temperature warning — 96 °C within 20 seconds of power-on.',
+          // Thermal compound goes on under the cooler, so the fix takes the
+          // cooler off and puts it back.
+          repairs: ['item:cooler']),
       _postCheck(
           'memory_detection',
           'Memory detection',

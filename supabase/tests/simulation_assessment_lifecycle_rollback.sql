@@ -18,7 +18,7 @@
 --     {moduleCode:'LO1.1',moduleTitle:'Assemble computer hardware',pcCodes:['1.4']})))"
 -- (single quotes doubled for SQL).
 begin;
-select plan(25);
+select plan(29);
 
 create temp table sim_ctx (
   admin uuid not null default gen_random_uuid(),
@@ -185,9 +185,14 @@ insert into sim_step values
 ('fix_ram2_out', 'coc1_m2_p5', 'placement_removed', 'ram_2', '{"item_id":"ram_2"}'),
 ('fix_ram1_a2', 'coc1_m2_p5', 'placement_attempted', 'dimm_a2', '{"item_id":"ram_1","destination_id":"dimm_a2","orientation":"0"}'),
 ('fix_ram2_b2', 'coc1_m2_p5', 'placement_attempted', 'dimm_b2', '{"item_id":"ram_2","destination_id":"dimm_b2","orientation":"0"}'),
-('fix_lock_latches', 'coc1_m2_p5', 'equipment_operation', 'close_dimm_latches', '{}');
+('fix_lock_latches', 'coc1_m2_p5', 'equipment_operation', 'close_dimm_latches', '{}'),
+('discard', 'coc1_m2_p1', 'practice_progress_discarded', null, '{"reason":"definition_updated"}'),
+('fix_cooler_out', 'coc1_m2_p5', 'placement_removed', 'cooler', '{"item_id":"cooler"}'),
+('fix_compound', 'coc1_m2_p5', 'equipment_operation', 'apply_thermal_compound', '{}'),
+('fix_cooler', 'coc1_m2_p5', 'placement_attempted', 'cooler_mount', '{"item_id":"cooler","destination_id":"cooler_mount"}');
 
-create temp table sim_run(name text primary key, steps text[], attempt uuid) on commit drop;
+create temp table sim_run(name text primary key, steps text[], attempt uuid,
+  practice boolean not null default false) on commit drop;
 grant select, update on sim_run, sim_step to authenticated;
 insert into sim_run(name, steps) values
 ('perfect', array['inspect_case','inspect_board','inspect_cpu','inspect_cooler','inspect_ram','inspect_psu',
@@ -242,7 +247,33 @@ insert into sim_run(name, steps) values
   'cooler','fan_cpu','open_latches','ram1_a1','ram2_b1','psu','screwdriver','fasten_psu',
   'shield','board','fasten_board','drive','fasten_drive','atx24','eps8','sata_power','sata_data','front_panel',
   'post_start','post_done','fix_ram1_out','fix_ram2_out','fix_ram1_a2','fix_ram2_b2','fix_lock_latches',
-  'post_start','post_done','interpret']);
+  'post_start','post_done','interpret']),
+-- Fix round 3 (N3): thermal compound missed, found by one failed POST; the
+-- fix takes the cooler off, which is the repair the run already charged.
+('compound_after_post', array['inspect_case','inspect_board','inspect_cpu','inspect_cooler','inspect_ram',
+  'inspect_psu','inspect_storage','wear_strap','ground_strap','open_lever','cpu','close_lever',
+  'cooler','fan_cpu','open_latches','ram1_a2','ram2_b2','lock_latches','psu','screwdriver','fasten_psu',
+  'shield','board','fasten_board','drive','fasten_drive','atx24','eps8','sata_power','sata_data','front_panel',
+  'post_start','post_done','fix_cooler_out','fix_compound','fix_cooler','post_start','post_done','interpret']),
+-- Fix round 3 (N1): two refused CPU placements, then a hand-made discard
+-- marker and a perfect run. An assessment evaluates every recorded action.
+('marker_after_cpu_errors', array['cpu','cpu','discard','inspect_case','inspect_board','inspect_cpu',
+  'inspect_cooler','inspect_ram','inspect_psu','inspect_storage','wear_strap','ground_strap','open_lever','cpu',
+  'close_lever','compound','cooler','fan_cpu','open_latches','ram1_a2','ram2_b2','lock_latches','psu',
+  'screwdriver','fasten_psu','shield','board','fasten_board','drive','fasten_drive','atx24','eps8',
+  'sata_power','sata_data','front_panel','post_start','post_done','interpret']);
+-- The same actions in a class practice attempt, where the app writes the
+-- marker when a practice run restarts on a new contract version.
+insert into sim_run(name, steps, practice)
+select 'practice_marker_after_cpu_errors', steps, true from sim_run where name = 'marker_after_cpu_errors';
+
+-- A class practice assignment of the same package.
+alter table sim_ctx add column practice_assignment uuid;
+with s as (
+  insert into public.assignments(class_id, activity_version_id, rubric_version_id, assignment_type, title, assigned_by)
+  select class, activity, rubric, 'practice', 'COC1 M2 class practice', instructor from sim_ctx
+  returning id)
+update sim_ctx set practice_assignment = s.id from s;
 
 -- The learner takes the assessment once per run through the normal RPCs.
 select set_config('request.jwt.claim.sub', (select learner::text from sim_ctx), true);
@@ -251,8 +282,10 @@ set local role authenticated;
 do $$
 declare v_run record; v_attempt uuid;
 begin
-  for v_run in select name, steps from sim_run order by name loop
-    select id into v_attempt from public.start_attempt((select assignment from sim_ctx), gen_random_uuid());
+  for v_run in select name, steps, practice from sim_run order by name loop
+    select id into v_attempt from public.start_attempt(
+      case when v_run.practice then (select practice_assignment from sim_ctx) else (select assignment from sim_ctx) end,
+      gen_random_uuid());
     for i in 1..array_length(v_run.steps, 1) loop
       perform public.append_attempt_action(v_attempt, i, s.kind, s.target,
         s.value || jsonb_build_object('phase_id', s.phase, 'mission_id', 'coc1_m2',
@@ -262,6 +295,10 @@ begin
       from sim_step s where s.name = v_run.steps[i];
     end loop;
     perform public.submit_attempt(v_attempt, gen_random_uuid(), 600);
+    -- Class practice is not evaluated on submit; the learner may request it.
+    if v_run.practice then
+      perform public.evaluate_submitted_attempt(v_attempt);
+    end if;
     update sim_run set attempt = v_attempt where name = v_run.name;
   end loop;
 end $$;
@@ -290,8 +327,8 @@ returns text language sql stable as $$
 $$;
 
 select is((select count(*)::integer from public.attempts
-    where id in (select attempt from sim_run) and status = 'evaluated'),
-  9, 'submitting each attempt runs the server evaluation');
+    where id in (select attempt from sim_run where not practice) and status = 'evaluated'),
+  11, 'submitting each assessment attempt runs the server evaluation');
 select is((select count(*)::integer from public.criterion_results
     where attempt_id = (select attempt from sim_run where name = 'perfect')),
   11, 'every step criterion is evaluated');
@@ -342,6 +379,20 @@ select is(pg_temp.not_satisfied('memory_two_faults_one_post'), '{}'::text[],
   'open latches and a wrong pair found by one failed POST keep the memory step satisfied');
 select is(pg_temp.c5_incorrect('memory_two_faults_one_post'), 1,
   'two failing memory checks in one POST charge the step once');
+create function pg_temp.c4_incorrect(p_run text)
+returns integer language sql stable as $$
+  select (cr.observed_evidence->>'incorrect_total')::integer
+  from public.criterion_results cr join public.rubric_criteria rc on rc.id = cr.rubric_criterion_id
+  where cr.attempt_id = (select attempt from sim_run where name = p_run) and rc.criterion_code = 'COC1_M2_C4'
+$$;
+select is(pg_temp.not_satisfied('compound_after_post'), '{}'::text[],
+  'thermal compound missed and fixed after one failed POST keeps every criterion satisfied');
+select is(pg_temp.c4_incorrect('compound_after_post'), 1,
+  'taking the cooler off to apply the compound is the repair the failed POST charged');
+select is(pg_temp.not_satisfied('marker_after_cpu_errors'), array['COC1_M2_C3'],
+  'a discard marker in an assessment does not erase earlier CPU errors: C3 stays not satisfied');
+select is(pg_temp.not_satisfied('practice_marker_after_cpu_errors'), '{}'::text[],
+  'a discard marker in a class practice attempt still restarts its evaluation');
 select is((select cr.expected_rule->'evidence_rule'->>'operator'
     from public.criterion_results cr join public.rubric_criteria rc on rc.id = cr.rubric_criterion_id
     where cr.attempt_id = (select attempt from sim_run where name = 'perfect') and rc.criterion_code = 'COC1_M2_C1'),
