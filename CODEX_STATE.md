@@ -2,6 +2,50 @@
 
 > Read this file with `AGENTS.md`, `README.md`, and `bytequest.md` before changing the repository.
 
+## Current continuation - 2026-11-20 PRODUCTION DATABASE MIGRATED (re-defense release)
+
+The owner approved and the migration ran on hosted ByteQuest `rslmteqipxqfifwftugk`. The project ID was verified in the dashboard and the CLI, and re-checked before each batch.
+
+**Backup** (fresh, encrypted, read-only):
+- Created with `scripts/create-production-backup.mjs`: an official temporary read-only login role, one exported snapshot, TLS verify-full, and AES-256-GCM archives with a DPAPI CurrentUser key.
+- Location, owner-only: `%LOCALAPPDATA%\ByteQuest\Recovery\rslmteqipxqfifwftugk-20261120-redefense`.
+- Database archive: `database-full-readonly.dump.bqenc`, 2,311,925 bytes, SHA-256 `689c3c341e20b9aa3944b602888a06fa77d293dcbca55eb2f886f527aeb7d177`. It covers 122 relations and 6,467 rows.
+- Verified: SHA-256 and full GCM authentication, then four isolated restores, each with all 122 relation counts and hashes exact.
+- Supabase platform backups: none (0, PITR off), so this backup is the only restore point.
+
+**Rehearsal:**
+- Restore attempt 3 on the restored copy: Batch A and Batch B applied, only documented row changes, read-back OK, **42/42 suites**.
+- Attempts 1 and 2 surfaced two problems, both fixed before the production apply:
+  - a missing QA-fixture opt-in in the tooling;
+  - over-broad privileges on 12 release tables, 3 sequences and 5 functions. Production's default privileges are stock Supabase. The fix is migration `20261120100400_align_release_object_privileges`.
+- Fix merged as PR #3.
+
+**Before the apply:** all 122 production relations were identical to the backup snapshot. The legacy `five_missions` and `ten_missions` achievement rows were exported to `legacy-achievements-five_ten_missions.json` in the backup folder.
+
+**Applied** via `supabase db query --linked`:
+- Batch A, `20261119130000`: 17:35:36 to 17:35:40 UTC.
+- Batch B, 43 migrations `20261119100000`…`20261120100400` in one transaction: 17:35:56 to 17:36:02 UTC.
+- Production now records 101 migration versions (57 + 44).
+
+**Verified after the apply:**
+- The read-back passed: 44/44 versions, RLS on every table, 20 contracts (COC1 M2 `css-assembly-20261119-v3`), 16 modules, 76 criteria, 20 mission links, `min_supported_app_version` 1.2.0, and the essay enum.
+- Integrity against the backup, across the 122 pre-existing relations:
+  - 108 are identical;
+  - 7 gained columns, and their pre-existing values are identical;
+  - 7 have only the documented changes: achievements +10 rows with 2 updated, audit_events +1, 1 homework submission released, 20 mission titles, COC1 M2 contract v3, user_achievements +16 (backfill), schema_migrations +44.
+- No deletions.
+- Security: clients cannot write the release tables, `evaluator_config` is hidden, the provisional evaluation is revoked, and the client-version guard is present. All 5 production-only SECURITY DEFINER functions predate the release.
+- Module unlocks were backfilled for all 20 learners.
+
+**NOT done (each still needs separate approval):**
+- **The Vercel deploy.** The live dashboard runs old code against the new schema. Until the new dashboard is promoted, instructors must not create quizzes, finalize or grade homework.
+- **The 1.2.0 APK.** It needs the signing decision: the 1.1.0 key `a4d01056…` is not on this PC. Learners on 1.1.0 get save errors on missions beyond their unlocked module and cannot verify COC1 M2.
+- **Simulation packages and the demo class** (rollout steps 8–9).
+
+**Other open items:**
+- Production default privileges are still stock, so future migrations must revoke client grants explicitly.
+- The Supabase organization is over its Free-plan quota, and projects are restricted from 14 Dec 2026.
+
 ## Current continuation - 2026-11-20 published to GitHub
 
 **What is on GitHub (`vincee08/bytequest-project`):**
