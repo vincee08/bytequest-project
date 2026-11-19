@@ -13,7 +13,8 @@ import {
   type ItemType,
   type QuizItem,
 } from "@/lib/quizzes/authoring";
-import { buildAlternativeQuizDraftRequest } from "@/lib/ai/alternative-quiz-draft";
+import { buildRegenerationRequest } from "@/lib/ai/alternative-quiz-draft";
+import type { QuizDifficulty } from "@/lib/quizzes/types";
 export interface QuizGroundingCatalog {
   source: { title: string; edition: string };
   coc: { id: string; code: string; title: string };
@@ -27,24 +28,31 @@ export interface QuizGroundingCatalog {
     learningOutcome: string;
   }>;
 }
+type SourceMode = "curriculum" | "approved_coc" | "class_resource";
+
 export function AiQuizPanel({
   version,
   grounding,
   topic,
+  focus,
+  mapped,
+  quizDifficulty,
   items,
   classes,
 }: {
   version: { id: string };
   grounding: QuizGroundingCatalog | null;
   topic: string;
+  focus: string | null;
+  mapped: boolean;
+  quizDifficulty: QuizDifficulty | null;
   items: QuizItem[];
   classes: { id: string; title: string; code: string | null }[];
 }) {
   const router = useRouter();
-  const isDraft = true;
-  const [sourceMode, setSourceMode] = useState<
-    "approved_coc" | "class_resource"
-  >("approved_coc");
+  const [sourceMode, setSourceMode] = useState<SourceMode>(
+    mapped ? "curriculum" : "approved_coc",
+  );
   const [classId, setClassId] = useState(classes[0]?.id ?? "");
   const [resourceId, setResourceId] = useState("");
   const [resources, setResources] = useState<
@@ -66,17 +74,21 @@ export function AiQuizPanel({
   const busyRef = useRef(false);
   const requestRef = useRef<{ body: string; id: string } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [aiTopic, setAiTopic] = useState(topic);
+  const [aiTopic, setAiTopic] = useState((focus ?? topic).slice(0, 240));
   const [aiActivityVersionId, setAiActivityVersionId] = useState(
     grounding?.activities[0]?.id ?? "",
   );
   const [aiInstructorContext, setAiInstructorContext] = useState("");
   const [aiError, setAiError] = useState<string | null>(null);
-  const [difficulty, setDifficulty] = useState<
-    "foundation" | "intermediate" | "advanced"
-  >("foundation");
+  const [difficulty, setDifficulty] = useState<QuizDifficulty>(
+    quizDifficulty ?? "foundation",
+  );
   const [itemCount, setItemCount] = useState(5);
   const [aiTypes, setAiTypes] = useState<ItemType[]>(["multiple_choice"]);
+  const [regenerating, setRegenerating] = useState<{
+    item: QuizItem;
+    reason: string;
+  } | null>(null);
   useEffect(() => {
     const controller = new AbortController();
     fetch("/api/instructor/quizzes/ai-draft", {
@@ -129,38 +141,44 @@ export function AiQuizPanel({
     return () => controller.abort();
   }, [classId, sourceMode, resourceRefresh]);
   const selectedResource = resources.find((item) => item.id === resourceId);
-  const disabledReason = !configuration
+  const sourceReason = !configuration
     ? "Checking AI availability…"
     : !configuration.configured
       ? "OpenRouter is not configured locally. Ask the administrator to add the local AI key; manual authoring remains available."
-      : sourceMode === "approved_coc" && (!grounding || !aiActivityVersionId)
-        ? "Select and save a COC with complete approved content, or choose My Class Resource."
-        : sourceMode === "class_resource" && loadingResources
-          ? "Loading class resources…"
-          : sourceMode === "class_resource" && !selectedResource
-            ? "Choose a PDF from your active class."
-            : sourceMode === "class_resource" &&
-                (selectedResource?.mime_type !== "application/pdf" ||
-                  (selectedResource?.size_bytes ?? Infinity) > 10 * 1024 * 1024)
-              ? "Choose a text PDF up to 10 MB. Images and videos cannot be read for AI generation."
-              : !consent
-                ? "Confirm that the selected content may be sent to OpenRouter."
-                : aiTopic.trim().length < 2
-                  ? "Enter a quiz focus with at least 2 characters."
-                  : !Number.isInteger(itemCount) ||
-                      itemCount < 1 ||
-                      itemCount > 10
-                    ? "Choose 1 to 10 questions."
-                    : aiTypes.length === 0
-                      ? "Select at least one question type."
-                      : null;
+      : sourceMode === "curriculum" && !mapped
+        ? "Map this quiz to a COC, its modules and a focus in Settings to generate from the curriculum."
+        : sourceMode === "approved_coc" && (!grounding || !aiActivityVersionId)
+          ? "Select and save a COC with complete approved content, or choose another source."
+          : sourceMode === "class_resource" && loadingResources
+            ? "Loading class resources…"
+            : sourceMode === "class_resource" && !selectedResource
+              ? "Choose a PDF from your active class."
+              : sourceMode === "class_resource" &&
+                  (selectedResource?.mime_type !== "application/pdf" ||
+                    (selectedResource?.size_bytes ?? Infinity) >
+                      10 * 1024 * 1024)
+                ? "Choose a text PDF up to 10 MB. Images and videos cannot be read for AI generation."
+                : !consent
+                  ? "Confirm that the selected content may be sent to OpenRouter."
+                  : aiTopic.trim().length < 2
+                    ? "Enter a quiz focus with at least 2 characters."
+                    : null;
+  const disabledReason =
+    sourceReason ??
+    (!Number.isInteger(itemCount) || itemCount < 1 || itemCount > 10
+      ? "Choose 1 to 10 questions."
+      : aiTypes.length === 0
+        ? "Select at least one question type."
+        : null);
   function sourceRequest() {
     return {
       sourceMode,
       externalConsent: consent,
       ...(sourceMode === "class_resource"
         ? { classId, resourceId }
-        : { activityVersionId: aiActivityVersionId }),
+        : sourceMode === "approved_coc"
+          ? { activityVersionId: aiActivityVersionId }
+          : {}),
     };
   }
   function withRequestId(body: object) {
@@ -176,27 +194,16 @@ export function AiQuizPanel({
         : (grounding?.activities[0]?.id ?? ""),
     );
   }, [grounding]);
-  async function generateAiDraft(event: React.FormEvent) {
-    event.preventDefault();
-    if (busyRef.current || disabledReason || !version || !isDraft) return;
+  async function send(body: object, key: string, success: string, failure: string) {
+    if (busyRef.current) return false;
     busyRef.current = true;
     setAiError(null);
-    setBusy("ai");
+    setBusy(key);
     try {
       const response = await fetch("/api/instructor/quizzes/ai-draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          withRequestId({
-            quizVersionId: version.id,
-            ...sourceRequest(),
-            topic: aiTopic,
-            instructorContext: aiInstructorContext.trim() || undefined,
-            difficulty,
-            itemCount,
-            itemTypes: aiTypes,
-          }),
-        ),
+        body: JSON.stringify(withRequestId(body)),
       });
       const result = (await response.json().catch(() => null)) as {
         error?: string;
@@ -204,90 +211,71 @@ export function AiQuizPanel({
       } | null;
       if (!response.ok) {
         if (response.status !== 409) requestRef.current = null;
-        const message =
-          result?.error ||
-          "AI draft generation failed without publishing any item.";
+        const message = result?.error || failure;
         setAiError(message);
         toast.error(message);
-      } else {
-        requestRef.current = null;
-        toast.success(
-          `${result?.generatedCount ?? itemCount} AI-generated draft items require your review.`,
-        );
-        router.refresh();
+        return false;
       }
+      requestRef.current = null;
+      toast.success(success.replace("{count}", String(result?.generatedCount ?? itemCount)));
+      router.refresh();
+      return true;
     } catch {
       const message =
         "The AI service could not be reached. Manual quiz creation is still available.";
       setAiError(message);
       toast.error(message);
+      return false;
     } finally {
       busyRef.current = false;
       setBusy(null);
     }
   }
-
-  async function regenerateAiItem(item: QuizItem) {
-    if (
-      busyRef.current ||
-      disabledReason ||
-      !version ||
-      !isDraft ||
-      item.origin !== "ai_generated_draft" ||
-      (sourceMode === "approved_coc" && !aiActivityVersionId)
-    )
+  async function generateAiDraft(event: React.FormEvent) {
+    event.preventDefault();
+    if (disabledReason || !version) return;
+    await send(
+      {
+        quizVersionId: version.id,
+        ...sourceRequest(),
+        topic: aiTopic,
+        instructorContext: aiInstructorContext.trim() || undefined,
+        difficulty,
+        itemCount,
+        itemTypes: aiTypes,
+      },
+      "ai",
+      "{count} AI-generated draft items require your review.",
+      "AI draft generation failed without publishing any item.",
+    );
+  }
+  async function regenerate() {
+    if (!regenerating || sourceReason || !version) return;
+    if (regenerating.reason.trim().length < 3) {
+      setAiError("Enter why this question should be replaced (at least 3 characters).");
       return;
-    busyRef.current = true;
-    setAiError(null);
-    setBusy(`regenerate-${item.id}`);
-    try {
-      const response = await fetch("/api/instructor/quizzes/ai-draft", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(
-          withRequestId({
-            ...buildAlternativeQuizDraftRequest({
-              sourceMode,
-              quizVersionId: version.id,
-              activityVersionId: aiActivityVersionId,
-              topic: aiTopic,
-              instructorContext: aiInstructorContext,
-              difficulty,
-              itemType: item.itemType,
-              originalPrompt: item.prompt,
-            }),
-            ...sourceRequest(),
-            activityVersionId:
-              sourceMode === "class_resource" ? undefined : aiActivityVersionId,
-          }),
-        ),
-      });
-      const result = (await response.json().catch(() => null)) as {
-        error?: string;
-      } | null;
-      if (!response.ok) {
-        if (response.status !== 409) requestRef.current = null;
-        const message =
-          result?.error ||
-          "The alternative question could not be generated. The original draft was kept.";
-        setAiError(message);
-        toast.error(message);
-      } else {
-        requestRef.current = null;
-        toast.success(
-          "A separate AI alternative was added as a draft. Review it before removing the original.",
-        );
-        router.refresh();
-      }
-    } catch {
-      const message =
-        "The AI service could not be reached. The original draft was kept.";
-      setAiError(message);
-      toast.error(message);
-    } finally {
-      busyRef.current = false;
-      setBusy(null);
     }
+    const done = await send(
+      {
+        ...buildRegenerationRequest({
+          quizVersionId: version.id,
+          sourceMode,
+          activityVersionId: aiActivityVersionId,
+          topic: aiTopic,
+          difficulty,
+          itemType: regenerating.item.itemType,
+          itemId: regenerating.item.id,
+          originalPrompt: regenerating.item.prompt,
+          reason: regenerating.reason,
+          instructorContext: aiInstructorContext,
+        }),
+        ...sourceRequest(),
+      },
+      `regenerate-${regenerating.item.id}`,
+      "The question was replaced by a new AI draft. The original stays in the history; review the replacement before publishing.",
+      "The question could not be regenerated. The original was kept.",
+    );
+    if (done) setRegenerating(null);
   }
 
   return (
@@ -298,16 +286,19 @@ export function AiQuizPanel({
           <h2 className="font-semibold">Generate with AI</h2>
         </div>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          Choose approved COC content or a PDF from your class. Every result
-          stays an editable draft until an Instructor reviews and approves it.
+          Generate from this quiz&apos;s curriculum (modules, performance
+          criteria, topic and focus), approved COC activity content, or a PDF
+          from your class. Every result stays an editable draft until you
+          review and approve it.
         </p>
 
         <fieldset className="mt-4" disabled={busy !== null}>
           <legend className="mb-2 text-sm font-medium">Source</legend>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-3">
             {(
               [
-                ["approved_coc", "Approved COC Content"],
+                ["curriculum", "Quiz curriculum"],
+                ["approved_coc", "Approved COC activity"],
                 ["class_resource", "My Class Resource"],
               ] as const
             ).map(([value, label]) => (
@@ -332,6 +323,26 @@ export function AiQuizPanel({
             ))}
           </div>
         </fieldset>
+        {sourceMode === "curriculum" ? (
+          mapped ? (
+            <div className="mt-4 rounded-lg border border-border bg-muted/35 p-3 text-xs leading-relaxed">
+              <p className="font-semibold text-foreground">
+                Grounded in the quiz mapping
+              </p>
+              <p className="mt-1 text-muted-foreground">
+                The selected modules, their official performance criteria
+                (questions are aligned to one criterion each), the published
+                topic text and the focus below. No new TESDA requirements are
+                invented.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+              Map this quiz to a COC, modules and a focus in Settings first.
+              Manual authoring remains available.
+            </div>
+          )
+        ) : null}
         {sourceMode === "approved_coc" &&
           (grounding ? (
             <div className="mt-4 rounded-lg border border-border bg-muted/35 p-3 text-xs leading-relaxed">
@@ -344,9 +355,8 @@ export function AiQuizPanel({
             </div>
           ) : (
             <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
-              Select and save a related COC with complete approved source
-              content before generating AI drafts. Manual authoring remains
-              available.
+              Approved COC activity content is not available for this COC.
+              Choose the quiz curriculum or a class resource instead.
             </div>
           ))}
 
@@ -455,7 +465,7 @@ export function AiQuizPanel({
                   </Button>
                 </div>
               </div>
-            ) : (
+            ) : sourceMode === "approved_coc" ? (
               <div className="space-y-2">
                 <Label htmlFor="ai-activity">
                   Approved activity / learning outcome
@@ -489,7 +499,7 @@ export function AiQuizPanel({
                   </p>
                 ) : null}
               </div>
-            )}
+            ) : null}
             <div className="space-y-2">
               <Label htmlFor="ai-topic">Quiz focus</Label>
               <Textarea
@@ -521,7 +531,7 @@ export function AiQuizPanel({
                   id="ai-difficulty"
                   value={difficulty}
                   onChange={(event) =>
-                    setDifficulty(event.target.value as typeof difficulty)
+                    setDifficulty(event.target.value as QuizDifficulty)
                   }
                   className="flex min-h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
@@ -565,6 +575,9 @@ export function AiQuizPanel({
                       className="h-4 w-4 accent-primary"
                     />
                     {label}
+                    {value === "scenario_essay"
+                      ? " (draft rubric included; instructor release)"
+                      : ""}
                   </label>
                 ))}
               </div>
@@ -625,37 +638,76 @@ export function AiQuizPanel({
           </p>
         </form>
       </section>
-      {items.filter((item) => item.origin === "ai_generated_draft").length ? (
+      {items.length ? (
         <section className="space-y-3 border-t border-border pt-5">
-          <h3 className="font-medium">Generate a separate alternative</h3>
+          <h3 className="font-medium">Regenerate this question</h3>
           <p className="text-sm text-muted-foreground">
-            The original question is kept. Alternatives also require your
-            review.
+            Replaces one draft question with a new AI draft in its position.
+            The original is removed with your reason and kept in the history.
+            The replacement also needs your review.
           </p>
-          {items
-            .filter((item) => item.origin === "ai_generated_draft")
-            .map((item) => (
-              <div
-                key={item.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border p-3"
-              >
+          {items.map((item) => (
+            <div
+              key={item.id}
+              className="space-y-3 rounded-lg border border-border p-3"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="min-w-0 flex-1 break-words text-sm">
+                  <span className="font-medium">{itemTypeLabels[item.itemType]}:</span>{" "}
                   {item.prompt}
                 </p>
                 <Button
                   variant="outline"
-                  disabled={
-                    busy !== null ||
-                    Boolean(disabledReason) ||
-                    aiTopic.trim().length < 2
-                  }
-                  onClick={() => regenerateAiItem(item)}
+                  className="min-h-11"
+                  disabled={busy !== null || Boolean(sourceReason)}
+                  onClick={() => {
+                    setAiError(null);
+                    setRegenerating({ item, reason: "" });
+                  }}
                 >
                   <RefreshCw className="mr-2 h-4 w-4" aria-hidden="true" />
-                  Generate alternative
+                  Regenerate this question
                 </Button>
               </div>
-            ))}
+              {regenerating?.item.id === item.id ? (
+                <div className="space-y-2">
+                  <Label htmlFor={`regenerate-reason-${item.id}`}>
+                    Why replace it? (required, recorded in the history)
+                  </Label>
+                  <Input
+                    id={`regenerate-reason-${item.id}`}
+                    className="min-h-11"
+                    maxLength={500}
+                    value={regenerating.reason}
+                    onChange={(event) =>
+                      setRegenerating({ item, reason: event.target.value })
+                    }
+                    placeholder="Ambiguous wording; two options could be correct."
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      className="min-h-11"
+                      disabled={busy !== null}
+                      onClick={regenerate}
+                    >
+                      {busy === `regenerate-${item.id}` ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                      ) : null}
+                      Replace with a new draft
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      className="min-h-11"
+                      disabled={busy !== null}
+                      onClick={() => setRegenerating(null)}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ))}
         </section>
       ) : null}
     </div>

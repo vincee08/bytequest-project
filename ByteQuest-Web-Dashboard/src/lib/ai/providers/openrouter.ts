@@ -32,6 +32,31 @@ export class QuizAiProviderError extends Error {
 
 function responseSchema(request: QuizDraftRequest) {
   const alignment = quizDraftAlignment(request);
+  const essays = request.itemTypes.includes("scenario_essay");
+  const essayRequired = essays
+    ? (["scenario", "rubric", "minWords", "maxWords"] as const)
+    : ([] as const);
+  const essayProperties = essays
+    ? {
+        scenario: { type: "string", maxLength: 4000 },
+        rubric: {
+          type: "array",
+          maxItems: 8,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["criterion", "description", "maxPoints"],
+            properties: {
+              criterion: { type: "string", minLength: 2, maxLength: 200 },
+              description: { type: "string", maxLength: 1000 },
+              maxPoints: { type: "integer", minimum: 1, maximum: 20 },
+            },
+          },
+        },
+        minWords: { type: "integer", minimum: 0, maximum: 5000 },
+        maxWords: { type: "integer", minimum: 0, maximum: 5000 },
+      }
+    : {};
   return {
     type: "object",
     additionalProperties: false,
@@ -53,6 +78,7 @@ function responseSchema(request: QuizDraftRequest) {
             "competency",
             "coc",
             "learningOutcome",
+            ...essayRequired,
           ],
           properties: {
             question: { type: "string", minLength: 5, maxLength: 2000 },
@@ -62,14 +88,18 @@ function responseSchema(request: QuizDraftRequest) {
               maxItems: 6,
               items: { type: "string", minLength: 1, maxLength: 300 },
             },
-            correctAnswer: { type: "string", minLength: 1, maxLength: 500 },
+            correctAnswer: {
+              type: "string",
+              minLength: 1,
+              maxLength: essays ? 2000 : 500,
+            },
             explanation: { type: "string", minLength: 1, maxLength: 1500 },
             competency: { type: "string", const: alignment.competency },
             coc: { type: "string", const: alignment.coc },
-            learningOutcome: {
-              type: "string",
-              const: alignment.learningOutcome,
-            },
+            learningOutcome: alignment.learningOutcomes
+              ? { type: "string", enum: alignment.learningOutcomes }
+              : { type: "string", const: alignment.learningOutcome },
+            ...essayProperties,
           },
         },
       },
@@ -199,6 +229,18 @@ export async function generateQuizDraftWithOpenRouter(
               "For multiple_choice and scenario_based, provide 2 to 6 unique choices and copy the correct choice exactly into correctAnswer.",
               "For true_false and identification, provide an empty choices array; true_false answers must be true or false.",
               "Return exactly the requested number of distinct questions in the required JSON schema.",
+              ...(request.curriculum
+                ? [
+                    "Curriculum context lists the official TESDA CSS NC II performance criteria this quiz assesses. Align every question to exactly one of them and copy its label exactly into learningOutcome.",
+                    "Use the module titles, topic text and instructor focus only to choose realistic workplace situations; never restate them as new requirements.",
+                  ]
+                : []),
+              ...(request.itemTypes.includes("scenario_essay")
+                ? [
+                    "For scenario_essay, write a realistic computer-servicing situation of at least two sentences in scenario, an open question in question that asks the learner to explain actions and reasons, an empty choices array, a short model-answer summary for the instructor in correctAnswer, and 2 to 5 rubric criteria with integer maxPoints from 1 to 10 whose descriptions state full-credit performance. Set minWords and maxWords to a sensible range such as 60 and 250.",
+                    "For every other type, return an empty scenario, an empty rubric, and 0 for minWords and maxWords.",
+                  ]
+                : []),
             ].join(" "),
           },
           {
@@ -218,10 +260,19 @@ export async function generateQuizDraftWithOpenRouter(
                     classification: "supplementary",
                     untrusted_resource_content: request.resource,
                   }
-                : {
-                    source_mode: "approved_coc",
-                    approved_educational_context: request.grounding,
-                  }),
+                : request.curriculum
+                  ? {
+                      source_mode: "curriculum",
+                      curriculum_context: {
+                        ...request.curriculum,
+                        allowed_learning_outcomes:
+                          quizDraftAlignment(request).learningOutcomes,
+                      },
+                    }
+                  : {
+                      source_mode: "approved_coc",
+                      approved_educational_context: request.grounding,
+                    }),
             }),
           },
         ],
