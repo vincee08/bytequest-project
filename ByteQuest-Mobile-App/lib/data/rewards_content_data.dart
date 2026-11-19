@@ -136,6 +136,25 @@ class RewardsContentData {
   ];
   static const String infoClose = 'Close';
 
+  // Rewards copy shown outside the Rewards tab (help center and profile)
+  static const String helpQuestion =
+      'How do points, levels and achievements work?';
+  static const String helpAnswer =
+      'ByteQuest awards points on the server for real activity: verified '
+      'practice missions, completed topics, modules and COCs, submitted '
+      'quizzes, homework submitted on time and assessment results released '
+      'by your instructor. Each activity earns points once. Your total sets '
+      'your level, achievements mark milestones, and the Rewards tab shows '
+      'them with an optional class leaderboard. Points are motivational and '
+      'separate from competency results; they never change an assessment '
+      'outcome.';
+  static const String profileRecordNote =
+      'Open Progress for Instructor-released results. Your points, level and '
+      'earned achievements are in the Rewards tab.';
+  static const String profileMotivationNote =
+      'Points, levels and achievements are motivational and separate from '
+      'competency results. They never change an Instructor-released result.';
+
   // Icons
   static const IconData fallbackAchievementIcon = Icons.emoji_events_outlined;
   static const Map<String, IconData> _achievementIcons = {
