@@ -132,7 +132,12 @@ const overview = overviewSchema.parse({
   classes: [{ id: CLASS_A, title: "CSS A", class_code: "CSS-A", enrolled: 2 }],
   assessments: { applicable: true, attempts: 4, submitted: 4, released: 3, competent: 1, not_yet_competent: 2, competent_rate: 33.3, avg_percent: 66.7, pending_release: 1 },
   quizzes: { applicable: true, submitted: 3, scored: 3, pending: 0, avg_percent: 50, eligible: 3, completed: 3, completion_rate: 100 },
-  homework: { applicable: false, eligible: 0, submitted: 0, graded: 0, missing: 0, late: 0, avg_percent: null, completion_rate: null },
+  homework: { applicable: false, eligible: 0, submitted: 0, released: 0, pending_evaluation: 0, missing: 0, late: 0, avg_percent: null, completion_rate: null },
+  evaluation: {
+    technical: { evaluate: 1, finalize: 1, release: 0, released: 3 },
+    homework: { evaluate: 0, finalize: 0, release: 0, released: 0 },
+    total: { evaluate: 1, finalize: 1, release: 0, released: 3 },
+  },
   missions: { applicable: true, verified: 5, learners_verified: 2, completion_rate: 8.3, runs: 7, successful_runs: 3, failed_runs: 4, avg_duration_seconds: 206.7 },
   learning_progress: { applicable: true, avg_percent: 6.9, items_total: 24, definition: "Completed required items." },
   trend: [{ date: "2026-11-18", assessments: 1, quizzes: 0, homework: 0, practice_runs: 2, verified: 1 }],
@@ -173,7 +178,9 @@ test("overview CSV states population and period on every metric row", () => {
   const table = overviewTable(overview);
   const avg = table.rows.find((row) => row.metric === "Average released score");
   assert.equal(avg?.value, 66.7);
-  assert.equal(table.rows.find((row) => row.metric === "Average graded score")?.value, null, "no data stays empty, not zero");
+  assert.equal(table.rows.find((row) => row.section === "Homework" && row.metric === "Average released score")?.value, null, "no data stays empty, not zero");
+  assert.equal(table.rows.find((row) => row.section === "Evaluation" && row.metric === "Finalize")?.value, 1, "evaluation stages are exported");
+  assert.equal(table.rows.find((row) => row.metric === "Completion to date")?.value, 8.3, "practice completion is labelled to date");
   assert.ok(table.rows.every((row) => String(row.population).includes("(3)") && String(row.period).includes("2026")));
   const csv = tableToCsv(table);
   assert.ok(csv.startsWith("﻿Section,Metric,Value,Unit,Population,Period\r\n"));
@@ -194,7 +201,7 @@ test("class, learner, quiz, mission and criteria CSV shapes", () => {
 
   const learners = learnerPerformanceSchema.parse({
     period,
-    learners: [{ id: LEARNER, name: "Ben", student_id: "S-2", email: "ben@example.invalid", classes: [{ id: CLASS_A, title: "CSS A" }], progress_percent: 0, completed_items: 0, total_items: 24, performance_score: 50, quiz_avg: 50, quizzes_scored: 1, assessment: { released: 0, competent: 0, pending: 1 }, missions_verified: 0, practice_runs: 0, assignments: { submitted: 0, missing: 1, late: 0 }, last_activity_at: null, status: "falling_behind", reasons: [{ code: "inactive", kind: "falling_behind", threshold_days: 14, days_inactive: 20, last_activity_at: null }, { code: "quiz_average_low", kind: "struggling", quiz_avg: 50, threshold: 75 }] }],
+    learners: [{ id: LEARNER, name: "Ben", student_id: "S-2", email: "ben@example.invalid", classes: [{ id: CLASS_A, title: "CSS A" }], progress_percent: 0, completed_items: 0, total_items: 24, performance_score: 50, quiz_avg: 50, quizzes_scored: 1, assessment: { released: 0, competent: 0, pending: 1 }, missions_verified: 0, practice_runs: 0, assignments: { submitted: 0, missing: 1, late: 0, pending_evaluation: 0 }, last_activity_at: null, status: "falling_behind", reasons: [{ code: "inactive", kind: "falling_behind", threshold_days: 14, days_inactive: 20, last_activity_at: null }, { code: "quiz_average_low", kind: "struggling", quiz_avg: 50, threshold: 75 }] }],
     thresholds: { inactivity_days: 14, progress_ratio_of_class_median: 0.5, quiz_average_below: 75, incomplete_runs_on_one_mission: 3 },
     counts: { on_track: 0, struggling: 0, falling_behind: 1 },
     generated_at: NOW.toISOString(),
@@ -225,7 +232,7 @@ test("class, learner, quiz, mission and criteria CSV shapes", () => {
 
   const missions = missionAnalyticsSchema.parse({
     period,
-    missions: [{ mission_code: "coc1_m4", title: "Peripherals", coc_code: "coc1", module: { id: MODULE_11, code: "LO1.2", title: "Install OS" }, learners_in_scope: 3, learners_attempted: 1, learners_verified: 0, completion_rate: 0, runs: 3, successful_runs: 0, failed_runs: 3, avg_runs_per_learner: 3, avg_duration_seconds: null, avg_invalid_actions: 2 }],
+    missions: [{ mission_code: "coc1_m4", title: "Peripherals", coc_code: "coc1", module: { id: MODULE_11, code: "LO1.2", title: "Install OS" }, learners_in_scope: 3, learners_attempted: 1, learners_verified: 0, learners_verified_to_date: 0, completion_rate_to_date: 0, runs: 3, successful_runs: 0, failed_runs: 3, avg_runs_per_learner: 3, avg_duration_seconds: null, avg_invalid_actions: 2 }],
     assessments: [{ mission_code: "coc1_m2", title: "Install components", coc_code: "coc1", attempts: 4, submitted: 4, released: 3, competent: 1, not_yet_competent: 2, pending: 1, avg_percent: 66.7 }],
     generated_at: NOW.toISOString(),
   });
@@ -233,10 +240,16 @@ test("class, learner, quiz, mission and criteria CSV shapes", () => {
   assert.equal(missionRows.length, 2, "practice and assessment missions are merged by mission code");
   assert.equal(missionRows.find((row) => row.mission === "COC1 M4")?.duration, null);
   assert.equal(missionRows.find((row) => row.mission === "COC1 M2")?.a_attempts, 4);
+  const missionColumns = missionsTable(missions).columns.map((column) => column.label);
+  assert.ok(missionColumns.includes("Practice: runs (period)") && missionColumns.includes("Practice: completion rate (%) (to date)"),
+    "every practice column states whether it is in the period or to date");
 
   const criterion = { source: "assessment", criterion_id: TOPIC, code: "CR-A", title: "Criterion A", mission_code: "coc1_m2", mission_title: "Install components", max: 1, avg: 1, percent: 100, evaluated_learners: 2, satisfied: 2, not_satisfied: 0 };
-  const criteria = criteriaAnalyticsSchema.parse({ period, criteria: [criterion], strongest: [criterion], weakest: [], generated_at: NOW.toISOString() });
+  const homeworkCriterion = { source: "homework", criterion_id: `${QUIZ}:HW-1`, code: "HW-1", title: "Report structure", mission_code: null, mission_title: null, activity_title: "Workstation report", max: 30, avg: 25, percent: 83.3, evaluated_learners: 1, satisfied: null, not_satisfied: null };
+  const criteria = criteriaAnalyticsSchema.parse({ period, criteria: [criterion, homeworkCriterion], strongest: [criterion], weakest: [homeworkCriterion], generated_at: NOW.toISOString() });
   assert.equal(criteriaTable(criteria).rows[0].rank, "Strongest");
+  assert.equal(criteriaTable(criteria).rows[1].activity, "Workstation report", "homework criteria name their homework");
+  assert.equal(criteria.criteria[0].activity_title, null, "a missing activity title parses as null");
   assert.equal(analyticsTable({ tab: "criteria", data: criteria }).title, "Criterion analysis");
   assert.equal(analyticsCsvFilename("learners", NOW), "bytequest-analytics-learners-2026-11-19.csv");
 });

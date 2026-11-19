@@ -1,31 +1,45 @@
 -- Slice A7: performance analytics (Objective 6). Rollback-only.
 -- Fixtures are created inside this transaction with known expected values:
---   classes C1, C2 (instructor T1), C3 (instructor T2); instructor T3 owns no class.
---   L1 is enrolled in C1 and C2, L2 in C1, L3 in C2, L4 in C3.
+--   classes C1, C2 (instructor T1), C3 (instructor T2), C4 (T1, archived);
+--   instructor T3 owns no class. L1 is enrolled in C1 and C2, L2 in C1, L3 in
+--   C2, L4 in C3, L5 in C3 (enrolled after C3's homework and quiz deadlines).
+-- Fixtures follow the real rules: practice completions use accepted contract
+-- versions, a COC practice quiz is passed only after every COC module is
+-- complete (slice A2 gate), homework follows submitted -> graded -> finalized
+-- -> released (slice A4).
 -- Every function is called while impersonating the caller (RLS applies), the
 -- JSON result is captured, and assertions run after `reset role`.
 begin;
-select plan(168);
+select plan(220);
+
+-- Isolate the expected progress values from lessons published in the target
+-- database (rolled back with everything else).
+update public.curriculum_topics set archived_at = now() where archived_at is null;
 
 create temporary table ax (
   admin_id uuid default gen_random_uuid(), t1 uuid default gen_random_uuid(),
   t2 uuid default gen_random_uuid(), t3 uuid default gen_random_uuid(),
   l1 uuid default gen_random_uuid(), l2 uuid default gen_random_uuid(),
-  l3 uuid default gen_random_uuid(), l4 uuid default gen_random_uuid(),
+  l3 uuid default gen_random_uuid(), l4 uuid default gen_random_uuid(), l5 uuid default gen_random_uuid(),
   c1 uuid default gen_random_uuid(), c2 uuid default gen_random_uuid(), c3 uuid default gen_random_uuid(),
+  c4 uuid default gen_random_uuid(),
   source_id uuid, module_version_id uuid, activity_version_id uuid, rubric_id uuid,
   crit_a uuid default gen_random_uuid(), crit_b uuid default gen_random_uuid(),
   asg_c1 uuid default gen_random_uuid(), asg_c2 uuid default gen_random_uuid(),
   att_l1_a uuid default gen_random_uuid(), att_l1_b uuid default gen_random_uuid(),
-  att_l2 uuid default gen_random_uuid(), att_l3 uuid default gen_random_uuid(),
+  att_l2 uuid default gen_random_uuid(), att_l3 uuid default gen_random_uuid(), att_l3_b uuid default gen_random_uuid(),
   q1 uuid default gen_random_uuid(), q1v uuid default gen_random_uuid(),
   q1i1 uuid default gen_random_uuid(), q1i2 uuid default gen_random_uuid(),
   q2 uuid default gen_random_uuid(), q2v uuid default gen_random_uuid(), q2i1 uuid default gen_random_uuid(),
+  q3 uuid default gen_random_uuid(), q3v uuid default gen_random_uuid(), q3i1 uuid default gen_random_uuid(),
   qa1_c1 uuid default gen_random_uuid(), qa1_c2 uuid default gen_random_uuid(), qa2_c1 uuid default gen_random_uuid(),
+  qa3_c3 uuid default gen_random_uuid(),
   qt_l1 uuid default gen_random_uuid(), qt_l2 uuid default gen_random_uuid(),
   qt_l3 uuid default gen_random_uuid(), qt_l2_draft uuid default gen_random_uuid(),
-  h1 uuid default gen_random_uuid(), h2 uuid default gen_random_uuid(),
-  coc1_id uuid, act_l1 bigint, act_l3 bigint
+  h1 uuid default gen_random_uuid(), h2 uuid default gen_random_uuid(), h3 uuid default gen_random_uuid(),
+  h4 uuid default gen_random_uuid(), h5 uuid default gen_random_uuid(),
+  gate_lesson uuid default gen_random_uuid(),
+  coc1_id uuid
 );
 insert into ax default values;
 update ax set coc1_id = (select id from public.coc_modules where coc_code = 'coc1');
@@ -33,24 +47,54 @@ create temporary table ar (name text primary key, v jsonb);
 grant select on ax to authenticated;
 grant select, insert on ar to authenticated;
 
+-- Fixture helpers: an evidence action, and a server-verified completion of the
+-- mission's current (accepted) contract version.
+create function pg_temp.a7_action(p_learner uuid, p_mission text) returns bigint language sql as $$
+  insert into public.practice_mission_actions(learner_id, client_action_id, mission_id, phase_id, action_type, value, client_occurred_at)
+  values (p_learner, 'a7-' || gen_random_uuid(), p_mission, p_mission || '_p1', 'object_inspected', '{}'::jsonb, now())
+  returning id
+$$;
+create function pg_temp.a7_complete(p_learner uuid, p_mission text, p_at timestamptz) returns void language sql as $$
+  insert into public.practice_mission_completions(learner_id, mission_id, contract_version, evidence_through_id, verified_at)
+  select p_learner, c.mission_id, c.version, pg_temp.a7_action(p_learner, p_mission), p_at
+  from public.practice_mission_contracts c where c.mission_id = p_mission
+$$;
+
 -- Identities (handle_new_user provisions the profiles).
 insert into auth.users(id,instance_id,aud,role,email,encrypted_password,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 select u.id,'00000000-0000-0000-0000-000000000000'::uuid,'authenticated','authenticated',u.id||'@analytics-rollback.invalid','',
   '{"provider":"email","providers":["email"]}'::jsonb,jsonb_build_object('full_name',u.name),now(),now()
 from ax cross join lateral (values
   (admin_id,'Analytics Admin'),(t1,'Analytics Teacher One'),(t2,'Analytics Teacher Two'),(t3,'Analytics Teacher Three'),
-  (l1,'Ana Analytics'),(l2,'Ben Analytics'),(l3,'Cara Analytics'),(l4,'Dino Analytics')) u(id,name);
+  (l1,'Ana Analytics'),(l2,'Ben Analytics'),(l3,'Cara Analytics'),(l4,'Dino Analytics'),(l5,'Eve Analytics')) u(id,name);
 update public.profiles set role = 'admin' where user_id = (select admin_id from ax);
 update public.profiles set role = 'instructor' where user_id in (select t1 from ax union all select t2 from ax union all select t3 from ax);
-update public.profiles p set learner_id = s.sid from ax cross join lateral (values (l1,'A7-001'),(l2,'A7-002'),(l3,'A7-003'),(l4,'A7-004')) s(id,sid) where p.user_id = s.id;
+update public.profiles p set learner_id = s.sid from ax cross join lateral (values (l1,'A7-001'),(l2,'A7-002'),(l3,'A7-003'),(l4,'A7-004'),(l5,'A7-005')) s(id,sid) where p.user_id = s.id;
 
 insert into public.classes(id,title,class_code,instructor_id,created_by)
 select c1,'Analytics A','A7-'||left(c1::text,8),t1,t1 from ax union all
 select c2,'Analytics B','A7-'||left(c2::text,8),t1,t1 from ax union all
 select c3,'Analytics C','A7-'||left(c3::text,8),t2,t2 from ax;
-insert into public.class_memberships(class_id,learner_id,enrolled_by)
-select c1,l1,t1 from ax union all select c2,l1,t1 from ax union all select c1,l2,t1 from ax union all
-select c2,l3,t1 from ax union all select c3,l4,t2 from ax;
+insert into public.classes(id,title,class_code,instructor_id,created_by,status,archived_at,archived_by,archive_reason)
+select c4,'Analytics Archived','A7-'||left(c4::text,8),t1,t1,'archived'::public.class_status,now()-interval '1 day',t1,'Term ended' from ax;
+insert into public.class_memberships(class_id,learner_id,enrolled_by,enrolled_at)
+select c1,l1,t1,now()-interval '60 days' from ax union all select c2,l1,t1,now()-interval '60 days' from ax union all
+select c1,l2,t1,now()-interval '60 days' from ax union all select c2,l3,t1,now()-interval '60 days' from ax union all
+select c3,l4,t2,now()-interval '60 days' from ax union all select c3,l5,t2,now()-interval '1 day' from ax union all
+select c4,l1,t1,now()-interval '60 days' from ax;
+
+-- T2's published quiz (assigned to C3, due 3 days ago) and homework (deadline
+-- 2 days ago); nobody submitted. L5 joined C3 after both deadlines.
+insert into public.quizzes(id,instructor_id,coc_module_id,title,topic,created_by)
+select q3,t2,coc1_id,'Analytics Foreign Quiz','Hardware',t2 from ax;
+insert into public.quiz_versions(id,quiz_id,version_number,status,created_by,published_by,published_at)
+select q3v,q3,1,'published',t2,t2,now()-interval '10 days' from ax;
+insert into public.quiz_items(id,quiz_version_id,item_code,item_type,prompt,options,correct_answer,review_status,reviewed_by,reviewed_at,order_index,created_by)
+select q3i1,q3v,'A7-ITEM-F','true_false','Foreign item prompt','[]','"True"','approved',t2,now(),1,t2 from ax;
+insert into public.quiz_assignments(id,class_id,quiz_version_id,assigned_by,created_at,due_at)
+select qa3_c3,c3,q3v,t2,now()-interval '10 days',now()-interval '3 days' from ax;
+insert into public.homework_assignments(id,class_id,instructor_id,title,instructions,status,deadline_at,published_at)
+select h5,c3,t2,'Analytics Homework Five','Write the report.','published',now()-interval '2 days',now()-interval '10 days' from ax;
 
 -- ===================================================================
 -- Zero-data results: null averages, empty arrays, each learner once.
@@ -76,10 +120,12 @@ select is((select v->'assessments'->>'avg_percent' from ar where name='zero_over
 select is((select v->'assessments'->>'competent_rate' from ar where name='zero_overview'), null, 'no released result gives a null competent rate');
 select is((select v->'quizzes'->>'avg_percent' from ar where name='zero_overview'), null, 'no quiz result gives a null quiz average');
 select is((select v->'quizzes'->>'completion_rate' from ar where name='zero_overview'), null, 'no eligible quiz gives a null completion rate');
-select is((select v->'homework'->>'avg_percent' from ar where name='zero_overview'), null, 'no graded homework gives a null homework average');
+select is((select v->'homework'->>'avg_percent' from ar where name='zero_overview'), null, 'no released homework gives a null homework average');
 select is((select v->'missions'->>'avg_duration_seconds' from ar where name='zero_overview'), null, 'no practice run gives a null duration');
 select is((select (v->'missions'->>'runs')::int from ar where name='zero_overview'), 0, 'zero recorded runs');
 select is((select v->'trend' from ar where name='zero_overview'), '[]'::jsonb, 'no activity gives an empty trend');
+select is((select v->'evaluation'->'total' from ar where name='zero_overview'),
+  '{"evaluate":0,"finalize":0,"release":0,"released":0}'::jsonb, 'no submitted work gives empty evaluation stages');
 select is((select (v->'learning_progress'->>'avg_percent')::numeric from ar where name='zero_overview'), 0::numeric,
   'learners with required items but no completions average 0 % learning progress');
 select is((select jsonb_array_length(v->'learners') from ar where name='zero_learners'), 3, 'learner list counts each learner once');
@@ -105,6 +151,23 @@ select throws_ok(format('select public.get_analytics_overview(%L::jsonb)', jsonb
   '42501', 'ANALYTICS_SCOPE_DENIED', 'an instructor cannot read another instructor''s class');
 select throws_ok(format('select public.get_class_performance(%L::jsonb)', jsonb_build_object('class_id',(select c3 from ax))),
   '42501', 'ANALYTICS_SCOPE_DENIED', 'class performance enforces class ownership');
+select throws_ok(format('select public.get_quiz_analytics(null, %L::jsonb)', jsonb_build_object('class_id',(select c3 from ax))),
+  '42501', 'ANALYTICS_SCOPE_DENIED', 'quiz analytics enforce class ownership');
+select throws_ok(format('select public.get_mission_analytics(%L::jsonb)', jsonb_build_object('class_id',(select c3 from ax))),
+  '42501', 'ANALYTICS_SCOPE_DENIED', 'mission analytics enforce class ownership');
+select throws_ok(format('select public.get_criteria_analytics(%L::jsonb)', jsonb_build_object('class_id',(select c3 from ax))),
+  '42501', 'ANALYTICS_SCOPE_DENIED', 'criteria analytics enforce class ownership');
+select throws_ok(format('select public.get_quiz_analytics(%L::uuid, ''{}''::jsonb)', (select q3 from ax)),
+  '42501', 'ANALYTICS_SCOPE_DENIED', 'an instructor cannot open another instructor''s quiz');
+select throws_ok(format('select public.get_quiz_analytics(null, %L::jsonb)', jsonb_build_object('quiz_id',(select q3 from ax))),
+  '42501', 'ANALYTICS_SCOPE_DENIED', 'a foreign quiz filter is denied on quiz analytics');
+select throws_ok(format('select public.get_mission_analytics(%L::jsonb)', jsonb_build_object('quiz_id',(select q3 from ax))),
+  '42501', 'ANALYTICS_SCOPE_DENIED', 'a foreign quiz filter is denied on mission analytics');
+select throws_ok(format('select public.get_criteria_analytics(%L::jsonb)', jsonb_build_object('quiz_id',(select q3 from ax))),
+  '42501', 'ANALYTICS_SCOPE_DENIED', 'a foreign quiz filter is denied on criteria analytics');
+select throws_ok($$select public.get_mission_analytics('{"mission_code":"coc1_m9"}'::jsonb)$$, '22023', 'ANALYTICS_FILTER_INVALID', 'mission analytics reject unknown mission codes');
+select throws_ok($$select public.get_criteria_analytics('{"mission_code":"coc5_m1"}'::jsonb)$$, '22023', 'ANALYTICS_FILTER_INVALID', 'criteria analytics reject unknown mission codes');
+select throws_ok($$select public.get_quiz_analytics(null, '{"mission_code":"coc1_m9"}'::jsonb)$$, '22023', 'ANALYTICS_FILTER_INVALID', 'quiz analytics reject unknown mission codes');
 select throws_ok(format('select public.get_learner_profile_analytics(%L::uuid, ''{}''::jsonb)', (select l4 from ax)),
   '42501', 'ANALYTICS_SCOPE_DENIED', 'an instructor cannot open a learner outside their classes');
 select throws_ok(format('select public.get_learner_performance(%L::jsonb)', jsonb_build_object('learner_id',(select l4 from ax))),
@@ -117,9 +180,26 @@ select throws_ok($$select public.get_analytics_overview('{"from":"yesterday-ish"
 select throws_ok($$select public.get_analytics_overview('{"coc_code":"coc9"}'::jsonb)$$, '22023', 'ANALYTICS_FILTER_INVALID', 'unknown COC codes are rejected');
 select throws_ok($$select public.get_analytics_overview('{"mission_code":"coc1_m9"}'::jsonb)$$, '22023', 'ANALYTICS_FILTER_INVALID', 'unknown mission codes are rejected');
 select throws_ok($$select public.get_my_performance()$$, '42501', 'ANALYTICS_LEARNER_REQUIRED', 'staff cannot call the learner performance view');
+insert into ar values ('archived_class', public.get_analytics_overview(jsonb_build_object('class_id',(select c4 from ax))));
+select set_config('request.jwt.claim.sub',(select admin_id::text from ax),true);
+insert into ar values ('admin_c3', public.get_analytics_overview(jsonb_build_object('class_id',(select c3 from ax)))),
+  ('admin_c3_quizzes', public.get_quiz_analytics(null, jsonb_build_object('class_id',(select c3 from ax)))),
+  ('admin_c3_missions', public.get_mission_analytics(jsonb_build_object('class_id',(select c3 from ax)))),
+  ('admin_c3_criteria', public.get_criteria_analytics(jsonb_build_object('class_id',(select c3 from ax))));
+select throws_ok(format('select public.get_analytics_overview(%L::jsonb)', jsonb_build_object('class_id', gen_random_uuid())),
+  '42501', 'ANALYTICS_SCOPE_DENIED', 'admins get a scope error for a class that does not exist');
 select set_config('request.jwt.claim.sub',(select l1::text from ax),true);
 select throws_ok($$select public.get_analytics_overview('{}'::jsonb)$$, '42501', 'ANALYTICS_ACCESS_DENIED', 'learners cannot read staff analytics');
 reset role;
+select ok((select (v->'population'->>'enrolled')::int = 0 and v->'classes' = '[]'::jsonb from ar where name='archived_class'),
+  'an own archived class is out of analytics scope (empty, not an error)');
+select is((select (v->'population'->>'enrolled')::int from ar where name='admin_c3'), 2, 'admins may analyse any instructor''s class');
+select ok((select bool_and(v->'filters'->>'class_id' = (select c3::text from ax)) from ar
+  where name in ('admin_c3_quizzes','admin_c3_missions','admin_c3_criteria')) and (select count(*) = 3 from ar
+  where name in ('admin_c3_quizzes','admin_c3_missions','admin_c3_criteria')),
+  'admins may scope quiz, mission and criteria analytics to any instructor''s class');
+select ok((select v->'quizzes' @> jsonb_build_array(jsonb_build_object('id', (select q3 from ax))) from ar where name='admin_c3_quizzes'),
+  'admin quiz analytics list the quiz that the other instructor cannot open');
 select ok((select bool_and(not p.prosecdef and p.provolatile = 's') from pg_proc p join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'public' and p.proname in ('get_analytics_overview','get_class_performance','get_learner_performance',
     'get_learner_profile_analytics','get_quiz_analytics','get_mission_analytics','get_criteria_analytics','get_my_performance',
@@ -130,6 +210,8 @@ select is((select count(*)::int from pg_proc p join pg_namespace n on n.oid = p.
     'get_analytics_filter_options')), 9, 'all nine analytics functions exist');
 select ok(not has_function_privilege('anon', 'public.get_analytics_overview(jsonb)', 'execute'), 'anon cannot execute analytics');
 select ok(has_function_privilege('authenticated', 'public.get_my_performance()', 'execute'), 'authenticated may call the learner view');
+select ok(has_function_privilege('authenticated', 'private.analytics_homework_facts(jsonb)', 'execute')
+  and not has_function_privilege('anon', 'private.analytics_learner_metrics(jsonb)', 'execute'), 'recreated helpers keep their grants');
 select ok((select count(*) = 0 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'private' and p.proname like 'analytics%' and p.prosecdef), 'no analytics helper is SECURITY DEFINER');
 select ok((select count(*) = 3 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public'
@@ -172,7 +254,8 @@ insert into public.attempts(id,learner_id,class_id,assignment_id,activity_versio
 select att_l1_a,l1,c1,asg_c1,activity_version_id,rubric_id,source_id,'released'::public.attempt_status,gen_random_uuid(),gen_random_uuid(),now()-interval '5 days',now()-interval '5 days',now()-interval '5 days',now()-interval '5 days',now()-interval '5 days' from ax union all
 select att_l1_b,l1,c1,asg_c1,activity_version_id,rubric_id,source_id,'released'::public.attempt_status,gen_random_uuid(),gen_random_uuid(),now()-interval '3 days',now()-interval '3 days',now()-interval '3 days',now()-interval '3 days',now()-interval '3 days' from ax union all
 select att_l2,l2,c1,asg_c1,activity_version_id,rubric_id,source_id,'evaluated'::public.attempt_status,gen_random_uuid(),gen_random_uuid(),now()-interval '20 days',now()-interval '20 days',now()-interval '20 days',null,null from ax union all
-select att_l3,l3,c2,asg_c2,activity_version_id,rubric_id,source_id,'released'::public.attempt_status,gen_random_uuid(),gen_random_uuid(),now()-interval '4 days',now()-interval '4 days',now()-interval '4 days',now()-interval '4 days',now()-interval '4 days' from ax;
+select att_l3,l3,c2,asg_c2,activity_version_id,rubric_id,source_id,'released'::public.attempt_status,gen_random_uuid(),gen_random_uuid(),now()-interval '4 days',now()-interval '4 days',now()-interval '4 days',now()-interval '4 days',now()-interval '4 days' from ax union all
+select att_l3_b,l3,c2,asg_c2,activity_version_id,rubric_id,source_id,'under_review'::public.attempt_status,gen_random_uuid(),gen_random_uuid(),now()-interval '1 day',now()-interval '1 day',now()-interval '1 day',null,null from ax;
 insert into public.score_revisions(attempt_id,revision_number,revision_type,actor_id,actor_role,tesda_source_id,rubric_version_id,total_value,max_value,percentage,outcome,criterion_values)
 select att_l1_a,1,'instructor_final'::public.score_revision_type,t1,'instructor'::public.user_role,source_id,rubric_id,1,2,50,'not_yet_competent'::public.evaluation_outcome,
   jsonb_build_array(jsonb_build_object('criterion_id',crit_a,'observation','satisfied','score_value',1),jsonb_build_object('criterion_id',crit_b,'observation','not_satisfied','score_value',0)) from ax union all
@@ -226,46 +309,82 @@ select qt_l3,0,2,'[]'::jsonb,now()-interval '2 days' from ax union all
 select qt_l2_draft,1,1,'[]'::jsonb,now()-interval '20 days' from ax;
 
 -- ===================================================================
--- Homework fixtures: H1 in C1 (L1 on time, graded 80; L2 missing),
--- H2 in C2 (L3 late, graded 60; L1 missing).
+-- Homework (A4 lifecycle). H1 (C1, COC1 / coc1_m2, max 50, two criteria):
+-- L1 released 40/50, L2 missing. H2 (C2): L3 released 60 late, L1 missing.
+-- H3 (C1, due in 3 days, max 20): L1 graded 18 (pending). H4 (C2, due in 3
+-- days): L3 finalized 70 (pending), L1 submitted (awaiting grading).
 -- ===================================================================
-insert into public.homework_assignments(id,class_id,instructor_id,title,instructions,status,deadline_at,published_at)
-select h1,c1,t1,'Analytics Homework One','Write the report.','published',now()-interval '2 days',now()-interval '10 days' from ax union all
-select h2,c2,t1,'Analytics Homework Two','Write the report.','published',now()-interval '5 days',now()-interval '10 days' from ax;
-insert into public.homework_submissions(assignment_id,learner_id,answer,submitted_at,effective_deadline_at,deadline_revision,status,score,graded_at,graded_by)
-select h1,l1,'Report',now()-interval '3 days',now()-interval '2 days',1,'graded',80,now()-interval '1 day',t1 from ax union all
-select h2,l3,'Report',now()-interval '3 days',now()-interval '5 days',1,'graded',60,now()-interval '1 day',t1 from ax;
+insert into public.homework_assignments(id,class_id,instructor_id,title,instructions,status,deadline_at,published_at,max_score,criteria,coc_module_id,mission_code)
+select h1,c1,t1,'Analytics Homework One','Write the report.','published',now()-interval '2 days',now()-interval '10 days',50,
+  '[{"id":"A7-HW-C1","criterion":"Report structure","max_points":30},{"id":"A7-HW-C2","criterion":"Diagram accuracy","max_points":20}]'::jsonb,
+  coc1_id,'coc1_m2' from ax;
+insert into public.homework_assignments(id,class_id,instructor_id,title,instructions,status,deadline_at,published_at,max_score)
+select h2,c2,t1,'Analytics Homework Two','Write the report.','published',now()-interval '5 days',now()-interval '10 days',100 from ax union all
+select h3,c1,t1,'Analytics Homework Three','Write the checklist.','published',now()+interval '3 days',now()-interval '4 days',20 from ax union all
+select h4,c2,t1,'Analytics Homework Four','Write the checklist.','published',now()+interval '3 days',now()-interval '4 days',100 from ax;
+insert into public.homework_submissions(assignment_id,learner_id,answer,submitted_at,effective_deadline_at,deadline_revision,status,score,criterion_scores,graded_at,graded_by,finalized_at,finalized_by,released_at,released_by)
+select h1,l1,'Report',now()-interval '3 days',now()-interval '2 days',1,'released',40,'{"A7-HW-C1":25,"A7-HW-C2":15}'::jsonb,
+  now()-interval '2 days',t1,now()-interval '1 day',t1,now()-interval '1 day',t1 from ax union all
+select h2,l3,'Report',now()-interval '3 days',now()-interval '5 days',1,'released',60,null::jsonb,
+  now()-interval '2 days',t1,now()-interval '1 day',t1,now()-interval '1 day',t1 from ax union all
+select h3,l1,'Checklist',now()-interval '1 day',now()+interval '3 days',1,'graded',18,null::jsonb,
+  now()-interval '12 hours',t1,null,null,null,null from ax union all
+select h4,l3,'Checklist',now()-interval '2 days',now()+interval '3 days',1,'finalized',70,null::jsonb,
+  now()-interval '1 day',t1,now()-interval '12 hours',t1,null,null from ax union all
+select h4,l1,'Checklist',now()-interval '1 day',now()+interval '3 days',1,'submitted',null,null::jsonb,
+  null,null,null,null,null,null from ax;
 
 -- ===================================================================
--- Practice fixtures: server-verified completions and recorded runs.
+-- Practice: server-verified completions (accepted contract versions) and
+-- recorded runs. L1 verified coc1_m3 40 days ago (outside the period).
 -- ===================================================================
-with a as (
-  insert into public.practice_mission_actions(learner_id,client_action_id,mission_id,phase_id,action_type,value,client_occurred_at)
-  select l1,'a7-l1','coc1_m1','phase','inspect','{}',now()-interval '7 days' from ax returning id)
-update ax set act_l1 = a.id from a;
-with a as (
-  insert into public.practice_mission_actions(learner_id,client_action_id,mission_id,phase_id,action_type,value,client_occurred_at)
-  select l3,'a7-l3','coc1_m1','phase','inspect','{}',now()-interval '7 days' from ax returning id)
-update ax set act_l3 = a.id from a;
-insert into public.practice_mission_completions(learner_id,mission_id,contract_version,evidence_through_id,verified_at)
-select l1,'coc1_m1','1',act_l1,now()-interval '6 days' from ax union all
-select l1,'coc1_m2','1',act_l1,now()-interval '5 days' from ax union all
-select l1,'coc1_m3','1',act_l1,now()-interval '4 days' from ax union all
-select l3,'coc1_m1','1',act_l3,now()-interval '6 days' from ax union all
-select l3,'coc1_m5','1',act_l3,now()-interval '5 days' from ax;
+select pg_temp.a7_complete(l1,'coc1_m1',now()-interval '6 days') from ax;
+select pg_temp.a7_complete(l1,'coc1_m2',now()-interval '5 days') from ax;
+select pg_temp.a7_complete(l1,'coc1_m3',now()-interval '40 days') from ax;
+select pg_temp.a7_complete(l3,'coc1_m1',now()-interval '6 days') from ax;
+select pg_temp.a7_complete(l3,'coc1_m5',now()-interval '5 days') from ax;
 insert into public.practice_mission_runs(learner_id,mission_id,contract_version,run_number,started_at,ended_at,duration_seconds,action_count,invalid_count,correction_count,outcome,created_at)
-select l1,'coc1_m1','1',1,now()-interval '7 days',now()-interval '7 days',90,8,3,1,'incomplete',now()-interval '7 days' from ax union all
-select l1,'coc1_m1','1',2,now()-interval '6 days',now()-interval '6 days',120,6,0,0,'verified',now()-interval '6 days' from ax union all
-select l1,'coc1_m2','1',1,now()-interval '5 days',now()-interval '5 days',200,9,0,0,'verified',now()-interval '5 days' from ax union all
-select l1,'coc1_m3','1',1,now()-interval '4 days',now()-interval '4 days',300,12,0,0,'verified',now()-interval '4 days' from ax union all
-select l3,'coc1_m4','1',1,now()-interval '3 days',now()-interval '3 days',60,5,2,0,'incomplete',now()-interval '3 days' from ax union all
-select l3,'coc1_m4','1',2,now()-interval '2 days',now()-interval '2 days',70,5,2,0,'incomplete',now()-interval '2 days' from ax union all
-select l3,'coc1_m4','1',3,now()-interval '1 day',now()-interval '1 day',80,5,2,0,'incomplete',now()-interval '1 day' from ax;
--- A COC1 practice quiz pass for L4 (T2's learner) exercises the new practice_coc_progress policy.
+select l1,'coc1_m1','v',1,now()-interval '7 days',now()-interval '7 days',90,8,3,1,'incomplete',now()-interval '7 days' from ax union all
+select l1,'coc1_m1','v',2,now()-interval '6 days',now()-interval '6 days',120,6,0,0,'verified',now()-interval '6 days' from ax union all
+select l1,'coc1_m2','v',1,now()-interval '5 days',now()-interval '5 days',200,9,0,0,'verified',now()-interval '5 days' from ax union all
+select l1,'coc1_m3','v',1,now()-interval '40 days',now()-interval '40 days',300,12,0,0,'verified',now()-interval '40 days' from ax union all
+select l3,'coc1_m4','v',1,now()-interval '3 days',now()-interval '3 days',60,5,2,0,'incomplete',now()-interval '3 days' from ax union all
+select l3,'coc1_m4','v',2,now()-interval '2 days',now()-interval '2 days',70,5,2,0,'incomplete',now()-interval '2 days' from ax union all
+select l3,'coc1_m4','v',3,now()-interval '1 day',now()-interval '1 day',80,5,2,0,'incomplete',now()-interval '1 day' from ax union all
+select l4,'coc1_m2','v',1,now()-interval '2 days',now()-interval '2 days',100,7,0,0,'verified',now()-interval '2 days' from ax;
+-- L4 (T2's learner) completes every COC1 module, then passes the COC1 practice
+-- quiz: the A2 gate (every module of the COC complete) is satisfied, not bypassed.
+-- A lesson published in LO1.4 beforehand keeps that module, and so the gate,
+-- open after all five missions are verified until L4 completes the lesson
+-- too. It is archived again after the quiz so the progress totals asserted
+-- below stay lesson-free (module completion is kept once recorded, slice A2).
+insert into public.curriculum_topics(id, module_id, sequence_order)
+select ax.gate_lesson, m.id, 1 + (select count(*) from public.curriculum_topics t where t.module_id = m.id)
+from ax, public.curriculum_modules m where m.coc_code = 'coc1' and m.code = 'LO1.4';
+insert into public.curriculum_topic_revisions(topic_id, revision_number, title, body_markdown, status, published_at)
+select gate_lesson, 1, 'Analytics gate lesson', 'Fixture lesson body.', 'published', now()-interval '21 days' from ax;
+select pg_temp.a7_complete(l4, m.mission_code, now()-interval '20 days')
+from ax cross join (values ('coc1_m1'),('coc1_m2'),('coc1_m3'),('coc1_m4'),('coc1_m5')) m(mission_code);
+select throws_ok(format($q$insert into public.practice_quiz_attempts(learner_id,coc_code,status,questions,answers,score,passed,submitted_at)
+  values (%L,'coc1','submitted',
+    '[{"id":"q1","answer":0},{"id":"q2","answer":0},{"id":"q3","answer":0},{"id":"q4","answer":0},{"id":"q5","answer":0}]'::jsonb,
+    '{"q1":0,"q2":0,"q3":0,"q4":0,"q5":0}'::jsonb,5,true,now())$q$, (select l4 from ax)),
+  '22023', 'PRACTICAL_COMPLETION_REQUIRED', 'fixture: the A2 gate refuses the practice quiz while a published COC1 lesson is incomplete');
+insert into public.learner_topic_progress(learner_id, topic_id, revision_id, completed_at)
+select ax.l4, t.id, (select r.id from public.curriculum_topic_revisions r where r.topic_id = t.id and r.status = 'published'
+  order by r.revision_number desc limit 1), now()-interval '20 days'
+from ax, public.curriculum_topics t join public.curriculum_modules m on m.id = t.module_id
+where m.coc_code = 'coc1' and t.archived_at is null
+  and exists (select 1 from public.curriculum_topic_revisions r where r.topic_id = t.id and r.status = 'published');
+select ok((select bool_and(s.completed) from ax, public.learner_module_states(ax.l4, 'coc1') s),
+  'fixture: every COC1 module of L4 is complete before the practice quiz');
 with pq as (
   insert into public.practice_quiz_attempts(learner_id,coc_code,status,questions,answers,score,passed,submitted_at)
-  select l4,'coc1','submitted','[1,2,3,4,5]','{}',5,true,now()-interval '1 day' from ax returning id, learner_id)
+  select l4,'coc1','submitted',
+    '[{"id":"q1","answer":0},{"id":"q2","answer":0},{"id":"q3","answer":0},{"id":"q4","answer":0},{"id":"q5","answer":0}]'::jsonb,
+    '{"q1":0,"q2":0,"q3":0,"q4":0,"q5":0}'::jsonb,5,true,now()-interval '1 day' from ax returning id, learner_id)
 insert into public.practice_coc_progress(learner_id,coc_code,completed_at,quiz_attempt_id) select learner_id,'coc1',now()-interval '1 day',id from pq;
+update public.curriculum_topics set archived_at = now() where id = (select gate_lesson from ax);
 
 -- ===================================================================
 -- RLS: instructors read practice records of learners they teach only.
@@ -304,6 +423,7 @@ insert into ar values
   ('overview', public.get_analytics_overview('{}'::jsonb)),
   ('overview_c2', public.get_analytics_overview(jsonb_build_object('class_id',(select c2 from ax)))),
   ('overview_quiz', public.get_analytics_overview(jsonb_build_object('quiz_id',(select q1 from ax)))),
+  ('overview_coc1', public.get_analytics_overview('{"coc_code":"coc1"}'::jsonb)),
   ('overview_coc2', public.get_analytics_overview('{"coc_code":"COC2"}'::jsonb)),
   ('classes', public.get_class_performance('{}'::jsonb)),
   ('learners', public.get_learner_performance('{}'::jsonb)),
@@ -317,9 +437,13 @@ insert into ar values
   ('profile_l1', public.get_learner_profile_analytics((select l1 from ax),'{}'::jsonb)),
   ('options', public.get_analytics_filter_options());
 select set_config('request.jwt.claim.sub',(select t2::text from ax),true);
-insert into ar values ('overview_t2', public.get_analytics_overview('{}'::jsonb));
+insert into ar values
+  ('overview_t2', public.get_analytics_overview('{}'::jsonb)),
+  ('missions_t2', public.get_mission_analytics('{}'::jsonb));
 select set_config('request.jwt.claim.sub',(select admin_id::text from ax),true);
-insert into ar values ('overview_admin', public.get_analytics_overview('{}'::jsonb));
+insert into ar values
+  ('overview_admin', public.get_analytics_overview('{}'::jsonb)),
+  ('quiz_q1_admin', public.get_quiz_analytics((select q1 from ax),'{}'::jsonb));
 select set_config('request.jwt.claim.sub',(select l1::text from ax),true);
 insert into ar values ('me_l1', public.get_my_performance());
 select set_config('request.jwt.claim.sub',(select l2::text from ax),true);
@@ -330,32 +454,49 @@ reset role;
 select is((select (v->'population'->>'enrolled')::int from ar where name='overview'), 3, 'population counts L1 once across C1 and C2');
 select is((select (v->'population'->>'active_in_period')::int from ar where name='overview'), 3, 'three learners have activity in the period');
 select is((select (v->'population'->>'completed')::int from ar where name='overview'), 0, 'nobody completed every required item');
-select is((select (v->'population'->>'enrolled')::int from ar where name='overview_admin'), 4, 'admin overview covers every active class');
-select is((select (v->'population'->>'enrolled')::int from ar where name='overview_t2'), 1, 'another instructor sees only their own learner');
+select is((select (v->'population'->>'enrolled')::int from ar where name='overview_admin'), 5, 'admin overview covers every active class');
+select is((select (v->>'participants')::int from ar where name='quiz_q1_admin'), 3, 'admins can analyse any quiz');
+select is((select (v->'population'->>'enrolled')::int from ar where name='overview_t2'), 2, 'another instructor sees only their own learners');
 select is((select v->'assessments'->>'avg_percent' from ar where name='overview_t2'), null, 'another instructor sees no foreign assessment results');
-select is((select (v->'assessments'->>'submitted')::int from ar where name='overview'), 4, 'four assessment attempts were submitted');
+select is((select (v->'assessments'->>'submitted')::int from ar where name='overview'), 5, 'five assessment attempts were submitted');
 select is((select (v->'assessments'->>'released')::int from ar where name='overview'), 3, 'three results are released');
-select is((select (v->'assessments'->>'pending_release')::int from ar where name='overview'), 1, 'the unreleased evaluated attempt is counted as pending');
+select is((select (v->'assessments'->>'pending_release')::int from ar where name='overview'), 2, 'evaluated and under-review attempts count as pending');
 select is((select (v->'assessments'->>'avg_percent')::numeric from ar where name='overview'), 66.7, 'pending results are excluded from the assessment average');
 select is((select (v->'assessments'->>'competent_rate')::numeric from ar where name='overview'), 33.3, 'competent rate uses released results only');
+select is((select v->'evaluation'->'technical' from ar where name='overview'),
+  '{"evaluate":1,"finalize":1,"release":0,"released":3}'::jsonb, 'technical attempts by Evaluate / Finalize / Release stage (under_review = Finalize)');
+select is((select v->'evaluation'->'homework' from ar where name='overview'),
+  '{"evaluate":1,"finalize":1,"release":1,"released":2}'::jsonb, 'homework by Evaluate / Finalize / Release stage');
+select is((select v->'evaluation'->'total' from ar where name='overview'),
+  '{"evaluate":2,"finalize":2,"release":1,"released":5}'::jsonb, 'evaluation stage totals');
 select is((select (v->'quizzes'->>'submitted')::int from ar where name='overview'), 3, 'only published quiz submissions are counted');
 select is((select (v->'quizzes'->>'avg_percent')::numeric from ar where name='overview'), 50.0, 'the unpublished quiz result is excluded from the quiz average');
 select is((select (v->'quizzes'->>'eligible')::int from ar where name='overview'), 3, 'quiz eligibility counts each learner once per quiz');
 select is((select (v->'quizzes'->>'completion_rate')::numeric from ar where name='overview'), 100.0, 'every eligible learner completed the published quiz');
-select is((select (v->'homework'->>'submitted')::int from ar where name='overview'), 2, 'two homework submissions');
+select is((select (v->'homework'->>'submitted')::int from ar where name='overview'), 5, 'five homework submissions in the period');
+select is((select (v->'homework'->>'released')::int from ar where name='overview'), 2, 'two homework grades are released');
+select is((select (v->'homework'->>'pending_evaluation')::int from ar where name='overview'), 3, 'submitted, graded and finalized homework is pending evaluation');
 select is((select (v->'homework'->>'missing')::int from ar where name='overview'), 2, 'two past-deadline homework items are missing');
 select is((select (v->'homework'->>'late')::int from ar where name='overview'), 1, 'one late homework submission');
-select is((select (v->'homework'->>'avg_percent')::numeric from ar where name='overview'), 70.0, 'missing homework is not scored as zero');
-select is((select (v->'missions'->>'runs')::int from ar where name='overview'), 7, 'mission attempts equal the recorded practice runs');
-select is((select (v->'missions'->>'successful_runs')::int from ar where name='overview'), 3, 'three verified runs');
+select is((select (v->'homework'->>'avg_percent')::numeric from ar where name='overview'), 70.0,
+  'homework average uses released grades as a share of max_score; graded and finalized grades are excluded');
+select is((select (v->'homework'->>'completion_rate')::numeric from ar where name='overview'), 62.5, 'homework completion = submitted / eligible pairs');
+select is((select (v->'missions'->>'runs')::int from ar where name='overview'), 6, 'mission attempts equal the recorded practice runs in the period');
+select is((select (v->'missions'->>'successful_runs')::int from ar where name='overview'), 2, 'two verified runs');
 select is((select (v->'missions'->>'failed_runs')::int from ar where name='overview'), 4, 'four incomplete runs');
-select is((select (v->'missions'->>'verified')::int from ar where name='overview'), 5, 'five server-verified completions in the period');
-select is((select (v->'missions'->>'completion_rate')::numeric from ar where name='overview'), 8.3, 'mission completion rate = verified pairs / (learners x missions)');
-select is((select (v->'missions'->>'avg_duration_seconds')::numeric from ar where name='overview'), 206.7, 'average completion time uses verified runs');
+select is((select (v->'missions'->>'verified')::int from ar where name='overview'), 4, 'four server-verified completions in the period');
+select is((select (v->'missions'->>'completion_rate')::numeric from ar where name='overview'), 8.3, 'mission completion to date = verified pairs / (learners x missions)');
+select is((select (v->'missions'->>'avg_duration_seconds')::numeric from ar where name='overview'), 160.0, 'average completion time uses verified runs in the period');
 select is((select (v->'learning_progress'->>'avg_percent')::numeric from ar where name='overview'), 6.9, 'learning progress averages each learner once');
 select ok((select jsonb_array_length(v->'trend') > 0 from ar where name='overview'), 'activity produces a daily trend');
-select is((select sum((d->>'practice_runs')::int)::int from ar, jsonb_array_elements(v->'trend') d where name='overview'), 7, 'trend practice runs add up to recorded runs');
+select is((select sum((d->>'practice_runs')::int)::int from ar, jsonb_array_elements(v->'trend') d where name='overview'), 6, 'trend practice runs add up to recorded runs');
 select ok((select (v->'homework'->>'applicable')::boolean and (v->'assessments'->>'applicable')::boolean from ar where name='overview'), 'every source applies without curriculum filters');
+
+-- Enrolment-aware eligibility (T2: L5 joined C3 after the deadlines).
+select is((select (v->'homework'->>'missing')::int from ar where name='overview_t2'), 1, 'a learner enrolled after the deadline is not counted as missing homework');
+select is((select (v->'homework'->>'eligible')::int from ar where name='overview_t2'), 1, 'a learner enrolled after the deadline is not eligible for that homework');
+select is((select (v->'quizzes'->>'eligible')::int from ar where name='overview_t2'), 1, 'a learner enrolled after the quiz closed is not eligible');
+select is((select (v->'quizzes'->>'completion_rate')::numeric from ar where name='overview_t2'), 0.0, 'the eligible learner has not completed the quiz');
 
 -- Class filter never mixes unrelated classes.
 select is((select (v->'population'->>'enrolled')::int from ar where name='overview_c2'), 2, 'class filter restricts the population');
@@ -367,21 +508,26 @@ select is((select (v->'homework'->>'avg_percent')::numeric from ar where name='o
 select is((select (v->'quizzes'->>'submitted')::int from ar where name='overview_quiz'), 3, 'quiz filter keeps the quiz');
 select ok((select not (v->'homework'->>'applicable')::boolean and v->'homework'->>'avg_percent' is null from ar where name='overview_quiz'), 'quiz filter marks homework as not applicable');
 select ok((select not (v->'assessments'->>'applicable')::boolean and v->'assessments'->>'avg_percent' is null from ar where name='overview_quiz'), 'quiz filter marks assessments as not applicable');
+select is((select (v->'homework'->>'submitted')::int from ar where name='overview_coc1'), 1, 'COC filter keeps only homework linked to that COC');
+select is((select (v->'homework'->>'avg_percent')::numeric from ar where name='overview_coc1'), 80.0, 'COC1 homework average (released 40 / 50)');
+select is((select (v->'homework'->>'missing')::int from ar where name='overview_coc1'), 1, 'COC1 missing homework');
 select is((select (v->'missions'->>'runs')::int from ar where name='overview_coc2'), 0, 'COC filter excludes practice from other COCs');
 select is((select v->'quizzes'->>'avg_percent' from ar where name='overview_coc2'), null, 'COC filter excludes quizzes from other COCs');
+select is((select (v->'homework'->>'submitted')::int from ar where name='overview_coc2'), 0, 'unlinked homework is excluded under a COC filter');
 select is((select v->'filters'->>'coc_code' from ar where name='overview_coc2'), 'coc2', 'COC codes are normalized');
 
 -- Class performance and comparison.
-select is((select jsonb_array_length(v->'classes') from ar where name='classes'), 2, 'two owned classes are compared');
+select is((select jsonb_array_length(v->'classes') from ar where name='classes'), 2, 'two active owned classes are compared (the archived class is excluded)');
 select is((select (c->>'quiz_avg')::numeric from ar, jsonb_array_elements(v->'classes') c where name='classes' and c->>'title'='Analytics A'), 75.0, 'C1 quiz average');
-select is((select (c->>'avg_score')::numeric from ar, jsonb_array_elements(v->'classes') c where name='classes' and c->>'title'='Analytics A'), 66.3, 'C1 average score averages each learner once');
+select is((select (c->>'avg_score')::numeric from ar, jsonb_array_elements(v->'classes') c where name='classes' and c->>'title'='Analytics A'), 66.3, 'C1 average score averages each learner once (unreleased grades excluded)');
 select is((select c->'highest'->>'name' from ar, jsonb_array_elements(v->'classes') c where name='classes' and c->>'title'='Analytics A'), 'Ana Analytics', 'C1 highest learner');
 select is((select (c->'lowest'->>'score')::numeric from ar, jsonb_array_elements(v->'classes') c where name='classes' and c->>'title'='Analytics A'), 50.0, 'C1 lowest learner score');
 select is((select (c->>'assessment_competent_rate')::numeric from ar, jsonb_array_elements(v->'classes') c where name='classes' and c->>'title'='Analytics A'), 50.0, 'C1 competent rate');
 select is((select (c->>'mission_completion_rate')::numeric from ar, jsonb_array_elements(v->'classes') c where name='classes' and c->>'title'='Analytics A'), 7.5, 'C1 mission completion rate');
 select is((select (c->>'assignment_completion_rate')::numeric from ar, jsonb_array_elements(v->'classes') c where name='classes' and c->>'title'='Analytics A'), 50.0, 'C1 homework completion rate');
+select is((select (c->>'assignment_completion_rate')::numeric from ar, jsonb_array_elements(v->'classes') c where name='classes' and c->>'title'='Analytics B'), 75.0, 'C2 homework completion rate');
 select is((select (c->>'progress_avg')::numeric from ar, jsonb_array_elements(v->'classes') c where name='classes' and c->>'title'='Analytics A'), 6.3, 'C1 learning progress average');
-select is((select (c->>'avg_score')::numeric from ar, jsonb_array_elements(v->'classes') c where name='classes' and c->>'title'='Analytics B'), 36.7, 'C2 average score ignores L1 who has no scored C2 work');
+select is((select (c->>'avg_score')::numeric from ar, jsonb_array_elements(v->'classes') c where name='classes' and c->>'title'='Analytics B'), 36.7, 'C2 average score ignores L1 who has no released C2 grade');
 select is((select (c->>'quiz_avg')::numeric from ar, jsonb_array_elements(v->'classes') c where name='classes' and c->>'title'='Analytics B'), 0.0, 'C2 quiz average');
 select is((select (v->'summary'->>'enrolled')::int from ar where name='classes'), 3, 'summary counts distinct learners');
 select is((select (v->'summary'->>'avg_score')::numeric from ar where name='classes'), 56.4, 'summary average score averages each learner once');
@@ -395,10 +541,12 @@ select ok((select l->'reasons' @> '[{"code":"inactive"}]' and l->'reasons' @> '[
 select is((select l->>'status' from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Cara Analytics'), 'struggling', 'L3 is struggling');
 select ok((select l->'reasons' @> '[{"code":"quiz_average_low"},{"code":"not_yet_competent"},{"code":"repeated_incomplete_runs"}]'
   from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Cara Analytics'), 'L3 reasons: quiz below 75 %, a not-yet-competent result, 3+ incomplete runs');
-select is((select jsonb_array_length(l->'classes') from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ana Analytics'), 2, 'L1 lists both classes');
+select is((select jsonb_array_length(l->'classes') from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ana Analytics'), 2, 'L1 lists both active classes');
 select is((select (l->'assessment'->>'released')::int from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ana Analytics'), 2, 'L1 has two released results');
-select is((select (l->>'practice_runs')::int from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ana Analytics'), 4, 'L1 recorded runs');
+select is((select (l->'assessment'->>'pending')::int from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Cara Analytics'), 1, 'L3 under-review attempt is pending');
+select is((select (l->>'practice_runs')::int from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ana Analytics'), 3, 'L1 recorded runs in the period');
 select is((select (l->'assignments'->>'missing')::int from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ana Analytics'), 1, 'L1 has one missing homework');
+select is((select (l->'assignments'->>'pending_evaluation')::int from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ana Analytics'), 2, 'L1 has two homework items pending evaluation');
 select is((select (v->'counts'->>'falling_behind')::int from ar where name='learners'), 1, 'status counts');
 select is((select (v->'thresholds'->>'quiz_average_below')::numeric from ar where name='learners'), 75::numeric, 'documented quiz threshold');
 select is((select jsonb_array_length(v->'learners') from ar where name='learner_l2_only'), 1, 'learner filter returns one learner');
@@ -423,26 +571,36 @@ select is((select v->'quiz'->>'status' from ar where name='quiz_q2'), 'draft', '
 select is((select (v->>'participants')::int from ar where name='quiz_q2'), 0, 'the unpublished quiz has no counted participants');
 select is((select v->'distribution' from ar where name='quiz_q2'), '[]'::jsonb, 'the unpublished quiz has no distribution');
 
--- Mission analytics.
-select is((select sum((m->>'runs')::int)::int from ar, jsonb_array_elements(v->'missions') m where name='missions'), 7, 'mission rows add up to recorded runs');
-select is((select (m->>'learners_attempted')::int from ar, jsonb_array_elements(v->'missions') m where name='missions' and m->>'mission_code'='coc1_m1'), 2, 'coc1_m1 learners attempted');
-select is((select (m->>'learners_verified')::int from ar, jsonb_array_elements(v->'missions') m where name='missions' and m->>'mission_code'='coc1_m1'), 2, 'coc1_m1 learners verified');
-select is((select (m->>'completion_rate')::numeric from ar, jsonb_array_elements(v->'missions') m where name='missions' and m->>'mission_code'='coc1_m1'), 66.7, 'coc1_m1 completion rate');
+-- Mission analytics: in-period columns and explicitly labelled to-date columns.
+select is((select sum((m->>'runs')::int)::int from ar, jsonb_array_elements(v->'missions') m where name='missions'), 6, 'mission rows add up to recorded runs in the period');
+select is((select jsonb_array_length(v->'missions') from ar where name='missions'), 5, 'missions with period activity or a completion to date are listed');
+select is((select (m->>'learners_attempted')::int from ar, jsonb_array_elements(v->'missions') m where name='missions' and m->>'mission_code'='coc1_m1'), 2, 'coc1_m1 learners attempted in the period');
+select is((select (m->>'learners_verified')::int from ar, jsonb_array_elements(v->'missions') m where name='missions' and m->>'mission_code'='coc1_m1'), 2, 'coc1_m1 learners verified in the period');
+select is((select (m->>'completion_rate_to_date')::numeric from ar, jsonb_array_elements(v->'missions') m where name='missions' and m->>'mission_code'='coc1_m1'), 66.7, 'coc1_m1 completion to date');
 select is((select (m->>'avg_runs_per_learner')::numeric from ar, jsonb_array_elements(v->'missions') m where name='missions' and m->>'mission_code'='coc1_m1'), 2.0, 'coc1_m1 runs per learner with runs');
 select is((select (m->>'avg_invalid_actions')::numeric from ar, jsonb_array_elements(v->'missions') m where name='missions' and m->>'mission_code'='coc1_m1'), 1.5, 'coc1_m1 invalid actions per run');
-select is((select (m->>'learners_verified')::int from ar, jsonb_array_elements(v->'missions') m where name='missions' and m->>'mission_code'='coc1_m4'), 0, 'incomplete runs never count as completion');
+select ok((select (m->>'learners_attempted')::int = 0 and (m->>'learners_verified')::int = 0 and (m->>'runs')::int = 0
+    and (m->>'learners_verified_to_date')::int = 1 and (m->>'completion_rate_to_date')::numeric = 33.3
+  from ar, jsonb_array_elements(v->'missions') m where name='missions' and m->>'mission_code'='coc1_m3'),
+  'coc1_m3 verified 40 days ago: zero in-period counts, one learner verified to date');
+select is((select (m->>'learners_verified_to_date')::int from ar, jsonb_array_elements(v->'missions') m where name='missions' and m->>'mission_code'='coc1_m4'), 0, 'incomplete runs never count as completion');
 select is((select (m->>'failed_runs')::int from ar, jsonb_array_elements(v->'missions') m where name='missions' and m->>'mission_code'='coc1_m4'), 3, 'coc1_m4 failed runs');
 select is((select m->>'avg_duration_seconds' from ar, jsonb_array_elements(v->'missions') m where name='missions' and m->>'mission_code'='coc1_m4'), null, 'no verified run gives a null completion time');
 select is((select m->'module'->>'code' from ar, jsonb_array_elements(v->'missions') m where name='missions' and m->>'mission_code'='coc1_m4'), 'LO1.2', 'missions carry their curriculum module');
-select ok((select a->>'mission_code' = 'coc1_m2' and (a->>'attempts')::int = 4 and (a->>'released')::int = 3 and (a->>'competent')::int = 1
-  and (a->>'not_yet_competent')::int = 2 and (a->>'pending')::int = 1 from ar, jsonb_array_elements(v->'assessments') a where name='missions'),
+select is((select (m->>'runs')::int from ar, jsonb_array_elements(v->'missions') m where name='missions' and m->>'mission_code'='coc1_m2'), 1, 'another instructor''s learner runs are never mixed in');
+select is((select (m->>'runs')::int from ar, jsonb_array_elements(v->'missions') m where name='missions_t2' and m->>'mission_code'='coc1_m2'), 1, 'the other instructor sees their own learner''s run');
+select ok((select a->>'mission_code' = 'coc1_m2' and (a->>'attempts')::int = 5 and (a->>'released')::int = 3 and (a->>'competent')::int = 1
+  and (a->>'not_yet_competent')::int = 2 and (a->>'pending')::int = 2 from ar, jsonb_array_elements(v->'assessments') a where name='missions'),
   'assessment attempts by mission come from recorded attempts');
 select is((select jsonb_array_length(v->'missions') from ar where name='missions_m1'), 1, 'mission filter narrows to one mission');
 
--- Criterion analysis.
+-- Criterion analysis (assessment and homework criteria).
 select is((select (c->>'percent')::numeric from ar, jsonb_array_elements(v->'criteria') c where name='criteria' and c->>'code'='A7-CRIT-A'), 100.0, 'criterion A percent');
 select is((select (c->>'percent')::numeric from ar, jsonb_array_elements(v->'criteria') c where name='criteria' and c->>'code'='A7-CRIT-B'), 50.0, 'criterion B percent (latest released result per learner)');
 select is((select (c->>'evaluated_learners')::int from ar, jsonb_array_elements(v->'criteria') c where name='criteria' and c->>'code'='A7-CRIT-B'), 2, 'each learner counted once per criterion');
+select ok((select c->>'source' = 'homework' and (c->>'percent')::numeric = 83.3 and c->>'activity_title' = 'Analytics Homework One'
+  from ar, jsonb_array_elements(v->'criteria') c where name='criteria' and c->>'code'='A7-HW-C1'), 'released homework criterion scores are analysed (25 / 30)');
+select is((select jsonb_array_length(v->'criteria') from ar where name='criteria'), 4, 'graded and finalized homework criteria are not analysed before release');
 select is((select v->'strongest'->0->>'code' from ar where name='criteria'), 'A7-CRIT-A', 'strongest criterion');
 select is((select v->'weakest'->0->>'code' from ar where name='criteria'), 'A7-CRIT-B', 'weakest criterion');
 
@@ -450,19 +608,33 @@ select is((select v->'weakest'->0->>'code' from ar where name='criteria'), 'A7-C
 select is((select v->'learner'->>'student_id' from ar where name='profile_l1'), 'A7-001', 'profile header');
 select is((select (v->'progress'->>'overall_percent')::numeric from ar where name='profile_l1'), 12.5, 'profile overall progress');
 select is((select jsonb_array_length(v->'assessments') from ar where name='profile_l1'), 2, 'profile assessment results');
-select ok((select jsonb_array_length(v->'timeline') >= 8 from ar where name='profile_l1'), 'profile activity timeline');
+select is((select jsonb_array_length(v->'timeline') from ar where name='profile_l1'), 14, 'profile timeline lists every recorded event in the period');
+select is((select v->'evaluation' from ar where name='profile_l1'),
+  '{"evaluate":1,"finalize":1,"release":0,"released":3}'::jsonb, 'profile evaluation stages for the learner');
+select ok((select a->>'status' = 'released' and (a->>'percent')::numeric = 80.0 and (a->>'max_score')::numeric = 50
+  from ar, jsonb_array_elements(v->'assignments') a where name='profile_l1' and a->>'title'='Analytics Homework One'), 'profile shows the released homework percentage of max_score');
+select is((select a->>'status' from ar, jsonb_array_elements(v->'assignments') a where name='profile_l1' and a->>'title'='Analytics Homework Three'), 'graded', 'profile shows the homework lifecycle status');
+select is((select a->>'status' from ar, jsonb_array_elements(v->'assignments') a where name='profile_l1' and a->>'title'='Analytics Homework Two'), 'missing', 'profile shows missing homework');
+select is((select (v->'status'->'assignments'->>'pending_evaluation')::int from ar where name='profile_l1'), 2, 'profile pending homework');
 select is((select (v->'status'->>'status') from ar where name='profile_l1'), 'on_track', 'profile status');
-select ok((select jsonb_array_length(v->'classes') = 2 and jsonb_array_length(v->'quizzes') = 1 from ar where name='options'), 'filter options list owned classes and published quizzes');
+select ok((select jsonb_array_length(v->'classes') = 2 and jsonb_array_length(v->'quizzes') = 1 from ar where name='options'), 'filter options list active owned classes and own published quizzes');
 
--- Learner-facing performance (released results only).
+-- Learner-facing performance (released results only; A2 progress methodology).
 select is((select (v->'progress'->>'overall_percent')::numeric from ar where name='me_l1'), 12.5, 'learner overall progress');
 select is((select (c->>'percent')::numeric from ar, jsonb_array_elements(v->'progress'->'cocs') c where name='me_l1' and c->>'coc_code'='coc1'), 50.0, 'learner COC1 progress');
-select ok((select (c->>'modules_completed')::int = 1 and (c->>'modules_total')::int = 3 from ar, jsonb_array_elements(v->'progress'->'cocs') c where name='me_l1' and c->>'coc_code'='coc1'), 'learner module completion counts');
+select ok((select (c->>'modules_completed')::int = 1 and (c->>'modules_total')::int = 4 from ar, jsonb_array_elements(v->'progress'->'cocs') c where name='me_l1' and c->>'coc_code'='coc1'),
+  'learner module counts follow learner_module_states (1 of 4 COC1 modules)');
 select is((select count(*)::int from ar, jsonb_array_elements(v->'competency') c where name='me_l1' and c->>'outcome'='satisfied' and c->>'criterion' like 'Analytics criterion%'), 2, 'competency per released criterion with its label');
 select is((select v->'scores'->'quizzes'->0->>'title' from ar where name='me_l1'), 'Analytics Quiz One', 'learner quiz score with title');
-select is((select (v->'scores'->'homework'->0->>'score')::numeric from ar where name='me_l1'), 80::numeric, 'released homework score');
+select ok((select (h->>'score')::numeric = 40 and (h->>'max_score')::numeric = 50 and (h->>'percent')::numeric = 80.0 and (h->>'released')::boolean
+  from ar, jsonb_array_elements(v->'scores'->'homework') h where name='me_l1' and h->>'title'='Analytics Homework One'), 'released homework score and max_score');
+select is((select jsonb_array_length(v->'scores'->'homework') from ar where name='me_l1'), 2, 'graded and finalized homework stay hidden from the learner until release');
+select is((select (v->'summary'->>'homework_avg')::numeric from ar where name='me_l1'), 80.0, 'learner homework average uses released grades only');
+select ok((select (v->'summary'->>'criteria_achieved')::int = 2 and (v->'summary'->>'criteria_total')::int = 2
+  and (v->'summary'->>'assessments_competent')::int = 1 and (v->'summary'->>'quiz_avg')::numeric = 100 from ar where name='me_l1'), 'learner summary');
 select is((select jsonb_array_length(v->'assessments') from ar where name='me_l1'), 2, 'released assessment results');
 select is((select (v->'practice'->>'runs')::int from ar where name='me_l1'), 4, 'learner practice runs');
+select is((select (v->'practice'->>'missions_verified')::int from ar where name='me_l1'), 3, 'learner verified missions (accepted versions)');
 select is((select (b->>'best_seconds')::int from ar, jsonb_array_elements(v->'practice'->'best_times') b where name='me_l1' and b->>'mission_code'='coc1_m1'), 120, 'best verified time');
 select is((select v->'assessments' from ar where name='me_l2'), '[]'::jsonb, 'unreleased results are not shown to the learner');
 select is((select v->'competency' from ar where name='me_l2'), '[]'::jsonb, 'no competency entries without a released result');

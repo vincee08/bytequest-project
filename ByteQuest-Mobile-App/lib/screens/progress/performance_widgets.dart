@@ -239,7 +239,7 @@ class PerformanceScoresCard extends StatelessWidget {
             for (final item in homework)
               _ValueRow(
                 title: item.title ?? PerformanceContentData.homeworkFallback,
-                detail: item.late ? PerformanceContentData.homeworkLate : null,
+                detail: PerformanceContentData.homeworkDetail(item.released ? item.percent : null, late: item.late),
                 value: !item.released
                     ? PerformanceContentData.homeworkAwaiting
                     : item.score == null
@@ -458,6 +458,92 @@ class _Pill extends StatelessWidget {
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Text(text, style: AppTheme.captionSmall.copyWith(color: color, fontWeight: FontWeight.w700)),
+    );
+  }
+}
+
+/// Compact summary tiles for the Progress screen's Performance slot, computed
+/// by the server (`summary` of get_my_performance). Learning progress and
+/// practice counts are left to the Progress screen, which already shows them.
+class PerformanceSummaryGrid extends StatelessWidget {
+  const PerformanceSummaryGrid({super.key, required this.snapshot});
+
+  final PerformanceSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = snapshot.summary;
+    final tiles = <_SummaryTile>[
+      _SummaryTile(
+        label: PerformanceContentData.summaryCriteriaLabel,
+        value: summary.criteriaTotal == 0
+            ? PerformanceContentData.noValue
+            : PerformanceContentData.ofTotal(summary.criteriaAchieved, summary.criteriaTotal),
+        detail: PerformanceContentData.summaryCriteriaDetail,
+      ),
+      _SummaryTile(
+        label: PerformanceContentData.summaryQuizLabel,
+        value: PerformanceContentData.percent(summary.quizAvg),
+        detail: PerformanceContentData.quizCount(snapshot.quizzes.length),
+      ),
+      _SummaryTile(
+        label: PerformanceContentData.summaryHomeworkLabel,
+        value: PerformanceContentData.percent(summary.homeworkAvg),
+        detail: PerformanceContentData.releasedGrades(summary.homeworkReleased),
+      ),
+      _SummaryTile(
+        label: PerformanceContentData.summaryAssessmentsLabel,
+        value: summary.assessmentsReleased == 0
+            ? PerformanceContentData.noValue
+            : PerformanceContentData.ofTotal(summary.assessmentsCompetent, summary.assessmentsReleased),
+        detail: PerformanceContentData.summaryAssessmentsDetail,
+      ),
+    ];
+    return LayoutBuilder(builder: (context, constraints) {
+      const spacing = 10.0;
+      final twoColumns = constraints.maxWidth >= 340;
+      final width = twoColumns ? (constraints.maxWidth - spacing) / 2 : constraints.maxWidth;
+      return Wrap(
+        spacing: spacing,
+        runSpacing: spacing,
+        children: [for (final tile in tiles) SizedBox(width: width, child: tile)],
+      );
+    });
+  }
+}
+
+class _SummaryTile extends StatelessWidget {
+  const _SummaryTile({required this.label, required this.value, required this.detail});
+
+  final String label;
+  final String value;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      container: true,
+      label: PerformanceContentData.summarySemantics(label, value, detail),
+      child: ExcludeSemantics(
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppTheme.cardWhite,
+            borderRadius: AppTheme.radiusMd,
+            border: Border.all(color: AppTheme.borderLight),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: AppTheme.captionSmall.copyWith(color: AppTheme.textMedium, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text(value, style: AppTheme.headlineSmall.copyWith(fontWeight: FontWeight.w800, color: AppTheme.navy)),
+              const SizedBox(height: 2),
+              Text(detail, style: AppTheme.captionSmall.copyWith(color: AppTheme.textLight)),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
