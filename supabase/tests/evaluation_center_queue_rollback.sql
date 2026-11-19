@@ -3,6 +3,8 @@
 -- and (when slice A3's function exists) quizzes. Rollback-only.
 begin;
 select plan(41);
+-- Learner calls identify as the 1.2.0 app (client version guard, 20261120100000).
+select set_config('request.headers', '{"x-bytequest-app-version":"1.2.0"}', true);
 
 create temporary table q as select
   gen_random_uuid() t1, gen_random_uuid() t2, gen_random_uuid() l1, gen_random_uuid() l2, gen_random_uuid() admin_user,
