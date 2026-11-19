@@ -22,6 +22,8 @@
 -- dart run tool/export_practice_contracts.dart --replay-fixtures <file>.
 begin;
 select plan(13);
+-- Learner calls identify as the 1.2.0 app (client version guard, 20261120100000).
+select set_config('request.headers', '{"x-bytequest-app-version":"1.2.0"}', true);
 
 create temp table seq_ctx (
   admin uuid not null default gen_random_uuid(),
