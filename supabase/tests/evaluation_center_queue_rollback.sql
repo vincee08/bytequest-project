@@ -2,7 +2,9 @@
 -- Finalize, Release and Released stages across technical attempts, homework
 -- and (when slice A3's function exists) quizzes. Rollback-only.
 begin;
-select plan(41);
+select plan(45);
+-- Learner calls identify as the 1.2.0 app (client version guard, 20261120100000).
+select set_config('request.headers', '{"x-bytequest-app-version":"1.2.0"}', true);
 
 create temporary table q as select
   gen_random_uuid() t1, gen_random_uuid() t2, gen_random_uuid() l1, gen_random_uuid() l2, gen_random_uuid() admin_user,
@@ -174,13 +176,14 @@ select is(public.get_evaluation_queue('evaluate','{}')->'counts'->'evaluate',
   ((select count(*) from public.attempts a join public.classes c on c.id=a.class_id where a.status='evaluated' and c.status='active')
    + (select count(*) from public.homework_submissions s join public.homework_assignments h on h.id=s.assignment_id
       join public.classes c on c.id=h.class_id where s.status='submitted' and c.status='active')
-   -- Quiz attempts awaiting essay scores, as slice A3's queue items list them
-   -- (every visible class). This test's own quiz attempt is created below, so
+   -- Quiz attempts awaiting essay scores in active classes: like technical
+   -- and homework items, the quiz action stages skip archived classes
+   -- (20261120100100). This test's own quiz attempt is created below, so
    -- these are only attempts that already exist in the target database.
    + (select count(*) from public.quiz_attempts qa join public.quiz_versions qv on qv.id=qa.quiz_version_id
       join public.quizzes qu on qu.id=qv.quiz_id join public.classes c on c.id=qa.class_id
-      where qa.evaluation_status='pending'))::text::jsonb,
-  'admins read every class');
+      where qa.evaluation_status='pending' and c.status='active'))::text::jsonb,
+  'admins read every active class');
 select set_config('request.jwt.claim.sub',(select l1::text from q),true);
 select throws_ok($$select public.get_evaluation_queue('evaluate','{}')$$,'42501','STAFF_REQUIRED','learners cannot read the evaluation queue');
 reset role;
@@ -259,6 +262,34 @@ select is((select i->>'status'||'|'||(i->>'id') from jsonb_array_elements(public
   'released|'||(select attempt from qz),'a released quiz result appears in Released');
 select is(public.get_evaluation_queue('evaluate','{}')->'counts','{"evaluate":4,"finalize":2,"release":2,"released":2}'::jsonb,
   'after release the quiz attempt is counted only in Released');
+
+-- Archived classes (demo review m4, final review SQL-B M4): every kind leaves
+-- the action stages while its class is archived and keeps its released
+-- results; reactivating the class brings the work back.
+select set_config('request.jwt.claim.sub',(select l2::text from q),true);
+update qz set attempt=(public.start_learner_quiz(assignment,gen_random_uuid())->>'attempt_id')::uuid;
+select public.save_learner_quiz_answer(attempt,objective,'True') from qz;
+select public.save_learner_quiz_answer(attempt,essay,'Wear the strap, open the lever, match the triangle and close the lever.') from qz;
+select public.submit_learner_quiz(attempt,gen_random_uuid()) from qz;
+select set_config('request.jwt.claim.sub',(select t1::text from q),true);
+select is(public.get_evaluation_queue('evaluate','{"kind":"quiz"}')->'counts','{"evaluate":1,"finalize":0,"release":0,"released":1}'::jsonb,
+  'a second essay attempt waits in Evaluate while its class is active');
+reset role;
+update public.classes set status='archived', archived_at=now(), archived_by=(select t1 from q), archive_reason='Rollback archive'
+where id=(select c1 from q);
+select set_config('request.jwt.claim.sub',(select t1::text from q),true);
+set local role authenticated;
+select is(public.get_evaluation_queue('evaluate','{}')->'counts','{"evaluate":0,"finalize":0,"release":0,"released":2}'::jsonb,
+  'an archived class leaves every action stage for technical, homework and quiz items; its released results stay');
+select is(jsonb_array_length(public.quiz_evaluation_queue_items('evaluate','{}'))::text
+    ||'/'||jsonb_array_length(public.quiz_evaluation_queue_items('released','{}'))::text,
+  '0/1','the quiz queue skips archived classes in Evaluate and still lists their released results');
+reset role;
+update public.classes set status='active', archived_at=null, archived_by=null, archive_reason=null where id=(select c1 from q);
+select set_config('request.jwt.claim.sub',(select t1::text from q),true);
+set local role authenticated;
+select is(public.get_evaluation_queue('evaluate','{"kind":"quiz"}')->'counts'->'evaluate','1'::jsonb,
+  'reactivating the class brings its quiz attempt back to Evaluate');
 reset role;
 
 select * from finish();

@@ -22,6 +22,8 @@
 -- dart run tool/export_practice_contracts.dart --replay-fixtures <file>.
 begin;
 select plan(13);
+-- Learner calls identify as the 1.2.0 app (client version guard, 20261120100000).
+select set_config('request.headers', '{"x-bytequest-app-version":"1.2.0"}', true);
 
 create temp table seq_ctx (
   admin uuid not null default gen_random_uuid(),
@@ -227,14 +229,18 @@ begin
         clock_timestamp());
     end loop;
     perform public.submit_attempt(v_attempt, gen_random_uuid(), 600);
-    -- Class practice is not evaluated on submit; the learner may request it.
-    if r.practice then
-      perform public.evaluate_submitted_attempt(v_attempt);
-    end if;
     update seq_run set attempt = v_attempt where name = r.name;
   end loop;
 end $$;
 reset role;
+-- Class practice is not evaluated on submit; the server evaluates it on
+-- request with the service role (learners cannot, 20261120100200).
+grant select on seq_run to service_role;
+set local role service_role;
+select set_config('request.jwt.claim.role', 'service_role', true);
+select count(public.evaluate_submitted_attempt(attempt)) from seq_run where practice;
+reset role;
+select set_config('request.jwt.claim.role', '', true);
 
 create function pg_temp.not_satisfied(p_run text)
 returns text[] language sql stable as $$
