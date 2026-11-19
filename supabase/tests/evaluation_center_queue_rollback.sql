@@ -2,7 +2,7 @@
 -- Finalize, Release and Released stages across technical attempts, homework
 -- and (when slice A3's function exists) quizzes. Rollback-only.
 begin;
-select plan(31);
+select plan(41);
 
 create temporary table q as select
   gen_random_uuid() t1, gen_random_uuid() t2, gen_random_uuid() l1, gen_random_uuid() l2, gen_random_uuid() admin_user,
@@ -179,22 +179,80 @@ select set_config('request.jwt.claim.sub',(select l1::text from q),true);
 select throws_ok($$select public.get_evaluation_queue('evaluate','{}')$$,'42501','STAFF_REQUIRED','learners cannot read the evaluation queue');
 reset role;
 
--- Quiz items join when slice A3's function is present (stubbed here).
-create or replace function public.quiz_evaluation_queue_items(p_stage text, p_filters jsonb)
-returns jsonb language sql stable set search_path='' as $$
-  select case when p_stage='evaluate' and coalesce(p_filters->>'learner_id','')<>'00000000-0000-0000-0000-000000000000'
-    then jsonb_build_array(jsonb_build_object('kind','quiz','id','00000000-0000-4000-8000-00000000a401','title','Stub essay quiz',
-      'learner',jsonb_build_object('id',null,'name','Stub learner'),'class',jsonb_build_object('id',null,'title','Stub class'),
-      'submitted_at','2026-11-14T00:00:00Z','status','pending','score',4,'max_score',10,'link','/quizzes/stub?tab=results'))
-    else '[]'::jsonb end
-$$;
-grant execute on function public.quiz_evaluation_queue_items(text,jsonb) to authenticated;
+-- Quiz essays through slice A3's real functions: an instructor-release quiz
+-- with a scenario essay moves Evaluate -> Finalize -> Release -> Released.
+create temporary table qz(quiz uuid, version uuid, objective uuid, essay uuid, assignment uuid, attempt uuid);
+insert into qz default values;
+grant all on qz to authenticated, service_role;
 select set_config('request.jwt.claim.sub',(select t1::text from q),true);
 set local role authenticated;
-select ok((public.get_evaluation_queue('evaluate','{}')->>'quiz_available')::boolean,'the quiz branch is used once the function exists');
-select is(public.get_evaluation_queue('evaluate','{}')->'counts'->'evaluate','5'::jsonb,'quiz items are counted in their stage');
-select is((public.get_evaluation_queue('evaluate','{}')->'items'->0->>'kind'),'quiz','quiz items are ordered with the others by submission time');
+update qz set quiz=(public.create_instructor_quiz('Queue essay quiz','Assembly',p_coc_module_id=>(select coc1 from q),
+  p_focus=>'Explain safe CPU installation',p_module_ids=>array[(select lo11 from q)])).id;
+update qz set version=(select id from public.quiz_versions where quiz_id=qz.quiz);
+update qz set objective=(public.upsert_quiz_item(version,'true_false','Thermal paste goes between the CPU and the cooler.','[]','"true"')).id;
+update qz set essay=(public.upsert_quiz_item(version,'scenario_essay','Explain how you would install the processor safely.','[]','""',
+  p_scenario=>'A client left an unassembled workstation on your bench with an anti-static mat.',
+  p_rubric=>'[{"id":"C1","criterion":"Safety","description":"ESD precautions before handling","max_points":4},{"id":"C2","criterion":"Procedure","description":"Lever, alignment and seating","max_points":6}]')).id;
+select public.review_quiz_item(id,'approved') from public.quiz_items where quiz_version_id=(select version from qz);
+select public.publish_and_assign_quiz(version,array[(select c1 from q)]) from qz;
+update qz set assignment=(select id from public.quiz_assignments where quiz_version_id=qz.version);
+select set_config('request.jwt.claim.sub',(select l1::text from q),true);
+update qz set attempt=(public.start_learner_quiz(assignment,gen_random_uuid())->>'attempt_id')::uuid;
+select public.save_learner_quiz_answer(attempt,objective,'True') from qz;
+select public.save_learner_quiz_answer(attempt,essay,'Ground yourself on the mat, lift the lever, align the triangle and lower the CPU.') from qz;
+select public.submit_learner_quiz(attempt,gen_random_uuid()) from qz;
+
+select set_config('request.jwt.claim.sub',(select t1::text from q),true);
+select ok((public.get_evaluation_queue('evaluate','{}')->>'quiz_available')::boolean,'the queue reads quiz essays through slice A3''s function');
+select is(public.get_evaluation_queue('evaluate','{}')->'counts','{"evaluate":5,"finalize":2,"release":2,"released":1}'::jsonb,
+  'a submitted essay attempt is counted in Evaluate');
+select is((select i from jsonb_array_elements(public.get_evaluation_queue('evaluate','{"kind":"quiz"}')->'items') i),
+  public.quiz_evaluation_queue_items('evaluate','{}')->0,'quiz items pass through exactly as slice A3 builds them');
+select is((select jsonb_agg(k order by k) from jsonb_object_keys(public.get_evaluation_queue('evaluate','{"kind":"quiz"}')->'items'->0) k),
+  '["class", "id", "kind", "learner", "link", "max_score", "score", "status", "submitted_at", "title"]'::jsonb,
+  'quiz items keep the documented Evaluation Center shape');
+select is((select i->>'kind'||'|'||(i->>'title')||'|'||(i->>'status')||'|'||coalesce(i->>'score','null')||'|'||(i->>'max_score')||'|'||(i->'learner'->>'name')
+    ||'|'||(i->'class'->>'title')||'|'||(i->>'link')
+  from jsonb_array_elements(public.get_evaluation_queue('evaluate','{"kind":"quiz"}')->'items') i),
+  'quiz|Queue essay quiz|pending|null|11|Queue Learner One|Queue class one|/quizzes/'||(select quiz from qz)||'?tab=results&attempt='||(select attempt from qz),
+  'Evaluate lists the attempt awaiting essay scores, linked to the quiz results');
+select is((select jsonb_agg(i->>'kind' order by ord) from jsonb_array_elements(public.get_evaluation_queue('evaluate','{}')->'items') with ordinality x(i,ord)),
+  '["homework","technical","technical","homework","quiz"]'::jsonb,'quiz items are ordered with the others by submission time');
 select is(public.get_evaluation_queue('evaluate','{"kind":"technical"}')->'counts'->'evaluate','2'::jsonb,'the kind filter excludes quiz items');
+select is(public.get_evaluation_queue('evaluate','{"coc_code":"coc2"}')->'counts'->'evaluate','1'::jsonb,'the COC filter applies to quiz items');
+select is(public.get_evaluation_queue('evaluate',jsonb_build_object('learner_id',(select l2 from q)))->'counts'->'evaluate','2'::jsonb,
+  'the learner filter applies to quiz items');
+select set_config('request.jwt.claim.sub',(select t2::text from q),true);
+select is(public.get_evaluation_queue('evaluate','{"kind":"quiz"}')->'counts'->'evaluate','0'::jsonb,'another instructor sees none of the quiz items');
+reset role;
+
+-- Essay scoring stays on the quiz results page (A3); then Finalize per attempt and Release.
+set local role service_role;
+select public.manage_quiz_evaluation(t1,'score_essay',jsonb_build_object('attempt_id',(select attempt from qz),'item_id',(select essay from qz),
+  'criterion_scores',jsonb_build_object('C1',3,'C2',5),'feedback','Good ESD steps.')) from q;
+reset role;
+select set_config('request.jwt.claim.sub',(select t1::text from q),true);
+set local role authenticated;
+select is((select i->>'status'||'|'||(i->>'score')||'/'||(i->>'max_score') from jsonb_array_elements(public.get_evaluation_queue('finalize','{"kind":"quiz"}')->'items') i),
+  'evaluated|9/11','scored essays move the attempt to Finalize with objective plus essay points');
+reset role;
+set local role service_role;
+select public.manage_quiz_evaluation(t1,'finalize',jsonb_build_object('attempt_id',(select attempt from qz))) from q;
+reset role;
+select set_config('request.jwt.claim.sub',(select t1::text from q),true);
+set local role authenticated;
+select is((select i->>'status'||'|'||(i->>'score')||'/'||(i->>'max_score') from jsonb_array_elements(public.get_evaluation_queue('release','{"kind":"quiz"}')->'items') i),
+  'finalized|9/11','a finalized quiz result waits in Release with its final total');
+reset role;
+set local role service_role;
+select public.manage_quiz_evaluation(t1,'release',jsonb_build_object('attempt_ids',jsonb_build_array((select attempt from qz)))) from q;
+reset role;
+select set_config('request.jwt.claim.sub',(select t1::text from q),true);
+set local role authenticated;
+select is((select i->>'status'||'|'||(i->>'id') from jsonb_array_elements(public.get_evaluation_queue('released','{"kind":"quiz"}')->'items') i),
+  'released|'||(select attempt from qz),'a released quiz result appears in Released');
+select is(public.get_evaluation_queue('evaluate','{}')->'counts','{"evaluate":4,"finalize":2,"release":2,"released":2}'::jsonb,
+  'after release the quiz attempt is counted only in Released');
 reset role;
 
 select * from finish();
