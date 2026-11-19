@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Plus, Search, ChevronRight, ListChecks } from "lucide-react";
+import { ChevronRight, ListChecks, Plus, Search } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,29 +13,42 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { quizTypeLabels } from "@/lib/quizzes/authoring";
+import {
+  modulesForCoc,
+  topicsForScope,
+  type CurriculumCatalog,
+} from "@/lib/quizzes/curriculum";
+import {
+  defaultLibraryFilters,
+  filterLibrary,
+  libraryStatusLabels,
+  type LibraryFilters,
+  type LibraryQuiz,
+} from "@/lib/quizzes/library";
 import { CreateQuizForm } from "./CreateQuizForm";
-import { QuizDeadlineControls, type QuizDeadlineAssignment } from './QuizDeadlineControls';
+import {
+  QuizDeadlineControls,
+  type QuizDeadlineAssignment,
+} from "./QuizDeadlineControls";
+
+const selectClass =
+  "min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60";
+
+export type LibraryQuizWithDeadlines = LibraryQuiz & {
+  deadlines: QuizDeadlineAssignment[];
+};
 
 export function QuizLibrary({
   quizzes,
-  modules,
+  catalog,
   serverNow,
 }: {
-  quizzes: {
-    id: string;
-    title: string;
-    topic: string;
-    coc: string;
-    status: string;
-    version: number;
-    questionCount: number;
-    deadlines?: QuizDeadlineAssignment[];
-  }[];
-  modules: { id: string; code: string; title: string }[];
-  serverNow?: string;
+  quizzes: LibraryQuizWithDeadlines[];
+  catalog: CurriculumCatalog;
+  serverNow: string;
 }) {
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState("active");
+  const [filters, setFilters] = useState<LibraryFilters>(defaultLibraryFilters);
   const [create, setCreate] = useState(false);
   const [dirty, setDirty] = useState(false);
   useEffect(() => {
@@ -44,22 +57,37 @@ export function QuizLibrary({
     window.addEventListener("beforeunload", guard);
     return () => window.removeEventListener("beforeunload", guard);
   }, [dirty]);
-  const query = search.trim().toLowerCase();
-  const visible = quizzes.filter(
-    (quiz) =>
-      (filter === "all" ||
-        (filter === "active"
-          ? quiz.status !== "archived"
-          : quiz.status === filter)) &&
-      `${quiz.title} ${quiz.topic} ${quiz.coc}`.toLowerCase().includes(query),
+  const moduleCoc = useMemo(
+    () => new Map(catalog.modules.map((module) => [module.id, module.cocId])),
+    [catalog.modules],
   );
+  const visible = filterLibrary(quizzes, filters, moduleCoc);
+  const modules = filters.cocId
+    ? modulesForCoc(catalog, filters.cocId)
+    : catalog.modules;
+  const topics = filters.cocId
+    ? topicsForScope(
+        catalog,
+        filters.cocId,
+        filters.moduleId ? [filters.moduleId] : [],
+      )
+    : catalog.topics;
+  const set = (patch: Partial<LibraryFilters>) =>
+    setFilters((current) => ({ ...current, ...patch }));
+  const counts = (status: string) =>
+    quizzes.filter((quiz) => quiz.status === status).length;
+  const filtered =
+    JSON.stringify({ ...filters, sort: "updated" }) !==
+    JSON.stringify(defaultLibraryFilters);
+
   return (
     <div className="space-y-5">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Quizzes</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Create, review and publish supplementary quizzes to your classes.
+            Curriculum-based quizzes organised by COC, module, topic and
+            learning outcome.
           </p>
         </div>
         <Button className="min-h-11" onClick={() => setCreate(true)}>
@@ -68,41 +96,113 @@ export function QuizLibrary({
         </Button>
       </header>
       <p className="text-sm text-muted-foreground">
-        {quizzes.filter((quiz) => quiz.status === "draft").length} drafts ·{" "}
-        {quizzes.filter((quiz) => quiz.status === "published").length} published
-        · {quizzes.filter((quiz) => quiz.status === "archived").length} archived
+        {counts("draft")} drafts · {counts("published")} published ·{" "}
+        {counts("closed")} closed · {counts("archived")} archived
       </p>
       <section className="overflow-hidden rounded-xl border border-border bg-card">
-        <div className="flex flex-wrap items-center gap-3 border-b border-border p-4">
-          <div className="relative min-w-0 flex-1">
+        <div className="grid gap-3 border-b border-border p-4 sm:grid-cols-2 lg:grid-cols-6">
+          <div className="relative min-w-0 sm:col-span-2">
             <Search
               aria-hidden="true"
-              className="absolute left-3 top-3 h-4 w-4 text-muted-foreground"
+              className="absolute left-3 top-3.5 h-4 w-4 text-muted-foreground"
             />
             <Input
               className="min-h-11 pl-9"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
+              value={filters.search}
+              onChange={(event) => set({ search: event.target.value })}
               aria-label="Search quizzes"
-              placeholder="Search title, topic or COC"
+              placeholder="Search title, topic or module"
             />
           </div>
           <select
-            className="min-h-11 rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring"
-            value={filter}
-            onChange={(event) => setFilter(event.target.value)}
-            aria-label="Filter quizzes"
+            className={selectClass}
+            aria-label="Filter by COC"
+            value={filters.cocId}
+            onChange={(event) =>
+              set({ cocId: event.target.value, moduleId: "", topicId: "" })
+            }
           >
-            {["active", "draft", "published", "archived", "all"].map(
-              (value) => (
-                <option key={value} value={value}>
-                  {value === "active"
-                    ? "Active quizzes"
-                    : value[0].toUpperCase() + value.slice(1)}
-                </option>
-              ),
-            )}
+            <option value="">All COCs</option>
+            {catalog.cocs.map((coc) => (
+              <option key={coc.id} value={coc.id}>
+                {coc.code.toUpperCase()}
+              </option>
+            ))}
           </select>
+          <select
+            className={selectClass}
+            aria-label="Filter by module"
+            value={filters.moduleId}
+            onChange={(event) => set({ moduleId: event.target.value, topicId: "" })}
+          >
+            <option value="">All modules</option>
+            {modules.map((module) => (
+              <option key={module.id} value={module.id}>
+                {module.code} {module.title}
+              </option>
+            ))}
+          </select>
+          <select
+            className={selectClass}
+            aria-label="Filter by topic"
+            value={filters.topicId}
+            onChange={(event) => set({ topicId: event.target.value })}
+          >
+            <option value="">All topics</option>
+            {topics.map((topic) => (
+              <option key={topic.id} value={topic.id}>
+                {topic.title}
+              </option>
+            ))}
+          </select>
+          <select
+            className={selectClass}
+            aria-label="Filter by quiz type"
+            value={filters.quizType}
+            onChange={(event) => set({ quizType: event.target.value })}
+          >
+            <option value="">All types</option>
+            {Object.entries(quizTypeLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <select
+            className={selectClass}
+            aria-label="Filter by status"
+            value={filters.status}
+            onChange={(event) => set({ status: event.target.value })}
+          >
+            <option value="active">Not archived</option>
+            <option value="draft">Draft</option>
+            <option value="published">Published</option>
+            <option value="closed">Closed</option>
+            <option value="archived">Archived</option>
+            <option value="all">All statuses</option>
+          </select>
+          <select
+            className={selectClass}
+            aria-label="Sort quizzes"
+            value={filters.sort}
+            onChange={(event) =>
+              set({ sort: event.target.value as LibraryFilters["sort"] })
+            }
+          >
+            <option value="updated">Recently updated</option>
+            <option value="title">Title A–Z</option>
+            <option value="due">Next deadline</option>
+            <option value="status">Status</option>
+          </select>
+          {filtered ? (
+            <Button
+              variant="ghost"
+              className="min-h-11"
+              onClick={() => setFilters(defaultLibraryFilters)}
+            >
+              Clear filters
+            </Button>
+          ) : null}
         </div>
         <p className="sr-only" role="status">
           {visible.length} quizzes shown
@@ -120,25 +220,54 @@ export function QuizLibrary({
                       {quiz.title}
                     </h2>
                     <p className="mt-1 break-words text-xs text-muted-foreground">
-                      {quiz.coc} · {quiz.topic}
+                      {quiz.coc}
+                      {quiz.mapped
+                        ? quiz.moduleCodes.length
+                          ? ` · ${quiz.moduleCodes.join(", ")}`
+                          : " · Whole COC"
+                        : " · Not mapped to a module"}{" "}
+                      · {quiz.topic}
                     </p>
                   </div>
                   <span className="text-xs text-muted-foreground">
                     v{quiz.version} · {quiz.questionCount} questions
+                    {quiz.essayCount ? ` · ${quiz.essayCount} essay` : ""}
+                    {quiz.timeLimitMinutes
+                      ? ` · ${quiz.timeLimitMinutes} min`
+                      : ""}
                   </span>
+                  {quiz.quizType ? (
+                    <Badge variant="outline">{quizTypeLabels[quiz.quizType]}</Badge>
+                  ) : null}
+                  {!quiz.mapped ? (
+                    <Badge variant="outline">Not mapped</Badge>
+                  ) : null}
                   <Badge
                     variant={
-                      quiz.status === "published" ? "secondary" : "outline"
+                      quiz.status === "published"
+                        ? "secondary"
+                        : quiz.status === "closed"
+                          ? "default"
+                          : "outline"
                     }
                   >
-                    {quiz.status}
+                    {libraryStatusLabels[quiz.status]}
+                    {quiz.hasDraft && quiz.status !== "draft" ? " · draft open" : ""}
                   </Badge>
                   <ChevronRight
                     className="h-4 w-4 text-muted-foreground"
                     aria-hidden="true"
                   />
                 </Link>
-                {quiz.deadlines?.length ? <div className="px-4 pb-4"><QuizDeadlineControls quizTitle={quiz.title} assignments={quiz.deadlines} serverNow={serverNow ?? new Date().toISOString()} /></div> : null}
+                {quiz.deadlines.length ? (
+                  <div className="px-4 pb-4">
+                    <QuizDeadlineControls
+                      quizTitle={quiz.title}
+                      assignments={quiz.deadlines}
+                      serverNow={serverNow}
+                    />
+                  </div>
+                ) : null}
               </li>
             ))}
           </ul>
@@ -150,13 +279,13 @@ export function QuizLibrary({
             />
             <p className="mt-3 font-medium">
               {quizzes.length
-                ? "No quizzes match your search"
+                ? "No quizzes match these filters"
                 : "Create your first quiz"}
             </p>
             <p className="mt-1 text-sm text-muted-foreground">
               {quizzes.length
-                ? "Try another search or filter."
-                : "Add questions, review them, then choose your classes."}
+                ? "Try another COC, module, type or status."
+                : "Choose a COC and modules, state the focus, then add and review questions."}
             </p>
           </div>
         )}
@@ -178,11 +307,11 @@ export function QuizLibrary({
           <DialogHeader>
             <DialogTitle>Create quiz</DialogTitle>
             <DialogDescription>
-              Start with a title and topic. Your private draft opens directly in
-              the question editor.
+              Place the quiz in the curriculum and state its focus. Your
+              private draft opens directly in the question editor.
             </DialogDescription>
           </DialogHeader>
-          <CreateQuizForm modules={modules} onDirtyChange={setDirty} />
+          <CreateQuizForm catalog={catalog} onDirtyChange={setDirty} />
         </DialogContent>
       </Dialog>
     </div>
