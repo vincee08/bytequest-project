@@ -131,6 +131,8 @@ class QuizContentData {
   static const openingQuiz = 'Opening quiz…';
   static const openFailed =
       'This quiz could not be opened. Check its availability and try again.';
+  static const updateRequired =
+      'This quiz needs the latest version of ByteQuest. Update the app, then open the quiz again.';
   static const quizTypePreAssessment = 'Pre-assessment';
   static const quizTypeFormative = 'Formative';
   static const quizTypeSummative = 'Summative';

@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../core/config/supabase_config.dart';
 import '../models/learner_quiz_model.dart';
+import 'app_version_service.dart';
 
 /// The server refused a quiz write because the attempt is no longer open:
 /// its time limit or the class deadline passed (and the saved answers were
@@ -14,6 +15,15 @@ class LearnerQuizClosedException implements Exception {
 
   @override
   String toString() => 'LearnerQuizClosedException($code)';
+}
+
+/// The server refused to start the quiz because this app version cannot
+/// answer it (scenario essays need 1.2.0 or later): the learner must update.
+class LearnerQuizUpdateRequiredException implements Exception {
+  const LearnerQuizUpdateRequiredException();
+
+  @override
+  String toString() => 'LearnerQuizUpdateRequiredException';
 }
 
 class LearnerQuizService {
@@ -62,6 +72,9 @@ class LearnerQuizService {
       );
       return LearnerQuizAttempt.fromJson(Map<String, dynamic>.from(response));
     } catch (error) {
+      if (isAppUpdateRequiredError(error)) {
+        throw const LearnerQuizUpdateRequiredException();
+      }
       _rethrow(error);
     }
   }
