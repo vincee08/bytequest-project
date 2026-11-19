@@ -70,6 +70,9 @@ test("overview cards state population and period and mark unlinked sources", () 
   assert.match(html, /Not linked/);
   assert.match(html, /3 learners · /, "each card footer states the population");
   assert.match(html, /tab=learners&amp;class=11111111/, "class rows drill down to the learner list");
+  const adminHtml = renderToStaticMarkup(<OverviewPanel data={data} query={query} pathname={null} scopeLabel="every active class" />);
+  assert.doesNotMatch(adminHtml, /href="\/analytics/, "the admin overview never links into instructor-only routes");
+  assert.match(adminHtml, /Active members of every active class/);
 });
 
 test("class comparison renders the summary, chart table and drill-down", () => {

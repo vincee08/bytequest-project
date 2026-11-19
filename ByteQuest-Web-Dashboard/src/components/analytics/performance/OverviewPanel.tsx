@@ -27,7 +27,8 @@ export function OverviewPanel({
 }: {
   data: AnalyticsOverview;
   query: AnalyticsQuery;
-  pathname: string;
+  /** Base path for tab links; null renders the overview without drill-down links (admin view). */
+  pathname: string | null;
   scopeLabel?: string;
 }) {
   const period = describePeriod(data.period);
@@ -44,6 +45,7 @@ export function OverviewPanel({
     { measure: "Homework", applicable: data.homework.applicable, completion: data.homework.completion_rate, basis: `${data.homework.submitted} submitted, ${data.homework.missing} missing` },
     { measure: "Practice missions", applicable: data.missions.applicable, completion: data.missions.completion_rate, basis: `${data.missions.verified} verified in period` },
   ];
+  const link = (tab: "learners" | "missions" | "quizzes") => (pathname ? analyticsHref(pathname, query, { tab }) : undefined);
   const hasTrend = data.trend.length > 0;
   const trendTotals = data.trend.reduce(
     (sum, day) => sum + day.assessments + day.quizzes + day.homework + day.practice_runs + day.verified,
@@ -60,15 +62,15 @@ export function OverviewPanel({
       <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
         <SummaryCard icon={Users} label="Learners" value={String(data.population.enrolled)}
           detail={`${data.population.active_in_period} active in period · ${data.population.completed} completed all required items`}
-          footer={`Active members of ${scopeLabel} · ${period}`} href={analyticsHref(pathname, query, { tab: "learners" })} linkLabel="Open the learner list" />
+          footer={`Active members of ${scopeLabel} · ${period}`} href={link("learners")} linkLabel="Open the learner list" />
         <SummaryCard icon={GraduationCap} label="Assessment results" applicable={data.assessments.applicable}
           value={formatPercent(data.assessments.avg_percent)}
           detail={`${data.assessments.released} released · ${formatPercent(data.assessments.competent_rate)} competent · ${data.assessments.pending_release} pending release`}
-          footer={footer} href={analyticsHref(pathname, query, { tab: "missions" })} linkLabel="Open mission and assessment analytics" />
+          footer={footer} href={link("missions")} linkLabel="Open mission and assessment analytics" />
         <SummaryCard icon={ClipboardCheck} label="Quiz scores" applicable={data.quizzes.applicable}
           value={formatPercent(data.quizzes.avg_percent)}
           detail={`${data.quizzes.submitted} submitted · ${formatPercent(data.quizzes.completion_rate)} completion${data.quizzes.pending ? ` · ${data.quizzes.pending} awaiting evaluation` : ""}`}
-          footer={footer} href={analyticsHref(pathname, query, { tab: "quizzes" })} linkLabel="Open quiz analytics" />
+          footer={footer} href={link("quizzes")} linkLabel="Open quiz analytics" />
         <SummaryCard icon={FileCheck2} label="Homework scores" applicable={data.homework.applicable}
           value={formatPercent(data.homework.avg_percent)}
           detail={`${data.homework.submitted} submitted · ${data.homework.missing} missing · ${data.homework.late} late`}
@@ -76,7 +78,7 @@ export function OverviewPanel({
         <SummaryCard icon={Route} label="Practice missions" applicable={data.missions.applicable}
           value={formatPercent(data.missions.completion_rate)}
           detail={`${data.missions.verified} verified · ${data.missions.runs} runs (${data.missions.successful_runs} verified, ${data.missions.failed_runs} incomplete) · avg ${formatDuration(data.missions.avg_duration_seconds)}`}
-          footer={footer} href={analyticsHref(pathname, query, { tab: "missions" })} linkLabel="Open mission analytics" />
+          footer={footer} href={link("missions")} linkLabel="Open mission analytics" />
         <SummaryCard icon={BookOpenCheck} label="Learning progress" applicable={data.learning_progress.applicable}
           value={formatPercent(data.learning_progress.avg_percent)}
           detail={data.learning_progress.definition}
@@ -133,17 +135,17 @@ export function OverviewPanel({
       </Panel>
 
       <Panel title="Classes in scope" description="Active classes included in every number on this page." action={
-        <Link className="text-xs font-medium text-primary hover:underline" href={analyticsHref(pathname, query, { tab: "classes" })}>Compare classes</Link>
+        pathname ? <Link className="inline-flex min-h-9 items-center text-xs font-medium text-primary hover:underline" href={analyticsHref(pathname, query, { tab: "classes" })}>Compare classes</Link> : null
       }>
         <DataTable caption="Classes in scope" minWidth={480} rows={data.classes} rowKey={(row) => row.id} emptyTitle="No active class is in scope."
           columns={[
             { key: "title", label: "Class", render: (row) => <span className="font-medium">{row.title}</span> },
             { key: "code", label: "Class code", render: (row) => row.class_code ?? "—" },
             { key: "enrolled", label: "Enrolled learners", align: "right", render: (row) => row.enrolled },
-            { key: "drill", label: "Drill down", align: "right", render: (row) => (
+            ...(pathname ? [{ key: "drill", label: "Drill down", align: "right" as const, render: (row: AnalyticsOverview["classes"][number]) => (
               <Link className="inline-flex min-h-9 items-center text-xs font-medium text-primary hover:underline"
-                href={analyticsHref(pathname, { ...query, classId: row.id, learnerId: null }, { tab: "learners" })}>Learners</Link>
-            ) },
+                href={analyticsHref(pathname, { ...query, classId: row.id, learnerId: null }, { tab: "learners" })}>Learners<span className="sr-only"> in {row.title}</span></Link>
+            ) }] : []),
           ]} />
       </Panel>
     </div>
