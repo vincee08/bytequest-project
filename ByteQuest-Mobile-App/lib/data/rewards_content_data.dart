@@ -97,10 +97,11 @@ class RewardsContentData {
       'Classmates in your active classes who chose to appear';
   static const String leaderboardToggleTitle =
       'Show me on the class leaderboard';
+  // The server shows "First L." names, as the info sheet says.
   static const String leaderboardToggleSubtitle =
-      'Show my first name and points to classmates.';
+      'Show my first name, last initial and points to classmates.';
   static const String leaderboardShown =
-      'Classmates can now see your first name and points.';
+      'Classmates can now see your first name, last initial and points.';
   static const String leaderboardHidden =
       'You are now hidden from your classmates.';
   static const String leaderboardSaveFailed =

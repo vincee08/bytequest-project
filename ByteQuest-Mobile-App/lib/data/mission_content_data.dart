@@ -626,8 +626,10 @@ class MissionContentData {
       'Practice access could not be verified. Check your connection and retry.';
   static const practiceLockedMessage =
       'Complete the earlier COCs and pass their practice quizzes to unlock this workspace.';
+  // Module methodology: the COC quiz opens once every published lesson and
+  // mission of the COC's modules is complete, not after five missions.
   static const practiceSavedMessage =
-      'Practice work verified and saved. Complete all five missions, then take the COC quiz.';
+      'Practice work verified and saved. The COC quiz opens when every lesson and mission in this COC is complete.';
   static const practiceSubmitFailed =
       'The server could not verify this work. Review the measured results and retry; your progress is saved.';
   static const practiceVerifyUnreachable =

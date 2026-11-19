@@ -172,7 +172,8 @@ class QuizContentData {
   static const submittedAnswersHeading = 'Your submitted answers';
   static const submittedAnswersSupporting =
       'Scores appear after your Instructor releases the result.';
-  static const itemCorrect = 'Correct';
+  // Never a bare "Correct" (AGENTS.md §3.4): say what was compared.
+  static const itemCorrect = 'Matches the answer key';
   static const itemNeedsReview = 'Needs review';
   static const itemNotAnswered = 'Not answered';
   static const itemSubmitted = 'Submitted';

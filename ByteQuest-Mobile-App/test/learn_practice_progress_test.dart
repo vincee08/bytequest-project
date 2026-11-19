@@ -1,11 +1,14 @@
 import 'package:bytequest/core/theme/app_theme.dart';
 import 'package:bytequest/core/widgets/learner_navigation_shell.dart';
 import 'package:bytequest/data/learning_content_data.dart';
+import 'package:bytequest/data/mission_content_data.dart';
 import 'package:bytequest/models/assigned_activity_model.dart';
 import 'package:bytequest/models/curriculum_model.dart';
 import 'package:bytequest/models/homework_model.dart';
+import 'package:bytequest/models/learner_learning_path_model.dart';
 import 'package:bytequest/models/learner_quiz_model.dart';
 import 'package:bytequest/models/mission_model.dart';
+import 'package:bytequest/screens/courses/coc_details_screen.dart';
 import 'package:bytequest/screens/dashboard/home_class_work_links.dart';
 import 'package:bytequest/screens/learn/learn_screen.dart';
 import 'package:bytequest/screens/learn/lesson_markdown.dart';
@@ -14,8 +17,10 @@ import 'package:bytequest/screens/learn/topic_reader_screen.dart';
 import 'package:bytequest/screens/missions/missions_screen.dart';
 import 'package:bytequest/screens/practice/practice_screen.dart';
 import 'package:bytequest/screens/progress/progress_screen.dart';
+import 'package:bytequest/screens/quizzes/quiz_details_screen.dart';
 import 'package:bytequest/services/curriculum_service.dart';
 import 'package:bytequest/services/learner_realtime_coordinator.dart';
+import 'package:bytequest/services/mission_service.dart';
 import 'package:bytequest/widgets/bytequest_bottom_nav.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -424,6 +429,98 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(TopicReaderScreen), findsNothing);
     expect(find.text(LearningContentData.progressValue(2, 3)), findsOneWidget);
+  });
+
+  // Rest Minor 9 (A2 #3, quizzes): module detail lists the class quizzes
+  // linked to the module, and only those.
+  testWidgets('module detail lists the class quizzes linked to the module',
+      (tester) async {
+    await setSurface(tester, 420, 3000);
+    final service = FakeCurriculumService();
+    LearnerQuizSummary quiz(String id, List<String> modules,
+            {String coc = 'coc1'}) =>
+        LearnerQuizSummary.fromJson({
+          'assignment_id': 'assignment-$id',
+          'quiz_version_id': 'version-$id',
+          'quiz_id': 'quiz-$id',
+          'title': 'Class quiz $id',
+          'class_id': 'class',
+          'class_title': 'CSS 11-A',
+          'coc_code': coc,
+          'is_available': true,
+          'module_codes': modules,
+        });
+    await tester.pumpWidget(host(ModuleDetailScreen(
+      cocCode: 'coc1',
+      moduleId: 'module-LO1.1',
+      initial: service.projection,
+      service: service,
+      loadQuizzes: () async => [
+        quiz('linked', ['LO1.1']),
+        quiz('other-module', ['LO1.2']),
+        quiz('other-coc', ['LO1.1'], coc: 'coc2'),
+      ],
+    )));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('module-quiz-assignment-linked')), 200,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text(LearningContentData.moduleQuizzesTitle), findsOneWidget);
+    expect(find.text('Class quiz linked'), findsOneWidget);
+    expect(find.text('Class quiz other-module'), findsNothing);
+    expect(find.text('Class quiz other-coc'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('module-quiz-assignment-linked')));
+    await tester.pumpAndSettle();
+    expect(find.byType(QuizDetailsScreen), findsOneWidget);
+  });
+
+  // Rest Minor 10 (A2 #2): the Assessment path screens use the same
+  // module-level access as Practice.
+  test('COC details mission access follows the curriculum modules', () {
+    final projection = FakeCurriculumService().projection;
+    Mission mission(String id, {bool? unlocked}) => Mission(
+        id: id,
+        cocId: 'coc1',
+        missionCode: id.toUpperCase(),
+        missionNumber: 1,
+        title: id,
+        missionType: MissionType.identification,
+        orderIndex: 1,
+        isUnlocked: unlocked);
+    expect(curriculumMissionUnlocked(projection, mission('coc1_m1')), isTrue);
+    expect(
+        curriculumMissionUnlocked(
+            projection, mission('coc1_m3', unlocked: true)),
+        isFalse,
+        reason: 'a COC-level unlock does not open a locked module');
+    expect(curriculumMissionUnlocked(null, mission('coc1_m3', unlocked: true)),
+        isTrue,
+        reason: 'before the curriculum loads, the earlier rule applies');
+  });
+
+  testWidgets('COC details uses the curriculum unlock, not the COC progress',
+      (tester) async {
+    await setSurface(tester, 420, 2400);
+    final service = FakeCurriculumService();
+    await tester.pumpWidget(ChangeNotifierProvider(
+      create: (_) => MissionService(),
+      child: MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: COCDetailsScreen(
+          projection: const LearnerCocProjection(
+              id: 'coc-1',
+              code: 'coc1',
+              title: 'COC 1',
+              description: '',
+              order: 1,
+              missions: []),
+          loadCurriculum: service.getCurriculum,
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text(MissionContentData.practiceLockedMessage), findsNothing,
+        reason: 'the curriculum unlocks COC 1 (no practice progress loaded)');
   });
 
   testWidgets('a lesson in a locked module can be read but not completed',
