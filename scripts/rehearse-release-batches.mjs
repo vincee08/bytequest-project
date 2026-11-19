@@ -205,7 +205,13 @@ export async function main(argv = process.argv.slice(2)) {
   if (options.withSuites) {
     const fixture = path.join(ROOT, "supabase", "tests", "fixtures", "qa_fixture_users.sql");
     if (!fs.existsSync(fixture)) throw Object.assign(new Error(`${path.relative(ROOT, fixture)} is missing; it comes with the SQL fix branch`), { evidence });
-    psql(target, fs.readFileSync(fixture, "utf8"));
+    // The fixture file refuses to run unless the session opts in (local or rehearsal copies only).
+    const fixtureSql = ["set bytequest.qa_fixtures = 'rehearsal';", fs.readFileSync(fixture, "utf8")].join(String.fromCharCode(10));
+    const fixtureRun = psql(target, fixtureSql, { allowError: true });
+    if (fixtureRun.status !== 0) {
+      const detail = (fixtureRun.stderr || fixtureRun.stdout).trim().split(/\r?\n/).filter((line) => /ERROR|DETAIL/.test(line)).slice(0, 4).join(" | ");
+      throw Object.assign(new Error(`QA fixtures failed on the rehearsal copy: ${detail}`), { evidence: { ...evidence, pre_existing_problems: problems, readback_problems: readbackProblems } });
+    }
     const suites = spawnSync(process.execPath, [path.join(ROOT, "scripts", "run-local-sql-tests.mjs"),
       ...(target.kind === "rehearsal" ? ["--container", target.container] : ["--db", target.database])], { cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
     const lines = (suites.stdout ?? "").trim().split("\n");
