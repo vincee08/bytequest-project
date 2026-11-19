@@ -299,8 +299,10 @@ class MissionContentData {
       'Scroll to Troubleshooting diagnostics. Tap a diagnostic action to reveal one finding, then read Recorded findings.';
   static String guideDiagnosticFinding(int number) =>
       'In Troubleshooting diagnostics, run a diagnostic action to reveal finding $number. Read Recorded findings before deciding.';
+  // Layout-neutral: Run test is below the workspace in portrait and in the
+  // side panel in landscape.
   static const guideTest =
-      'Scroll below the workspace and tap Run test. Wait for Test completed and read the measurements.';
+      'Tap Run test, wait for Test completed and read the measurements.';
   static const guideTestInterpret =
       'Below the test result, enter an interpretation and tap Record test interpretation.';
   static const guideObserve =
@@ -578,11 +580,24 @@ class MissionContentData {
   static const practiceTimerRemainingLabel = 'COC practice time remaining';
   static const practiceTimerCompactLabel = 'COC practice';
   static const practiceTimerExpiredShort = 'Practice time ended';
-  static String practiceTimerWarningShort(int minutes) => '$minutes min left';
+  // Threshold warnings: shown while less than [minutes] remain, beside the
+  // exact countdown, so they never read as the remaining time.
+  static String practiceTimerWarningShort(int minutes) =>
+      'Under $minutes min left';
   static String practiceEvidencePreserved(int accepted, int pending) =>
       '$accepted evidence actions saved; $pending waiting to sync.';
-  static String practiceTimerWarning(int minutes) =>
-      '$minutes minutes remain in this COC practice session.';
+  static String practiceTimerWarning(int minutes) => minutes == 1
+      ? 'Less than 1 minute remains in this COC practice session.'
+      : 'Less than $minutes minutes remain in this COC practice session.';
+
+  /// The warning threshold (1, 5 or 10 minutes) that [remaining] is under,
+  /// or null above 10 minutes.
+  static int? practiceTimerThreshold(Duration remaining) {
+    for (final minutes in const [1, 5, 10]) {
+      if (remaining < Duration(minutes: minutes)) return minutes;
+    }
+    return null;
+  }
   static const loadingPracticeProgressLabel = 'Loading practice access';
   static const practiceMissionsPendingLabel =
       'Complete the remaining missions below to unlock the COC quiz.';
@@ -615,6 +630,8 @@ class MissionContentData {
       'Practice work verified and saved. Complete all five missions, then take the COC quiz.';
   static const practiceSubmitFailed =
       'The server could not verify this work. Review the measured results and retry; your progress is saved.';
+  static const practiceVerifyUnreachable =
+      'Could not reach ByteQuest to verify. Your evidence is saved — retry when you are online.';
   static const assessmentSubmitFailed =
       'Evidence could not be submitted. Your mission progress is preserved.';
   static const practiceQuizTitle = 'COC practice quiz';

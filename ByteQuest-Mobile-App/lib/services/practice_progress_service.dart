@@ -2,9 +2,22 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart'
+    show AuthRetryableFetchException;
 import '../core/config/app_release.dart';
 import '../core/config/supabase_config.dart';
 import '../models/practice_progress_model.dart';
+
+/// ByteQuest could not be reached (offline, timed out, blocked by the
+/// browser, or the service was down), so the work was not judged at all.
+/// Distinct from a refused verification (HTTP 403 or 422).
+class PracticeServiceUnreachableException implements Exception {
+  const PracticeServiceUnreachableException(this.cause);
+  final Object cause;
+
+  @override
+  String toString() => 'PracticeServiceUnreachableException($cause)';
+}
 
 class PracticeProgressService {
   static const _configuredUrl = String.fromEnvironment('BQ_PRACTICE_API_URL');
@@ -60,19 +73,33 @@ class PracticeProgressService {
     }
     final client = SupabaseConfig.client;
     var session = client.auth.currentSession;
-    if (session?.isExpired == true) {
-      session = (await client.auth.refreshSession()).session;
+    final http.Response response;
+    try {
+      if (session?.isExpired == true) {
+        session = (await client.auth.refreshSession()).session;
+      }
+      if (session == null) throw StateError('AUTHENTICATION_REQUIRED');
+      response = await http
+          .post(uri,
+              headers: {
+                ...kAppVersionHeaders,
+                'Authorization': 'Bearer ${session.accessToken}',
+                'Content-Type': 'application/json'
+              },
+              body: jsonEncode(body))
+          .timeout(const Duration(seconds: 45));
+    } on TimeoutException catch (error) {
+      throw PracticeServiceUnreachableException(error);
+    } on http.ClientException catch (error) {
+      // Includes socket errors and a browser CORS block.
+      throw PracticeServiceUnreachableException(error);
+    } on AuthRetryableFetchException catch (error) {
+      throw PracticeServiceUnreachableException(error);
     }
-    if (session == null) throw StateError('AUTHENTICATION_REQUIRED');
-    final response = await http
-        .post(uri,
-            headers: {
-              ...kAppVersionHeaders,
-              'Authorization': 'Bearer ${session.accessToken}',
-              'Content-Type': 'application/json'
-            },
-            body: jsonEncode(body))
-        .timeout(const Duration(seconds: 45));
+    if (response.statusCode >= 500) {
+      throw PracticeServiceUnreachableException(
+          StateError('PRACTICE_SERVICE_${response.statusCode}'));
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError('PRACTICE_REQUEST_FAILED');
     }

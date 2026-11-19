@@ -154,16 +154,10 @@ class _PracticeCocSessionPanelState extends State<PracticeCocSessionPanel>
     final expired = session?.expiredAt(now) ?? false;
     final clockChanged = session?.clockMovedBackAt(now) ?? false;
     final remaining = session?.remainingAt(now) ?? Duration.zero;
-    final minutes = (remaining.inSeconds / 60).ceil();
-    final warning = session == null
+    final threshold = MissionContentData.practiceTimerThreshold(remaining);
+    final warning = session == null || expired || threshold == null
         ? null
-        : minutes <= 1 && !expired
-            ? MissionContentData.practiceTimerWarning(1)
-            : minutes <= 5 && !expired
-                ? MissionContentData.practiceTimerWarning(5)
-                : minutes <= 10 && !expired
-                    ? MissionContentData.practiceTimerWarning(10)
-                    : null;
+        : MissionContentData.practiceTimerWarning(threshold);
     return Semantics(
       container: true,
       liveRegion: warning != null || expired || clockChanged,
@@ -254,19 +248,15 @@ class PracticeCocTimeLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final remaining = session.remainingAt(now);
-    final minutes = (remaining.inSeconds / 60).ceil();
+    final threshold = MissionContentData.practiceTimerThreshold(remaining);
     final compactLabel = compact ||
         (MediaQuery.sizeOf(context).height < 500 &&
             MediaQuery.textScalerOf(context).scale(1) > 1.4);
     final warning = session.expiredAt(now)
         ? MissionContentData.practiceTimerExpired
-        : minutes <= 1
-            ? MissionContentData.practiceTimerWarning(1)
-            : minutes <= 5
-                ? MissionContentData.practiceTimerWarning(5)
-                : minutes <= 10
-                    ? MissionContentData.practiceTimerWarning(10)
-                    : null;
+        : threshold == null
+            ? null
+            : MissionContentData.practiceTimerWarning(threshold);
     return Semantics(
       liveRegion: warning != null,
       label: warning ??
@@ -295,11 +285,7 @@ class PracticeCocTimeLabel extends StatelessWidget {
                           ? MissionContentData.practiceTimerCompactLabel
                           : MissionContentData.practiceTimerRemainingLabel
                       : MissionContentData.practiceTimerWarningShort(
-                          minutes <= 1
-                              ? 1
-                              : minutes <= 5
-                                  ? 5
-                                  : 10),
+                          threshold ?? 1),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: AppTheme.bodySmall.copyWith(

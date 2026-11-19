@@ -1183,4 +1183,46 @@ void main() {
           isNot(false));
     });
   }
+
+  // QA Q6: assessment never shows a bench step title (they name the
+  // expected slots and headers, e.g. "the manual specifies DIMM_A2 and
+  // DIMM_B2"); practice does.
+  testWidgets('assessment shows no bench step title in any phase',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    for (var number = 1; number <= 5; number++) {
+      final phase = _phase(number);
+      final labels = [
+        for (final step in phase.presentation['bench_steps'] as List)
+          (step as Map)['label'] as String,
+      ];
+      // A step named exactly like a tray control (every operation of the
+      // phase is listed there, in both modes) is the control's own name.
+      final equipment = phase.presentation['equipment'] as Map? ?? const {};
+      final controls = {
+        for (final operation in equipment['operations'] as List? ?? const [])
+          (operation as Map)['label'] as String,
+      };
+      await _pump(tester, _stateAt(number, mode: MissionRuntimeMode.assessment));
+      expect(find.textContaining(RegExp(r'Step \d+ of \d+'), skipOffstage: false),
+          findsNothing,
+          reason: '${phase.id}: no step position in assessment');
+      for (final label in labels.where((label) => !controls.contains(label))) {
+        expect(find.textContaining(label, skipOffstage: false), findsNothing,
+            reason: '${phase.id}: $label');
+        expect(find.bySemanticsLabel(RegExp(RegExp.escape(label))),
+            findsNothing,
+            reason: '${phase.id} semantics: $label');
+      }
+      expect(find.text(MissionContentData.benchAssessmentHeader),
+          findsOneWidget);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await _pump(tester, _stateAt(number));
+      expect(find.textContaining(labels.first, skipOffstage: false),
+          findsWidgets,
+          reason: 'practice shows the step (${phase.id})');
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
+    semantics.dispose();
+  });
 }

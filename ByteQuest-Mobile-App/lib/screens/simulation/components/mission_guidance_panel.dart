@@ -34,7 +34,10 @@ class MissionGuidanceBar extends StatelessWidget {
     final compact =
         size.height < 500 || MediaQuery.textScalerOf(context).scale(1) > 1.4;
     final current = actionGuide.currentStep;
-    final currentText = current?.text ??
+    // On the bench the bar names the same pending step as the bench header,
+    // so the two never disagree (practice only; assessment has no bar).
+    final currentText = guidance.benchStep ??
+        current?.text ??
         (guidance.interactionLabel == MissionContentData.guidanceReviewLabel
             ? MissionContentData.reviewReadyLabel
             : MissionContentData.guideReadyToContinue);
