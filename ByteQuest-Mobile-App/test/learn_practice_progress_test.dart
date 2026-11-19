@@ -574,6 +574,84 @@ void main() {
         reason: 'counts come from the projection, not a hard-coded "of 5"');
   });
 
+  // Rest I2: Progress never invents a score for a quiz awaiting instructor
+  // evaluation, and shows the released points the result screen shows.
+  testWidgets('Progress quiz scores follow evaluation and release',
+      (tester) async {
+    await setSurface(tester, 420, 4000);
+    final service = FakeCurriculumService();
+    final base = progressSources(service);
+    final now = DateTime.utc(2026, 11, 19).toIso8601String();
+    LearnerQuizSummary quiz(String id, Map<String, dynamic> extra) =>
+        LearnerQuizSummary.fromJson({
+          'assignment_id': 'assignment-$id',
+          'quiz_version_id': 'version-$id',
+          'quiz_id': 'quiz-$id',
+          'title': 'Essay quiz $id',
+          'class_id': 'class',
+          'class_title': 'CSS 11-A',
+          'is_available': false,
+          'attempt_status': 'completed',
+          'attempt_id': 'attempt-$id',
+          ...extra,
+        });
+    final fetched = <String>[];
+    await tester.pumpWidget(host(ProgressScreen(
+        sources: ProgressSources(
+      curriculum: base.curriculum,
+      releasedResults: base.releasedResults,
+      attemptCounts: base.attemptCounts,
+      homework: base.homework,
+      quizzes: () async => [
+        quiz('pending', {
+          'status': 'awaiting_evaluation',
+          'evaluation_status': 'pending',
+        }),
+        quiz('stale', const {}),
+        quiz('released', {
+          'status': 'released',
+          'evaluation_status': 'released',
+        }),
+      ],
+      quizResult: (attemptId) async {
+        fetched.add(attemptId);
+        return LearnerQuizResult.fromJson({
+          'attempt_id': attemptId,
+          'title': 'Essay quiz',
+          'class_title': 'CSS 11-A',
+          'completed_at': now,
+          'question_count': 2,
+          ...switch (attemptId) {
+            'attempt-released' => {
+                'result_status': 'released',
+                'evaluation_status': 'released',
+                'correct_count': 1,
+                'total_points': 12,
+                'max_points': 13,
+              },
+            // The list was stale: the server says the result is pending.
+            _ => {
+                'result_status': 'awaiting_evaluation',
+                'evaluation_status': 'pending',
+              },
+          },
+        });
+      },
+    ))));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+        find.text(LearningContentData.quizPoints('12', '13')), 300,
+        scrollable: find.byType(Scrollable).first);
+    expect(find.text(LearningContentData.quizPoints('12', '13')),
+        findsOneWidget, reason: 'released points, as on the result screen');
+    expect(find.text(LearningContentData.quizAwaitingEvaluation),
+        findsNWidgets(2));
+    expect(find.textContaining(RegExp(r'\d+/\d+ correct')), findsNothing,
+        reason: 'no made-up count for a pending or points-based quiz');
+    expect(fetched, isNot(contains('attempt-pending')),
+        reason: 'a quiz known to be awaiting evaluation is not fetched');
+  });
+
   testWidgets(
       'Progress keeps working when one source fails and explains the methodology',
       (tester) async {
