@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/soft_card.dart';
 import '../../data/mission_content_data.dart';
+import '../../data/rewards_content_data.dart';
 
 class HelpCenterScreen extends StatefulWidget {
   const HelpCenterScreen({super.key});
@@ -18,9 +19,8 @@ class _HelpCenterScreenState extends State<HelpCenterScreen> {
           'Follow the instructions and complete the task. Practice gives local feedback; an assigned assessment is evaluated and released through your Instructor.',
     ),
     (
-      question: 'How is XP calculated?',
-      answer:
-          'XP is temporarily unavailable until an Admin activates an approved gamification configuration. XP never changes an official competency result.',
+      question: RewardsContentData.helpQuestion,
+      answer: RewardsContentData.helpAnswer,
     ),
     (
       question: 'What happens if I do not satisfy a mission criterion?',

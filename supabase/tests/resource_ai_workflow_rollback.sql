@@ -11,7 +11,7 @@ declare
 begin
   select user_id into instructor from public.profiles where role='instructor' and status='active' order by created_at limit 1;
   perform set_config('request.jwt.claims',jsonb_build_object('sub',instructor,'role','authenticated')::text,true);
-  q := public.create_instructor_quiz('Resource request regression','Network review');
+  q := public.create_instructor_quiz('Resource request regression','Network review',p_coc_module_id=>(select id from public.coc_modules where coc_code='coc2'),p_focus=>'Review network device roles');
   select * into v from public.quiz_versions where quiz_id=q.id;
   g := public.begin_ai_quiz_generation(v.id,'openrouter','qa-free',context,1);
   begin perform public.begin_ai_quiz_generation(v.id,'openrouter','qa-free',context,1);

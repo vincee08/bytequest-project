@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import '../../data/account_content_data.dart';
 import '../../data/mission_content_data.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_button.dart';
 import '../../services/profile_service.dart';
 import '../../services/auth_service.dart';
 import 'package:provider/provider.dart';
+import 'student_id_policy.dart';
 
 @visibleForTesting
 String? resolveProfileSetupFullName(Map<String, dynamic>? userMetadata) {
@@ -13,7 +15,10 @@ String? resolveProfileSetupFullName(Map<String, dynamic>? userMetadata) {
 }
 
 class ProfileSetupScreen extends StatefulWidget {
-  const ProfileSetupScreen({super.key});
+  const ProfileSetupScreen({super.key, this.loadStudentIdPolicy});
+
+  /// Overrides how the staff-managed student ID flag is read (tests).
+  final StudentIdPolicyLoader? loadStudentIdPolicy;
 
   @override
   State<ProfileSetupScreen> createState() => _ProfileSetupScreenState();
@@ -28,6 +33,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
   String? _selectedGoal;
   bool _isLoading = false;
+  // A roster import or an administrator can set the student ID before the
+  // learner completes this form; it is then shown read-only and not resent.
+  bool _studentIdManaged = false;
 
   final List<String> _goals = [
     'Complete CSS NC II Certification',
@@ -41,6 +49,22 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     super.initState();
     _prefillSignedUpName();
     _loadExistingProfile();
+    _loadStudentIdPolicy();
+  }
+
+  Future<void> _loadStudentIdPolicy() async {
+    StudentIdPolicy? policy;
+    try {
+      policy =
+          await (widget.loadStudentIdPolicy ?? loadSignedInStudentIdPolicy)();
+    } catch (_) {
+      policy = null;
+    }
+    if (!mounted || policy == null || !policy.managed) return;
+    setState(() {
+      _studentIdManaged = true;
+      _studentIdController.text = policy!.learnerId?.trim() ?? '';
+    });
   }
 
   void _prefillSignedUpName() {
@@ -124,9 +148,10 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         userId: userId,
         fullName: _fullNameController.text.trim(),
         email: userEmail,
-        learnerId: _studentIdController.text.trim().isNotEmpty
-            ? _studentIdController.text.trim()
-            : null,
+        learnerId:
+            !_studentIdManaged && _studentIdController.text.trim().isNotEmpty
+                ? _studentIdController.text.trim()
+                : null,
         school: _schoolController.text.trim().isNotEmpty
             ? _schoolController.text.trim()
             : null,
@@ -146,13 +171,20 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     } catch (e) {
       debugPrint('Error saving profile: $e');
       if (mounted) {
+        final managed = isStudentIdManagedError(e);
         setState(() {
           _isLoading = false;
+          if (managed) _studentIdManaged = true;
         });
+        if (managed) _loadStudentIdPolicy();
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to save profile: $e'),
+            content: Text(managed
+                ? AccountContentData.studentIdManagedSaveError
+                : isStudentIdTakenError(e)
+                    ? AccountContentData.studentIdTakenSaveError
+                    : 'Failed to save profile: $e'),
             backgroundColor: Colors.red,
           ),
         );
@@ -284,15 +316,42 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                 // Student ID
                 Text('Student ID', style: AppTheme.labelLarge),
                 const SizedBox(height: 8),
-                TextFormField(
-                  controller: _studentIdController,
-                  textInputAction: TextInputAction.next,
-                  decoration: InputDecoration(
-                    labelText: MissionContentData.studentIdFieldLabel,
-                    hintText: 'Enter your student ID',
-                    prefixIcon: Icon(Icons.badge, color: AppTheme.primaryBlue),
+                if (_studentIdManaged)
+                  Semantics(
+                    label: AccountContentData.studentIdManagedSemantics(
+                        _studentIdController.text),
+                    hint: AccountContentData.studentIdManagedHint,
+                    readOnly: true,
+                    container: true,
+                    child: ExcludeSemantics(
+                      child: TextFormField(
+                        key: const Key('profileSetupStudentIdField'),
+                        controller: _studentIdController,
+                        readOnly: true,
+                        decoration: const InputDecoration(
+                          labelText: AccountContentData.studentIdLabel,
+                          helperText: AccountContentData.studentIdManagedHelper,
+                          helperMaxLines: 2,
+                          filled: true,
+                          fillColor: AppTheme.surfaceMuted,
+                          prefixIcon: Icon(Icons.lock_outline,
+                              color: AppTheme.textMedium),
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  TextFormField(
+                    key: const Key('profileSetupStudentIdField'),
+                    controller: _studentIdController,
+                    textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(
+                      labelText: MissionContentData.studentIdFieldLabel,
+                      hintText: 'Enter your student ID',
+                      prefixIcon:
+                          Icon(Icons.badge, color: AppTheme.primaryBlue),
+                    ),
                   ),
-                ),
                 const SizedBox(height: 20),
 
                 // School
