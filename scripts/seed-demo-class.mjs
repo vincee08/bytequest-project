@@ -678,7 +678,12 @@ function loadFixtures(ctx) {
     if (fs.existsSync(path.join(mobile, '.dart_tool', 'package_config.json'))) {
       say(`Exporting the practice work orders to ${path.relative(ROOT, file)} (dart run tool/export_practice_test_evidence.dart)…`);
       fs.mkdirSync(path.dirname(file), { recursive: true });
-      const result = spawnSync('dart', ['run', 'tool/export_practice_test_evidence.dart', file], { cwd: mobile, stdio: 'inherit', shell: process.platform === 'win32' });
+      // On Windows `dart` is a .bat launcher, so it runs through the shell, which
+      // splits unquoted arguments on spaces (the repository path has spaces):
+      // pass the path relative to the app folder, quoted for cmd.exe.
+      const target = path.relative(mobile, file);
+      const exportArg = process.platform === 'win32' ? `"${target}"` : target;
+      const result = spawnSync('dart', ['run', 'tool/export_practice_test_evidence.dart', exportArg], { cwd: mobile, stdio: 'inherit', shell: process.platform === 'win32' });
       if (result.status !== 0) fail('The practice fixture export failed.');
     } else {
       fail(`Practice fixtures not found at ${file}. Generate them first:\n  cd ByteQuest-Mobile-App && flutter pub get && dart run tool/export_practice_test_evidence.dart ../.tmp/demo-practice-evidence.json\n(or run the same command inside the Flutter container; see docs/DEMO_DATA.md).`);

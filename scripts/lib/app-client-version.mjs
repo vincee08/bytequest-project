@@ -10,14 +10,23 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
-const SOURCE = path.join(ROOT, "ByteQuest-Mobile-App", "lib", "services", "app_version_service.dart");
+// kAppVersion lives in lib/core/config/app_release.dart (final fix wave);
+// app_version_service.dart re-exports it. Both are checked so the scripts
+// keep working if the constant moves between them again.
+const SOURCES = [
+  path.join(ROOT, "ByteQuest-Mobile-App", "lib", "core", "config", "app_release.dart"),
+  path.join(ROOT, "ByteQuest-Mobile-App", "lib", "services", "app_version_service.dart"),
+];
 
 export const APP_VERSION_HEADER = "x-bytequest-app-version";
 
 export function appVersion() {
-  const match = fs.readFileSync(SOURCE, "utf8").match(/const String kAppVersion = '(\d+\.\d+\.\d+)';/);
-  if (!match) throw new Error(`kAppVersion not found in ${path.relative(ROOT, SOURCE)}`);
-  return match[1];
+  for (const source of SOURCES) {
+    if (!fs.existsSync(source)) continue;
+    const match = fs.readFileSync(source, "utf8").match(/const String kAppVersion = '(\d+\.\d+\.\d+)';/);
+    if (match) return match[1];
+  }
+  throw new Error(`kAppVersion not found in ${SOURCES.map((s) => path.relative(ROOT, s)).join(" or ")}`);
 }
 
 /** Headers a learner-app client sends (Supabase global headers, dashboard API calls). */
