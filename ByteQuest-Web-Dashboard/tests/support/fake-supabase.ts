@@ -6,7 +6,7 @@
 const serverOnly = require.resolve('server-only');
 require.cache[serverOnly] = { id: serverOnly, filename: serverOnly, loaded: true, exports: {} } as unknown as NodeJS.Module;
 
-export type FakeCall = { method: string; path: string; body: unknown };
+export type FakeCall = { method: string; path: string; body: unknown; headers: Record<string, string> };
 export type FakeReply = { status: number; body: unknown };
 type RpcFn = (body: Record<string, unknown>) => FakeReply;
 type RpcHandler = RpcFn | Record<string, unknown> | unknown[] | string | number | boolean | null;
@@ -28,7 +28,9 @@ export async function withFakeSupabase(fake: FakeSupabase, run: (calls: FakeCall
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
     let body: unknown = null;
     if (typeof init?.body === 'string' && init.body) { try { body = JSON.parse(init.body); } catch { body = init.body; } }
-    calls.push({ method: init?.method ?? 'GET', path: url.pathname, body });
+    const headers: Record<string, string> = {};
+    new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined)).forEach((value, key) => { headers[key] = value; });
+    calls.push({ method: init?.method ?? 'GET', path: url.pathname, body, headers });
     if (url.pathname === '/auth/v1/user') {
       return Response.json({ id: fake.userId, aud: 'authenticated', role: 'authenticated', email: 'qa@fake.invalid', app_metadata: {}, user_metadata: {}, created_at: '2026-11-19T00:00:00Z' });
     }
