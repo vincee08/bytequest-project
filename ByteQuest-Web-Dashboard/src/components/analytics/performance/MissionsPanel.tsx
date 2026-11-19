@@ -11,7 +11,7 @@ const RUNS_CONFIG = {
   successful_runs: { label: "Verified runs", color: "hsl(var(--chart-2))" },
   failed_runs: { label: "Incomplete runs", color: "hsl(var(--chart-4))" },
 } satisfies ChartConfig;
-const COMPLETION_CONFIG = { completion_rate: { label: "Learners verified", color: "hsl(var(--chart-1))" } } satisfies ChartConfig;
+const COMPLETION_CONFIG = { completion_rate_to_date: { label: "Completion to date", color: "hsl(var(--chart-1))" } } satisfies ChartConfig;
 const ASSESSMENT_CONFIG = {
   competent: { label: "Competent", color: "hsl(var(--chart-2))" },
   not_yet_competent: { label: "Not yet competent", color: "hsl(var(--chart-4))" },
@@ -31,41 +31,42 @@ export function MissionsPanel({ data, query }: { data: MissionAnalytics; query: 
   }
   return (
     <div className="space-y-6">
-      <Panel title="Practice missions" description={`Recorded practice runs in the period and server-verified completions to date · ${period}. Attempt counts come from recorded runs, never from completions.`}>
+      <Panel title="Practice missions" description={`Columns marked "period" count activity in ${period}; "to date" columns count server-verified completions up to the period end. Attempt counts come from recorded runs, never from completions.`}>
         {data.missions.length ? (
           <>
             <div className="grid gap-5 p-4 sm:p-5 xl:grid-cols-2">
               <div>
-                <p className="mb-2 text-xs font-semibold text-foreground">Runs per mission</p>
+                <p className="mb-2 text-xs font-semibold text-foreground">Runs per mission (period)</p>
                 <CountBarChart data={data.missions.map((row) => ({ mission: missionLabel(row.mission_code), successful_runs: row.successful_runs, failed_runs: row.failed_runs }))}
                   config={RUNS_CONFIG} categoryKey="mission" series={["successful_runs", "failed_runs"]} stacked categoryLabel="Mission" valueLabel="Runs"
                   ariaLabel="Verified and incomplete practice runs per mission" />
               </div>
               <div>
-                <p className="mb-2 text-xs font-semibold text-foreground">Learners verified per mission</p>
-                <PercentBarChart data={data.missions.map((row) => ({ mission: missionLabel(row.mission_code), completion_rate: row.completion_rate }))}
-                  config={COMPLETION_CONFIG} categoryKey="mission" series={["completion_rate"]} categoryLabel="Mission" valueLabel="Learners verified (%)"
-                  ariaLabel="Share of learners with a verified completion per mission" height={260} />
+                <p className="mb-2 text-xs font-semibold text-foreground">Completion per mission (to date)</p>
+                <PercentBarChart data={data.missions.map((row) => ({ mission: missionLabel(row.mission_code), completion_rate_to_date: row.completion_rate_to_date }))}
+                  config={COMPLETION_CONFIG} categoryKey="mission" series={["completion_rate_to_date"]} categoryLabel="Mission" valueLabel="Learners verified to date (%)"
+                  ariaLabel="Share of learners with a verified completion to date per mission" height={260} />
               </div>
             </div>
             <DataTable<PracticeRow>
               caption="Practice mission performance"
               rows={data.missions}
               rowKey={(row) => row.mission_code}
-              minWidth={1100}
+              minWidth={1280}
               columns={[
                 { key: "mission", label: "Mission", render: (row) => <div className="min-w-[200px]"><p className="font-medium">{missionLabel(row.mission_code)} · {row.title}</p><p className="mt-0.5 text-xs text-muted-foreground">{row.module ? `${row.module.code} ${row.module.title}` : "No module"}</p></div> },
-                { key: "attempted", label: "Attempted", align: "right", render: (row) => `${row.learners_attempted} / ${row.learners_in_scope}` },
-                { key: "verified", label: "Verified", align: "right", render: (row) => row.learners_verified },
-                { key: "completion", label: "Completion", align: "right", render: (row) => formatPercent(row.completion_rate) },
-                { key: "runs", label: "Runs", align: "right", render: (row) => `${row.runs} (${row.successful_runs} ok · ${row.failed_runs} incomplete)` },
-                { key: "per_learner", label: "Runs / learner", align: "right", render: (row) => formatNumber(row.avg_runs_per_learner) },
-                { key: "duration", label: "Avg completion time", align: "right", render: (row) => formatDuration(row.avg_duration_seconds) },
-                { key: "invalid", label: "Invalid actions / run", align: "right", render: (row) => formatNumber(row.avg_invalid_actions) },
+                { key: "attempted", label: "Attempted (period)", align: "right", render: (row) => `${row.learners_attempted} / ${row.learners_in_scope}` },
+                { key: "verified", label: "Verified (period)", align: "right", render: (row) => row.learners_verified },
+                { key: "runs", label: "Runs (period)", align: "right", render: (row) => `${row.runs} (${row.successful_runs} ok · ${row.failed_runs} incomplete)` },
+                { key: "per_learner", label: "Runs / learner (period)", align: "right", render: (row) => formatNumber(row.avg_runs_per_learner) },
+                { key: "duration", label: "Avg completion time (period)", align: "right", render: (row) => formatDuration(row.avg_duration_seconds) },
+                { key: "invalid", label: "Invalid actions / run (period)", align: "right", render: (row) => formatNumber(row.avg_invalid_actions) },
+                { key: "verified_to_date", label: "Verified to date", align: "right", render: (row) => `${row.learners_verified_to_date} / ${row.learners_in_scope}` },
+                { key: "completion", label: "Completion to date", align: "right", render: (row) => formatPercent(row.completion_rate_to_date) },
               ]}
             />
           </>
-        ) : <EmptyState title="No practice activity in this period" description="Missions appear once learners record practice runs or verified completions." />}
+        ) : <EmptyState title="No practice activity in this period" description="Missions appear once learners record practice runs in the period or have a verified completion to date." />}
       </Panel>
 
       <Panel title="Technical assessments by mission" description="Assessment attempts in the period, labelled separately from practice. Pending results are counted but excluded from averages.">

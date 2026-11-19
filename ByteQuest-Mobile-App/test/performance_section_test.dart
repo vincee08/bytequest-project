@@ -1,24 +1,33 @@
 import 'dart:async';
 
 import 'package:bytequest/core/theme/app_theme.dart';
+import 'package:bytequest/data/learning_content_data.dart';
 import 'package:bytequest/data/performance_content_data.dart';
 import 'package:bytequest/models/performance_model.dart';
 import 'package:bytequest/screens/progress/performance_section.dart';
+import 'package:bytequest/screens/progress/performance_widgets.dart';
+import 'package:bytequest/screens/progress/progress_screen.dart';
 import 'package:bytequest/services/performance_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Shape returned by get_my_performance() for the A7 rollback fixture learner
-/// (supabase/tests/analytics_redefense_rollback.sql, learner L1).
+// Slice A2's Progress screen fixtures (curriculum projection, sources, host).
+import 'learn_practice_progress_test.dart' as a2;
+
+/// Shape returned by get_my_performance(), modelled on learner L1 of
+/// supabase/tests/analytics_redefense_rollback.sql (criterion B is not
+/// achieved here so both outcome labels are covered).
 Map<String, dynamic> populatedJson({double overall = 12.5, String updatedAt = '2026-11-19T07:05:00Z'}) => {
       'progress': {
         'overall_percent': overall,
         'completed_items': 3,
         'total_items': 24,
         'cocs': [
-          {'coc_code': 'coc1', 'title': 'Install and Configure Computer Systems', 'percent': 50.0, 'completed_items': 3, 'total_items': 6, 'modules_completed': 1, 'modules_total': 3},
-          {'coc_code': 'coc2', 'title': 'Set-up Computer Networks', 'percent': 0, 'completed_items': 0, 'total_items': 6, 'modules_completed': 0, 'modules_total': 3},
+          {'coc_code': 'coc1', 'title': 'Install and Configure Computer Systems', 'percent': 50.0, 'completed_items': 3, 'total_items': 6, 'modules_completed': 1, 'modules_total': 4},
+          {'coc_code': 'coc2', 'title': 'Set-up Computer Networks', 'percent': 0, 'completed_items': 0, 'total_items': 6, 'modules_completed': 0, 'modules_total': 4},
         ],
       },
       'competency': [
@@ -30,8 +39,8 @@ Map<String, dynamic> populatedJson({double overall = 12.5, String updatedAt = '2
           {'attempt_id': 'q1', 'title': 'Hardware Basics Quiz', 'percent': 100.0, 'correct_count': 2, 'question_count': 2, 'submitted_at': '2026-11-17T07:00:00Z'},
         ],
         'homework': [
-          {'title': 'Workstation report', 'score': 80, 'max_score': 100, 'released': true, 'submitted_at': '2026-11-16T07:00:00Z', 'late': false},
-          {'title': 'Cable checklist', 'score': null, 'max_score': 100, 'released': false, 'submitted_at': '2026-11-18T07:00:00Z', 'late': true},
+          {'title': 'Workstation report', 'score': 40, 'max_score': 50, 'percent': 80.0, 'released': true, 'submitted_at': '2026-11-16T07:00:00Z', 'late': false},
+          {'title': 'Cable checklist', 'score': null, 'max_score': 100, 'percent': null, 'released': false, 'submitted_at': '2026-11-18T07:00:00Z', 'late': true},
         ],
       },
       'assessments': [
@@ -45,6 +54,15 @@ Map<String, dynamic> populatedJson({double overall = 12.5, String updatedAt = '2
           {'mission_code': 'coc1_m1', 'title': 'Identify Computer Parts and Tools', 'best_seconds': 120},
         ],
       },
+      'summary': {
+        'quiz_avg': 100.0,
+        'homework_avg': 80.0,
+        'homework_released': 1,
+        'assessments_released': 2,
+        'assessments_competent': 1,
+        'criteria_total': 2,
+        'criteria_achieved': 1,
+      },
       'updated_at': updatedAt,
     };
 
@@ -54,13 +72,22 @@ Map<String, dynamic> emptyJson() => {
         'completed_items': 0,
         'total_items': 24,
         'cocs': [
-          {'coc_code': 'coc1', 'title': 'Install and Configure Computer Systems', 'percent': 0, 'completed_items': 0, 'total_items': 6, 'modules_completed': 0, 'modules_total': 3},
+          {'coc_code': 'coc1', 'title': 'Install and Configure Computer Systems', 'percent': 0, 'completed_items': 0, 'total_items': 6, 'modules_completed': 0, 'modules_total': 4},
         ],
       },
       'competency': [],
       'scores': {'quizzes': [], 'homework': []},
       'assessments': [],
       'practice': {'missions_verified': 0, 'runs': 0, 'best_times': []},
+      'summary': {
+        'quiz_avg': null,
+        'homework_avg': null,
+        'homework_released': 0,
+        'assessments_released': 0,
+        'assessments_competent': 0,
+        'criteria_total': 0,
+        'criteria_achieved': 0,
+      },
       'updated_at': '2026-11-19T07:05:00Z',
     };
 
@@ -98,6 +125,10 @@ Widget host(Widget child, {double textScale = 1}) => MaterialApp(
 
 String clock(String iso) => DateFormat('HH:mm').format(DateTime.parse(iso).toLocal());
 
+/// Accessible label of one compact summary tile.
+Finder summaryTile(String label, String value, String detail) =>
+    find.bySemanticsLabel(PerformanceContentData.summarySemantics(label, value, detail));
+
 void main() {
   testWidgets('shows a loading state, then the empty state with its update time', (tester) async {
     final service = FakePerformanceService([emptyJson()])..gate = Completer<void>();
@@ -117,14 +148,17 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('12.5%'), findsOneWidget);
     expect(find.text('COC1'), findsOneWidget);
-    expect(find.text(PerformanceContentData.modulesCompleted(1, 3)), findsOneWidget);
+    expect(find.text(PerformanceContentData.modulesCompleted(1, 4)), findsOneWidget);
     expect(find.text('Wears the ESD wrist strap'), findsOneWidget);
     expect(find.text(PerformanceContentData.achievedLabel), findsOneWidget);
     expect(find.text(PerformanceContentData.notYetAchievedLabel), findsOneWidget);
     expect(find.text(PerformanceContentData.competencySummary(1, 2)), findsOneWidget);
     expect(find.text('Hardware Basics Quiz'), findsOneWidget);
-    expect(find.text(PerformanceContentData.homeworkScore('80', '100')), findsOneWidget);
+    expect(find.text(PerformanceContentData.homeworkScore('40', '50')), findsOneWidget,
+        reason: 'homework is scored against its own maximum');
+    expect(find.text(PerformanceContentData.homeworkDetail(80, late: false)!), findsOneWidget);
     expect(find.text(PerformanceContentData.homeworkAwaiting), findsOneWidget, reason: 'an unreleased homework score is never shown');
+    expect(find.text(PerformanceContentData.homeworkLate), findsOneWidget);
     expect(find.text(PerformanceContentData.competentLabel), findsOneWidget);
     expect(find.text(PerformanceContentData.notYetCompetentLabel), findsOneWidget);
     expect(find.text('2m 00s'), findsOneWidget);
@@ -165,10 +199,51 @@ void main() {
     await tester.pumpAndSettle();
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
     await tester.pump(PerformanceSection.pollInterval * 2);
-    expect(service.fetches, 1);
+    service.changes.add(null);
+    await tester.pump(const Duration(seconds: 1));
+    expect(service.fetches, 1, reason: 'no polling or realtime refetch in the background');
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
     expect(service.fetches, 2, reason: 'returning to the app refreshes once');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('a hidden section defers realtime changes until it is shown again', (tester) async {
+    final service = FakePerformanceService([
+      populatedJson(),
+      populatedJson(overall: 20.8, updatedAt: '2026-11-19T07:06:00Z'),
+    ]);
+    // The learner navigation shell disables tickers on tabs that are not selected.
+    Widget tab({required bool selected}) =>
+        host(TickerMode(enabled: selected, child: PerformanceSection(service: service)));
+    await tester.pumpWidget(tab(selected: true));
+    await tester.pumpAndSettle();
+    expect(service.fetches, 1);
+
+    await tester.pumpWidget(tab(selected: false));
+    service.changes
+      ..add(null)
+      ..add(null);
+    await tester.pump(const Duration(seconds: 1));
+    expect(service.fetches, 1, reason: 'no refetch while another tab is selected');
+
+    await tester.pumpWidget(tab(selected: true));
+    await tester.pumpAndSettle();
+    expect(service.fetches, 2, reason: 'one refetch for the changes missed while hidden');
+    expect(find.text('20.8%'), findsOneWidget);
+
+    await tester.pumpWidget(tab(selected: false));
+    await tester.pump(const Duration(seconds: 5));
+    await tester.pumpWidget(tab(selected: true));
+    await tester.pumpAndSettle();
+    expect(service.fetches, 2, reason: 'a quick tab switch without changes does not refetch');
+
+    await tester.pumpWidget(tab(selected: false));
+    await tester.pump(PerformanceSection.pollInterval * 3);
+    expect(service.fetches, 2, reason: 'polling stops while hidden');
+    await tester.pumpWidget(tab(selected: true));
+    await tester.pumpAndSettle();
+    expect(service.fetches, 3, reason: 'hidden for longer than a poll interval: refreshed when shown');
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
@@ -199,16 +274,18 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final service = FakePerformanceService([populatedJson()]);
-    await tester.pumpWidget(host(PerformanceSection(service: service), textScale: 2));
-    await tester.pumpAndSettle();
-    expect(tester.takeException(), isNull);
-    final refresh = find.bySemanticsLabel(PerformanceContentData.refreshLabel);
-    expect(refresh, findsOneWidget);
-    final size = tester.getSize(refresh);
-    expect(size.width, greaterThanOrEqualTo(48));
-    expect(size.height, greaterThanOrEqualTo(48));
-    await tester.pumpWidget(const SizedBox.shrink());
+    for (final compact in [false, true]) {
+      final service = FakePerformanceService([populatedJson()]);
+      await tester.pumpWidget(host(PerformanceSection(service: service, compact: compact), textScale: 2));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final refresh = find.bySemanticsLabel(PerformanceContentData.refreshLabel);
+      expect(refresh, findsOneWidget);
+      final size = tester.getSize(refresh);
+      expect(size.width, greaterThanOrEqualTo(48));
+      expect(size.height, greaterThanOrEqualTo(48));
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
   });
 
   testWidgets('reduced motion still renders progress without animation', (tester) async {
@@ -226,6 +303,40 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('compact: server averages and criterion outcomes, without repeating the Progress lists', (tester) async {
+    final service = FakePerformanceService([populatedJson()]);
+    await tester.pumpWidget(host(PerformanceSection(service: service, compact: true)));
+    await tester.pumpAndSettle();
+    expect(find.text(PerformanceContentData.sectionTitle), findsNothing, reason: 'the Progress screen supplies the header');
+    expect(summaryTile(PerformanceContentData.summaryCriteriaLabel, PerformanceContentData.ofTotal(1, 2), PerformanceContentData.summaryCriteriaDetail), findsOneWidget);
+    expect(summaryTile(PerformanceContentData.summaryQuizLabel, '100%', PerformanceContentData.quizCount(1)), findsOneWidget);
+    expect(summaryTile(PerformanceContentData.summaryHomeworkLabel, '80%', PerformanceContentData.releasedGrades(1)), findsOneWidget,
+        reason: 'the released homework average is a share of each maximum score');
+    expect(summaryTile(PerformanceContentData.summaryAssessmentsLabel, PerformanceContentData.ofTotal(1, 2), PerformanceContentData.summaryAssessmentsDetail), findsOneWidget);
+    expect(find.text('Seats the CPU in the correct orientation'), findsOneWidget);
+    expect(find.text(PerformanceContentData.notYetAchievedLabel), findsOneWidget);
+    expect(find.text(PerformanceContentData.updatedAt(clock('2026-11-19T07:05:00Z'))), findsOneWidget);
+    for (final duplicate in [PerformanceProgressCard, PerformanceScoresCard, PerformanceAssessmentsCard, PerformancePracticeCard]) {
+      expect(find.byType(duplicate), findsNothing, reason: '$duplicate is already covered by the Progress screen');
+    }
+    expect(find.text(PerformanceContentData.compactEmpty), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('compact: no scored work shows dashes, never zero averages', (tester) async {
+    final service = FakePerformanceService([emptyJson()]);
+    await tester.pumpWidget(host(PerformanceSection(service: service, compact: true)));
+    await tester.pumpAndSettle();
+    const none = PerformanceContentData.noValue;
+    expect(summaryTile(PerformanceContentData.summaryQuizLabel, none, PerformanceContentData.quizCount(0)), findsOneWidget);
+    expect(summaryTile(PerformanceContentData.summaryHomeworkLabel, none, PerformanceContentData.releasedGrades(0)), findsOneWidget);
+    expect(summaryTile(PerformanceContentData.summaryCriteriaLabel, none, PerformanceContentData.summaryCriteriaDetail), findsOneWidget);
+    expect(find.text(PerformanceContentData.compactEmpty), findsOneWidget);
+    expect(find.text('0%'), findsNothing);
+    expect(find.text(PerformanceContentData.competencyTitle), findsNothing);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   test('model parses numbers sent as integers, decimals or strings', () {
     final snapshot = PerformanceSnapshot.fromJson({
       ...populatedJson(),
@@ -233,10 +344,58 @@ void main() {
     });
     expect(snapshot.progress.overallPercent, 12.5);
     expect(snapshot.progress.completedItems, 3);
+    expect(snapshot.homework.first.percent, 80);
     expect(snapshot.homework.last.score, isNull);
+    expect(snapshot.homework.last.percent, isNull);
+    expect(snapshot.summary.homeworkAvg, 80);
+    expect(snapshot.summary.criteriaAchieved, 1);
     expect(snapshot.hasActivity, isTrue);
-    expect(PerformanceSnapshot.fromJson(emptyJson()).hasActivity, isFalse);
+    expect(snapshot.hasScoredWork, isTrue);
+    final empty = PerformanceSnapshot.fromJson(emptyJson());
+    expect(empty.hasActivity, isFalse);
+    expect(empty.hasScoredWork, isFalse);
+    final legacy = PerformanceSnapshot.fromJson({...emptyJson()}..remove('summary'));
+    expect(legacy.summary.quizAvg, isNull, reason: 'a payload without a summary parses to empty values');
+    expect(legacy.summary.criteriaTotal, 0);
     expect(PerformanceContentData.percent(null), PerformanceContentData.noValue);
     expect(PerformanceContentData.duration(3720), '1h 2m');
+    expect(PerformanceContentData.homeworkDetail(null, late: false), isNull);
+  });
+
+  group('inside the Progress screen', () {
+    setUpAll(() async {
+      SharedPreferences.setMockInitialValues({});
+      await Supabase.initialize(url: 'https://example.supabase.co', publishableKey: 'sb_publishable_performance_test');
+    });
+    tearDownAll(() async => Supabase.instance.dispose());
+
+    testWidgets('the compact section fills the Performance slot and keeps the Progress layout', (tester) async {
+      await a2.setSurface(tester, 420, 4000);
+      final service = FakePerformanceService([populatedJson()]);
+      await tester.pumpWidget(a2.host(ProgressScreen(
+        sources: a2.progressSources(a2.FakeCurriculumService()),
+        performanceSection: PerformanceSection(service: service, compact: true),
+      )));
+      await tester.pumpAndSettle();
+
+      final slotHeader = find.text(LearningContentData.performanceTitle);
+      final quizTile = summaryTile(PerformanceContentData.summaryQuizLabel, '100%', PerformanceContentData.quizCount(1));
+      expect(slotHeader, findsOneWidget);
+      expect(quizTile, findsOneWidget);
+      expect(find.text('Wears the ESD wrist strap'), findsOneWidget);
+      expect(find.text(PerformanceContentData.sectionTitle), findsNothing, reason: 'one header: the screen\'s own');
+      expect(service.fetches, 1);
+
+      double top(Finder finder) => tester.getTopLeft(finder).dy;
+      expect(top(find.text(LearningContentData.overallTitle).first), lessThan(top(slotHeader)),
+          reason: 'learning progress stays first');
+      expect(top(slotHeader), lessThan(top(quizTile)), reason: 'the section renders under the slot header');
+      expect(find.byKey(const ValueKey('methodology-button')), findsOneWidget, reason: 'the methodology info stays');
+
+      await tester.scrollUntilVisible(find.text(LearningContentData.resultsTitle), 300, scrollable: find.byType(Scrollable).first);
+      expect(find.text(LearningContentData.resultsTitle), findsOneWidget, reason: 'released results follow the slot');
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
   });
 }

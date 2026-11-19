@@ -22,7 +22,7 @@ export function CriteriaPanel({ data, query }: { data: CriteriaAnalytics; query:
         <RankList title="Strongest skills" icon="up" rows={data.strongest} empty="Strengths appear after results are released." />
         <RankList title="Weakest skills" icon="down" rows={data.weakest} empty="Weaknesses appear once at least two criteria have released results." />
       </div>
-      <Panel title="Assessment criteria" description={`Released technical assessment results only; each learner counts once per criterion (latest released result) · ${period}. Simulation steps and essay rubric criteria are added when those assessments are released.`}>
+      <Panel title="Criteria" description={`Released technical assessment results and released homework grades only; each learner counts once per criterion (latest released result) · ${period}. Simulation steps and essay rubric criteria are added when those assessments are released.`}>
         {data.criteria.length ? (
           <>
             <div className="p-4 sm:p-5">
@@ -36,13 +36,13 @@ export function CriteriaPanel({ data, query }: { data: CriteriaAnalytics; query:
               rowKey={(row) => row.criterion_id}
               minWidth={900}
               columns={[
-                { key: "criterion", label: "Criterion", render: (row) => <div className="max-w-[360px]"><p className="font-medium">{row.title}</p><p className="mt-0.5 text-xs text-muted-foreground">{row.code} · {row.mission_title ?? row.mission_code ?? "Mission"}</p></div> },
-                { key: "source", label: "Source", render: (row) => <span className="capitalize">{row.source}</span> },
+                { key: "criterion", label: "Criterion", render: (row) => <div className="max-w-[360px]"><p className="font-medium">{row.title}</p><p className="mt-0.5 text-xs text-muted-foreground">{row.code} · {row.activity_title ?? row.mission_title ?? row.mission_code ?? "Activity"}{row.source === "homework" && row.mission_title ? ` · ${row.mission_title}` : ""}</p></div> },
+                { key: "source", label: "Source", render: (row) => (row.source === "homework" ? "Homework" : "Technical assessment") },
                 { key: "max", label: "Maximum", align: "right", render: (row) => formatNumber(row.max) },
                 { key: "avg", label: "Average", align: "right", render: (row) => formatNumber(row.avg, 2) },
                 { key: "percent", label: "Percent", align: "right", render: (row) => <span className="font-semibold">{formatPercent(row.percent)}</span> },
                 { key: "learners", label: "Learners", align: "right", render: (row) => row.evaluated_learners },
-                { key: "satisfied", label: "Satisfied / not", align: "right", render: (row) => `${row.satisfied} / ${row.not_satisfied}` },
+                { key: "satisfied", label: "Satisfied / not", align: "right", render: (row) => (row.satisfied === null ? "Points-based" : `${row.satisfied} / ${row.not_satisfied ?? 0}`) },
               ]}
             />
           </>
@@ -64,7 +64,7 @@ function RankList({ title, icon, rows, empty }: { title: string; icon: "up" | "d
                 <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-semibold" aria-hidden="true">{index + 1}</span>
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{row.title}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">{row.code} · {row.evaluated_learners} learner{row.evaluated_learners === 1 ? "" : "s"}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{row.source === "homework" ? "Homework" : "Assessment"} · {row.code} · {row.evaluated_learners} learner{row.evaluated_learners === 1 ? "" : "s"}</p>
                 </div>
               </div>
               <span className={icon === "up" ? "flex items-center gap-1 text-sm font-semibold text-emerald-700" : "flex items-center gap-1 text-sm font-semibold text-amber-800"}>

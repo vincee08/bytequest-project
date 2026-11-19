@@ -17,7 +17,7 @@ import {
   outcomeLabel,
   reasonText,
 } from "@/lib/analytics/format";
-import type { LearnerProfile } from "@/lib/analytics/performance-types";
+import { EVALUATION_STAGES, type EvaluationStage, type LearnerProfile } from "@/lib/analytics/performance-types";
 import { RANGE_LABELS, RANGE_PRESETS, analyticsHref, analyticsSearchParams, type AnalyticsQuery, type RangePreset } from "@/lib/analytics/query";
 import { cn } from "@/lib/utils";
 
@@ -26,10 +26,19 @@ type QuizRow = LearnerProfile["quizzes"][number];
 type HomeworkRow = LearnerProfile["assignments"][number];
 
 const HOMEWORK_STATUS: Record<HomeworkRow["status"], string> = {
-  graded: "Graded",
-  submitted: "Submitted, awaiting grade",
+  submitted: "Submitted · awaiting evaluation",
+  graded: "Graded · awaiting finalization",
+  finalized: "Finalized · awaiting release",
+  released: "Released",
   missing: "Missing",
   open: "Open",
+};
+
+const STAGE_LABELS: Record<EvaluationStage, string> = {
+  evaluate: "Evaluate",
+  finalize: "Finalize",
+  release: "Release",
+  released: "Released",
 };
 
 const TIMELINE_LABELS: Record<string, string> = {
@@ -106,11 +115,22 @@ export function LearnerProfileView({ profile, query }: { profile: LearnerProfile
             <Stat label="Quiz average" value={formatPercent(status.quiz_avg)} />
             <Stat label="Assessments" value={`${status.assessment.competent}/${status.assessment.released}`} helper={`competent of released · ${status.assessment.pending} pending`} />
             <Stat label="Missions verified" value={status.missions_verified} helper={`${status.practice_runs} runs in period`} />
-            <Stat label="Homework" value={status.assignments.submitted} helper={`${status.assignments.missing} missing · ${status.assignments.late} late`} />
+            <Stat label="Homework" value={status.assignments.submitted} helper={`${status.assignments.pending_evaluation} awaiting evaluation · ${status.assignments.missing} missing · ${status.assignments.late} late`} />
             <Stat label="Last activity" value={<span className="text-sm">{formatDateTime(status.last_activity_at)}</span>} />
           </div>
         </Panel>
       ) : null}
+
+      <Panel title="Evaluation status" description="This learner's technical assessments and homework submitted in the period, by Evaluation Center stage. Only released results count in averages.">
+        <dl className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-4 sm:p-5">
+          {EVALUATION_STAGES.map((stage) => (
+            <div key={stage} className="rounded-lg border border-border/70 bg-background px-3.5 py-3">
+              <dt className="text-[11px] font-semibold uppercase tracking-[0.04em] text-muted-foreground">{STAGE_LABELS[stage]}</dt>
+              <dd className="mt-1 text-lg font-bold tabular-nums">{profile.evaluation[stage]}</dd>
+            </div>
+          ))}
+        </dl>
+      </Panel>
 
       <Panel title="Curriculum progress" description="COC → module → topic and mission completion using the shared methodology (published topics, server-verified missions, COC practice quiz).">
         {profile.progress.cocs.length ? (
@@ -191,7 +211,11 @@ export function LearnerProfileView({ profile, query }: { profile: LearnerProfile
             columns={[
               { key: "title", label: "Homework", render: (row) => <div><p className="font-medium">{row.title}</p><p className="mt-0.5 text-xs text-muted-foreground">Due {formatDateTime(row.deadline_at)}</p></div> },
               { key: "status", label: "Status", render: (row) => <span className={cn(row.status === "missing" && "font-medium text-red-800")}>{HOMEWORK_STATUS[row.status]}{row.late ? " · late" : ""}</span> },
-              { key: "score", label: "Score", align: "right", render: (row) => row.score === null ? "—" : `${formatNumber(row.score)} / ${row.max_score ?? 100}` },
+              { key: "score", label: "Score", align: "right", render: (row) => row.score === null ? "—" : (
+                <span>{formatNumber(row.score)} / {formatNumber(row.max_score)}{row.percent !== null
+                  ? <span className="block text-[11px] text-muted-foreground">{formatPercent(row.percent)} released</span>
+                  : <span className="block text-[11px] text-muted-foreground">not released</span>}</span>
+              ) },
             ]}
           />
         </Panel>
@@ -209,7 +233,7 @@ export function LearnerProfileView({ profile, query }: { profile: LearnerProfile
                   </div>
                   <div className="text-right">
                     <p className="text-sm font-semibold">{attempt.released_at ? `${outcomeLabel(attempt.outcome)} · ${formatPercent(attempt.percent)}` : "Pending release"}</p>
-                    <p className="text-xs text-muted-foreground">{attempt.released_at ? `Released ${formatDateTime(attempt.released_at)}` : attempt.status.replaceAll("_", " ")}</p>
+                    <p className="text-xs text-muted-foreground">{attempt.released_at ? `Released ${formatDateTime(attempt.released_at)}` : attempt.stage ? `${STAGE_LABELS[attempt.stage]} stage` : attempt.status.replaceAll("_", " ")}</p>
                   </div>
                 </div>
                 {attempt.criteria.length ? (
