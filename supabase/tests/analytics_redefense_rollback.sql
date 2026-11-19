@@ -10,7 +10,7 @@
 -- Every function is called while impersonating the caller (RLS applies), the
 -- JSON result is captured, and assertions run after `reset role`.
 begin;
-select plan(219);
+select plan(220);
 
 -- Isolate the expected progress values from lessons published in the target
 -- database (rolled back with everything else).
@@ -38,6 +38,7 @@ create temporary table ax (
   qt_l3 uuid default gen_random_uuid(), qt_l2_draft uuid default gen_random_uuid(),
   h1 uuid default gen_random_uuid(), h2 uuid default gen_random_uuid(), h3 uuid default gen_random_uuid(),
   h4 uuid default gen_random_uuid(), h5 uuid default gen_random_uuid(),
+  gate_lesson uuid default gen_random_uuid(),
   coc1_id uuid
 );
 insert into ax default values;
@@ -353,8 +354,22 @@ select l3,'coc1_m4','v',3,now()-interval '1 day',now()-interval '1 day',80,5,2,0
 select l4,'coc1_m2','v',1,now()-interval '2 days',now()-interval '2 days',100,7,0,0,'verified',now()-interval '2 days' from ax;
 -- L4 (T2's learner) completes every COC1 module, then passes the COC1 practice
 -- quiz: the A2 gate (every module of the COC complete) is satisfied, not bypassed.
+-- A lesson published in LO1.4 beforehand keeps that module, and so the gate,
+-- open after all five missions are verified until L4 completes the lesson
+-- too. It is archived again after the quiz so the progress totals asserted
+-- below stay lesson-free (module completion is kept once recorded, slice A2).
+insert into public.curriculum_topics(id, module_id, sequence_order)
+select ax.gate_lesson, m.id, 1 + (select count(*) from public.curriculum_topics t where t.module_id = m.id)
+from ax, public.curriculum_modules m where m.coc_code = 'coc1' and m.code = 'LO1.4';
+insert into public.curriculum_topic_revisions(topic_id, revision_number, title, body_markdown, status, published_at)
+select gate_lesson, 1, 'Analytics gate lesson', 'Fixture lesson body.', 'published', now()-interval '21 days' from ax;
 select pg_temp.a7_complete(l4, m.mission_code, now()-interval '20 days')
 from ax cross join (values ('coc1_m1'),('coc1_m2'),('coc1_m3'),('coc1_m4'),('coc1_m5')) m(mission_code);
+select throws_ok(format($q$insert into public.practice_quiz_attempts(learner_id,coc_code,status,questions,answers,score,passed,submitted_at)
+  values (%L,'coc1','submitted',
+    '[{"id":"q1","answer":0},{"id":"q2","answer":0},{"id":"q3","answer":0},{"id":"q4","answer":0},{"id":"q5","answer":0}]'::jsonb,
+    '{"q1":0,"q2":0,"q3":0,"q4":0,"q5":0}'::jsonb,5,true,now())$q$, (select l4 from ax)),
+  '22023', 'PRACTICAL_COMPLETION_REQUIRED', 'fixture: the A2 gate refuses the practice quiz while a published COC1 lesson is incomplete');
 insert into public.learner_topic_progress(learner_id, topic_id, revision_id, completed_at)
 select ax.l4, t.id, (select r.id from public.curriculum_topic_revisions r where r.topic_id = t.id and r.status = 'published'
   order by r.revision_number desc limit 1), now()-interval '20 days'
@@ -369,6 +384,7 @@ with pq as (
     '[{"id":"q1","answer":0},{"id":"q2","answer":0},{"id":"q3","answer":0},{"id":"q4","answer":0},{"id":"q5","answer":0}]'::jsonb,
     '{"q1":0,"q2":0,"q3":0,"q4":0,"q5":0}'::jsonb,5,true,now()-interval '1 day' from ax returning id, learner_id)
 insert into public.practice_coc_progress(learner_id,coc_code,completed_at,quiz_attempt_id) select learner_id,'coc1',now()-interval '1 day',id from pq;
+update public.curriculum_topics set archived_at = now() where id = (select gate_lesson from ax);
 
 -- ===================================================================
 -- RLS: instructors read practice records of learners they teach only.
