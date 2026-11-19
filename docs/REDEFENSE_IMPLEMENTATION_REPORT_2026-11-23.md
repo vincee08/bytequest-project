@@ -35,7 +35,7 @@ Every panel item in the revision checklist has been implemented on `vince-branch
 - **Homework.** Linked to COC and mission, with criteria, maximum score, submission management, missing work, and the same evaluation workflow.
 - **Analytics.** Overall, class, learner, quiz, mission (including practice runs), criterion and engagement views. Every number is computed by the database from real records; pending evaluations are shown separately and excluded from averages.
 - **Learner management.**
-  - Excel/CSV roster import (preview → confirm). Existing accounts are enrolled; new emails are pre-registered and auto-enrol on sign-up. Instructors never create accounts.
+  - Excel roster import (`.xlsx`/`.xls`; preview → confirm). Existing accounts are enrolled; new emails are pre-registered and auto-enrol on sign-up. Instructors never create accounts.
   - Server-side learner search.
   - Staff-managed student IDs.
 - **Alignment.** One canonical curriculum: 16 official TR modules (learning outcomes) and 76 performance criteria, copied verbatim with source line references. Learn, Practice, Progress and the dashboard all read it, using one progress method.
@@ -44,7 +44,7 @@ Every panel item in the revision checklist has been implemented on `vince-branch
   - Objective 2: points, levels, rewards, achievements, an opt-in leaderboard and progress tracking.
   - Objective 4: an automated skill evaluation against competency criteria, completed by the instructor's Evaluate → Finalize → Release.
   - Objective 6: a performance analytics dashboard for instructors, and a learner Performance section, both refreshing in real time.
-- **Publication.** A draft → submitted → approved → published workflow for curriculum content, quiz questions and assessment results. Approved and published items are what learners see.
+- **Publication.** A draft → submitted → evaluated → finalized → approved → published workflow (plus needs-revision and unpublish) for curriculum content, quiz questions and assessment results. Approved and published items are what learners see.
 - **Integrity.** Evaluator answer keys are hidden from clients. RLS is on every table. No new SECURITY DEFINER functions beyond the approved list. No learner history was deleted.
 
 Remaining before or at the defense (Section 8):
@@ -75,7 +75,7 @@ Remaining before or at the defense (Section 8):
    - **A6:** gamification
    - **A7:** analytics
 4. **Review loop.** Each slice got its own specification and quality review, then fix rounds until every Critical and Important finding was resolved, with scoped re-reviews after each fix.
-5. **Integration.** All 39 migrations were applied in order on a fresh local database, the database types were regenerated, and the full gates ran.
+5. **Integration.** The re-defense migrations (39 at integration time; 43 after the final fix wave) were applied in order on a fresh local database, the database types were regenerated, and the full gates ran.
 6. **Browser QA.** The dashboard was checked at 1366, 1280 and 390 px, and the learner app in the Flutter web preview.
 7. **Final whole-branch review.** Six parallel reviewers covered SQL part A, SQL part B with the security inventory, dashboard server, dashboard UI, Flutter simulation, and the rest of Flutter. Then one fix wave and a scoped re-review (Section 6.3).
 
@@ -88,7 +88,7 @@ Remaining before or at the defense (Section 8):
 | Panel requirement | What was built | Verification |
 |---|---|---|
 | Components individually selectable and draggable, with rotation and realistic visuals | Assembly bench scene with a real motherboard close-up and an open case. The tray uses real part images. Parts can be dragged or tapped to select. A Rotate control shows the part's orientation marker, which turns with the part: gold triangle on the CPU, notch on the RAM, fan on the PSU. A larger preview shows marker position and angle, e.g. "Notch: left edge · 0°". | Widget tests for marker rotation and tap/drag placement. **Live:** CPU, RAM and PSU orientation visible and enforced. |
-| Multiple sequential assembly steps | Six phases with ordered steps:<br>1. Prepare the work area: inspect parts, wrist strap, mat ground point.<br>2. Prepare the motherboard (9 steps): socket lever, CPU orientation, thermal compound, cooler, CPU_FAN, DIMM latches, DIMM_A2/B2.<br>3. Install into the case (8 steps): PSU fan facing the intake vent, screwdriver, screws, I/O shield, motherboard on the standoffs, drive.<br>4. Connect power and data (5 cables).<br>5. Power-on test: POST with measured output, then interpretation.<br>6. Evidence review. | Contract `css-assembly-20261119-v3`. SQL suites `simulation_coc1_m2_contract`, `simulation_replay` and `simulation_sequence`. **Live:** full practice run completed. |
+| Multiple sequential assembly steps | Six phases with ordered steps:<br>1. Prepare the work area: inspect parts, wrist strap, mat ground point.<br>2. Prepare the motherboard (9 steps): socket lever, CPU orientation, thermal compound, cooler, CPU_FAN, DIMM latches, DIMM_A2/B2.<br>3. Install into the case (8 steps): PSU fan facing the intake vent, screwdriver, screws, I/O shield, motherboard on the standoffs, drive.<br>4. Connect power and data (5 cables).<br>5. Power-on test: POST with measured output, then interpretation.<br>6. Evidence review. | Contract `css-assembly-20261119-v3`. SQL suites `simulation_coc1_m2_contract`, `simulation_replay` and `simulation_assessment_sequence`. **Live:** full practice run completed. |
 | Logical placement areas, validation, prevention and correction | Physical slots with category and orientation rules. Prerequisites follow real assembly order. Wrong placements get concise technical feedback, e.g. "The processor only drops into the socket one way…". Parts can be removed and reseated. A failed POST reveals the faults of missing steps, which the learner then corrects. | Server replay tests (valid, invalid, out of order, correction). Flutter widget tests. |
 | Smooth drag, snap, highlights, indicators, hints and feedback | Snap into the slot rectangle. Compatible slots are highlighted in practice only. Operation-specific confirmations such as "DIMM latches opened.". "Show me how" outlines that follow the target under zoom and pan. Labelled hotspots ("Wrist strap", "Mat ground point"). | Widget tests, including 4 screen sizes with and without zoom. **Live** check. |
 | Record steps, incorrect attempts, attempts, time, completion, criteria and final performance | Every action is stored as evidence. On verification the database replays the actions against the contract and writes a practice run: run number, duration, incorrect and correction counts, per-step results. Assessment attempts are scored per criterion (COC1 M2 has 11 criteria). The results feed instructor analytics and learner progress. | SQL suites. **Live:** server verification of a correct run returned `verified: true`, run 1, 3,568 s, 3 incorrect attempts. |
@@ -99,18 +99,18 @@ Remaining before or at the defense (Section 8):
 - Scoring thresholds: at most 2 incorrect attempts per step; 0 for safety-critical steps (ESD/wrist strap, CPU orientation).
 - A failed test run adds at most one incorrect attempt per step.
 - Discard markers only apply to practice attempts.
-- Simulation assessment packages exist for all 20 missions (102 criteria).
+- Simulation assessment packages exist for all 20 missions (106 criteria after the final fix wave: 4–6 per mission, 11 for COC1 M2).
 
 ### Phase 3 — Quiz creation and management
 
 | Requirement | What was built | Verification |
 |---|---|---|
-| COC → Module → Topic → LO organisation; focus, type, difficulty, time limit, deadline, attempts | Curriculum foreign keys and cascading selectors. Focus, difficulty and time limit are stored. One attempt is enforced in the database. | `quiz_redefense_*` SQL suites, form tests |
-| No invented TESDA LOs | 16 modules and 76 performance criteria seeded verbatim from `docs/reference/tesda_sources/TR_current.txt` (Amended December 2013), each with a source line range | Foundation suite (seed against source references) |
+| COC → Module → Topic → LO organisation; focus, type, difficulty, time limit, deadline, attempts | Curriculum foreign keys and cascading selectors. Focus, difficulty and time limit are stored. One attempt is enforced in the database. | `quiz_redefense_*` SQL suites; Node tests of the settings and curriculum helpers (no component test of the forms) |
+| No invented TESDA LOs | 16 modules and 76 performance criteria seeded verbatim from `docs/reference/tesda_sources/TR_current.txt` (Amended December 2013), each with a source line range | Foundation suite (counts and verbatim samples; there is no full seed-versus-source test — see the release-readiness review, R3.2) |
 | AI generation grounded in the curriculum | Prompts are grounded in the selected module, topic and LO, plus focus, difficulty and type. Generated items stay drafts until a human approves them. Single questions can be regenerated. | `quiz-ai-curriculum` Node tests with mocked provider |
 | Scenario-based essay with rubric | `scenario_essay` item type with scenario, prompt, rubric criteria, points and word limits. The learner writes a long answer. The instructor scores against the rubric in the Evaluation Center. The result is final only after Finalize and Release. | `quiz_redefense_evaluation` suite; editor and mobile widget tests |
 | One attempt, deadline, auto-submission, states | The server automatically submits saved answers at the deadline or when the time limit expires (deterministic). States: draft, published, closed and archived. Extensions and reopening are supported. Results are hidden from learners until released. | Clock-controlled SQL tests (expiry while answering, extension, reopen, expiry before release) |
-| Management dashboard | Library filters by COC, module, topic and status. A results summary shows average, highest, lowest, completion, distribution and per-question difficulty, with links to the evaluation queue. | Node tests, browser QA |
+| Management dashboard | Library filters by COC, module, topic and status. A results summary shows average, highest, lowest, completion, distribution and per-question difficulty, with links to the evaluation queue. | Node tests of library filters and result statistics (no topic-filter assertion); page-load browser sweep |
 
 ### Phase 4 — Assignments (homework)
 
@@ -118,7 +118,7 @@ Remaining before or at the defense (Section 8):
 |---|---|---|
 | Categorised by COC and mission, with objectives, criteria, resources, maximum score and status | Optional COC and mission links. Objectives. A criteria list with points. Maximum score. Submission requirements. | `homework_redefense` suite |
 | Learner view: filter, submit, upload, status, feedback, score | Mobile lists with COC and mission labels. Submission and upload flow. Grades and feedback appear only after release; learner replays are redacted until then. | SQL suite, including a leak regression; widget tests |
-| Instructor view: filters, missing work, files, grading, late tracking | Submissions across assignments with filters, a missing-work view, late tracking, and grader names. Grading goes through Evaluate → Finalize → Release. | API tests, browser QA |
+| Instructor view: filters, missing work, files, grading, late tracking | Submissions across assignments with filters, a missing-work view, late tracking, and grader names. Grading goes through Evaluate → Finalize → Release. | Homework workflow and redaction Node tests; **no test or live check yet for the `/submissions` filters, missing-work view and grader names** |
 
 ### Phase 5 — Performance analytics
 
@@ -146,14 +146,14 @@ Accuracy rules:
 - there is no double counting;
 - a learner in two classes is handled.
 
-The dashboard refreshes through realtime, with 30-second polling as a fallback.
+The dashboard refreshes through realtime, with 30-second polling as a fallback. The learner-side refresh is covered by Flutter tests. The dashboard's live refresh (`AnalyticsLiveRefresh.tsx`) has no automated test yet and has not been demonstrated live. Rehearse demo step 6 before the defense.
 
 Verification: the `analytics_redefense` SQL suite (257 assertions), covering zero learners, pending evaluations, one learner in two classes, unpublished quizzes, and scope denial. Node tests check the dashboard data shapes. Browser QA covered the analytics tabs.
 
 ### Phase 6 — Learner management
 
 - **Excel bulk import.**
-  - Accepts `.xlsx`, `.xls` and `.csv` (SheetJS 0.20.3 from the official tarball) and offers a template download.
+  - Accepts `.xlsx` and `.xls` (SheetJS 0.20.3 from the official tarball) and offers a template download. CSV uploads are refused; only the downloadable error report is CSV.
   - Validates rows and tolerates header case and spacing variants.
   - Detects duplicates, invalid emails and staff-account emails.
   - Shows a preview before you confirm, then a summary.
@@ -204,7 +204,7 @@ Verification:
 
 ### Phase 10 — Approval and publication
 
-- **Statuses.** Curriculum topics, topic revisions and quiz questions move through draft → submitted → approved → published. Unpublishing is supported. Who and when is recorded in `content_publication_events`.
+- **Statuses.** Curriculum topics and topic revisions move through draft → submitted → evaluated → finalized → approved → published, with needs-revision; quiz questions are reviewed and approved before publication. Unpublishing is supported. Who and when is recorded in `content_publication_events`.
 - **What learners see.** Only approved and published content reaches the Learn page and quizzes.
 - **Assessment results.** These follow Evaluate → Finalize → Release; nothing is released automatically.
 - **"Website" interpretation.** ByteQuest has no public website, so "the website" means the instructor/admin dashboard and the learner app, as the owner decided.
@@ -412,7 +412,7 @@ Live QA added the coordinator's own findings Q1–Q6. Three fixers then worked i
 - **Hosted rollout limits not yet verified:**
   - the backup step is still manual;
   - the restored-production rehearsal has not run, because there is no backup on this machine;
-  - Batch B is about 0.83 MB, and its fit within the Management API size and time limits is unverified (the plan says stop rather than split);
+  - Batch B is about 0.92 MB (918,516 bytes of SQL), and its fit within the Management API size and time limits is unverified (the plan says stop rather than split);
   - hosted Supabase CORS for the custom version header matters only for web builds; the APK has no CORS.
 - **"Can wait" minors** skipped in the fix wave are listed in the three fix reports under `.superpowers/sdd/2026-11-19-redefense-revision/`.
 
