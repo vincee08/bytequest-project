@@ -36,20 +36,29 @@
 //   node scripts/seed-demo-class.mjs                  local stack + local dashboard (default)
 //   node scripts/seed-demo-class.mjs --summary-only   print the run summary only
 //   node scripts/seed-demo-class.mjs --remove         archive the class and deactivate the learners
-//   node scripts/seed-demo-class.mjs --target hosted --confirm --instructor-email <email> --admin-email <email> [--publish-topics]
+//   node scripts/seed-demo-class.mjs --target hosted --confirm --instructor-email <email> --admin-email <email> [--publish-topics] [--publish-assessments]
 // Credentials of the demo learners are written only to the gitignored
-// .tmp/demo-accounts.json; the run summary to .tmp/demo-seed-summary.json.
+// .tmp/demo-accounts.local.json (local) or .tmp/demo-accounts.hosted-<host>.json
+// (hosted); the run summary to .tmp/demo-seed-summary.json.
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import { execSync, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { appClientHeaders } from './lib/app-client-version.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const LOCAL_API = 'http://127.0.0.1:57321';
 const LOCAL_WEB = 'http://127.0.0.1:3000';
-const ACCOUNT_FILE = path.join(ROOT, '.tmp', 'demo-accounts.json');
+// One credential store per target (demo-data review m1): a hosted run never
+// reads the local passwords or user ids, and the other way round. The earlier
+// shared file is adopted only when it was written for the same Supabase URL.
+const LEGACY_ACCOUNT_FILE = path.join(ROOT, '.tmp', 'demo-accounts.json');
+export function accountFile(target) {
+  if (target.kind === 'local') return path.join(ROOT, '.tmp', 'demo-accounts.local.json');
+  return path.join(ROOT, '.tmp', `demo-accounts.hosted-${new URL(target.url).hostname.replace(/[^a-z0-9.-]/gi, '_')}.json`);
+}
 const SUMMARY_FILE = path.join(ROOT, '.tmp', 'demo-seed-summary.json');
 const DEFAULT_FIXTURES = path.join(ROOT, '.tmp', 'demo-practice-evidence.json');
 const DEFAULT_QA_ACCOUNTS = path.join(ROOT, '.tmp', 'local-qa-accounts.json');
@@ -411,7 +420,7 @@ const say = (message) => console.log(message);
 const stepLog = (scope, message) => console.log(`  ${scope.padEnd(10)} ${message}`);
 
 function parseArgs(argv) {
-  const options = { target: 'local', confirm: false, remove: false, archiveTopics: false, publishTopics: false, summaryOnly: false,
+  const options = { target: 'local', confirm: false, remove: false, archiveTopics: false, publishTopics: false, publishAssessments: false, summaryOnly: false,
     instructorEmail: null, adminEmail: null, webUrl: null, fixtures: DEFAULT_FIXTURES, qaAccounts: DEFAULT_QA_ACCOUNTS, paceMs: 150 };
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index];
@@ -421,6 +430,7 @@ function parseArgs(argv) {
     else if (arg === '--remove') options.remove = true;
     else if (arg === '--archive-topics') options.archiveTopics = true;
     else if (arg === '--publish-topics') options.publishTopics = true;
+    else if (arg === '--publish-assessments') options.publishAssessments = true;
     else if (arg === '--summary-only') options.summaryOnly = true;
     else if (arg === '--instructor-email') options.instructorEmail = next().toLowerCase();
     else if (arg === '--admin-email') options.adminEmail = next().toLowerCase();
@@ -439,7 +449,7 @@ const HELP = `Seeds the labelled re-defense demo class (see docs/DEMO_DATA.md).
   node scripts/seed-demo-class.mjs [--summary-only | --remove [--archive-topics]]
       Local stack (supabase status) and the local dashboard at ${LOCAL_WEB}.
       Staff: qa.instructor / qa.admin from .tmp/local-qa-accounts.json (--qa-accounts <file>).
-  node scripts/seed-demo-class.mjs --target hosted --confirm --instructor-email <email> --admin-email <email> [--publish-topics]
+  node scripts/seed-demo-class.mjs --target hosted --confirm --instructor-email <email> --admin-email <email> [--publish-topics] [--publish-assessments]
       Needs NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY (or _PUBLISHABLE_KEY), SUPABASE_SERVICE_ROLE_KEY,
       BYTEQUEST_DEMO_WEB_URL (or --web-url), BYTEQUEST_DEMO_INSTRUCTOR_PASSWORD and BYTEQUEST_DEMO_ADMIN_PASSWORD.
   Options: --practice-fixtures <file> (default .tmp/demo-practice-evidence.json), --web-url <url>, --pace-ms <ms>.`;
@@ -508,15 +518,24 @@ function newPassword() {
   return `Demo-${randomBytes(12).toString('base64url')}-7q`;
 }
 
-function readAccountStore() {
-  if (!fs.existsSync(ACCOUNT_FILE)) return { learners: {} };
-  try { return { learners: {}, ...JSON.parse(fs.readFileSync(ACCOUNT_FILE, 'utf8')) }; } catch { return { learners: {} }; }
+export function readAccountStore(target) {
+  const parse = (file) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return null; } };
+  const file = accountFile(target);
+  let store = fs.existsSync(file) ? parse(file) : null;
+  if (!store && fs.existsSync(LEGACY_ACCOUNT_FILE)) {
+    const legacy = parse(LEGACY_ACCOUNT_FILE);
+    if (legacy?.api === target.url) store = legacy;
+  }
+  // Never another target's credentials, whatever the file holds.
+  if (!store || (store.api && store.api !== target.url)) return { learners: {} };
+  return { ...store, learners: store.learners ?? {} };
 }
 
 function writeAccountStore(ctx, store) {
-  fs.mkdirSync(path.dirname(ACCOUNT_FILE), { recursive: true });
+  const file = accountFile(ctx.target);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
   const content = { note: 'Synthetic re-defense demo learners (gitignored). Never commit this file.', target: ctx.target.kind, api: ctx.target.url, updated_at: new Date().toISOString(), learners: store.learners };
-  fs.writeFileSync(ACCOUNT_FILE, `${JSON.stringify(content, null, 2)}\n`);
+  fs.writeFileSync(file, `${JSON.stringify(content, null, 2)}\n`);
 }
 
 function rpcError(fn, error) {
@@ -577,7 +596,8 @@ async function staffSession(ctx, account, role, createServerClient) {
 
 /** A learner signed in exactly as the mobile app is (bearer token). */
 function learnerSession(ctx, spec, createClient) {
-  const client = createClient(ctx.target.url, ctx.target.anon, { auth: { persistSession: false, autoRefreshToken: false } });
+  // The 1.2.0 app identifies itself on every request (x-bytequest-app-version).
+  const client = createClient(ctx.target.url, ctx.target.anon, { auth: { persistSession: false, autoRefreshToken: false }, global: { headers: appClientHeaders() } });
   let current = null;
   return {
     staff: false, spec, client, get id() { return spec.id; },
@@ -601,7 +621,10 @@ function learnerSession(ctx, spec, createClient) {
 async function call(ctx, actor, method, pathname, { json, form, expect } = {}) {
   const headers = new Headers();
   if (actor?.staff) { await actor.fresh(); headers.set('cookie', actor.cookieHeader()); }
-  else if (actor) headers.set('authorization', `Bearer ${await actor.token()}`);
+  else if (actor) {
+    headers.set('authorization', `Bearer ${await actor.token()}`);
+    for (const [name, value] of Object.entries(appClientHeaders())) headers.set(name, value);
+  }
   let body;
   if (json !== undefined) { headers.set('content-type', 'application/json'); body = JSON.stringify(json); }
   else if (form) body = form;
@@ -694,7 +717,7 @@ async function demoClass(ctx) {
 // Phases
 // ---------------------------------------------------------------------------
 async function ensureAccounts(ctx, specs) {
-  const store = readAccountStore();
+  const store = readAccountStore(ctx.target);
   const existing = await rows(ctx.service.from('profiles').select('user_id,email,role,status,full_name').in('email', specs.map((spec) => spec.email)), 'learner profiles');
   for (const base of specs) {
     const spec = { ...base };
@@ -709,7 +732,7 @@ async function ensureAccounts(ctx, specs) {
         spec.password = newPassword();
         const { error } = await ctx.service.auth.admin.updateUserById(spec.id, { password: spec.password });
         if (error) fail(`Could not reset the password of ${spec.email}: ${error.message}`);
-        stepLog(spec.key, 'existing account: password reset (credentials were not in .tmp/demo-accounts.json)');
+        stepLog(spec.key, `existing account: password reset (credentials were not in ${path.relative(ROOT, accountFile(ctx.target))})`);
       } else {
         stepLog(spec.key, `account exists (${spec.email})`);
       }
@@ -988,6 +1011,11 @@ async function runPractice(ctx) {
  * gets a one-time password that is never printed.
  */
 export function publishSimulationAssessments(ctx) {
+  // On hosted this publishes 20 production packages (not demo-labelled) and a
+  // governance principal: an explicit opt-in (demo-data review m2).
+  if (ctx.target.kind === 'hosted' && !ctx.options.publishAssessments) {
+    fail('The COC1 M2 simulation assessment is not published on the hosted project. Publish the 20 simulation assessments first (rollout plan step 8: node scripts/publish-simulation-assessments.mjs --target hosted --confirm), or re-run this script with --publish-assessments to let it run that publisher.');
+  }
   const args = [path.join(ROOT, 'scripts', 'publish-simulation-assessments.mjs'), ...(ctx.target.kind === 'hosted' ? ['--target', 'hosted', '--confirm'] : [])];
   stepLog('assess', `no published simulation assessment yet: running node scripts/publish-simulation-assessments.mjs${ctx.target.kind === 'hosted' ? ' --target hosted --confirm' : ''}`);
   const result = spawnSync(process.execPath, args, {
@@ -1419,6 +1447,15 @@ export async function main(argv = process.argv.slice(2)) {
   if (options.help) { say(HELP); return; }
   const ctx = await buildContext(options);
   if (options.remove) return removeDemo(ctx);
+  if (!options.summaryOnly && ctx.target.kind === 'hosted' && !options.publishAssessments) {
+    // Stop before any write when the hosted run would need the publisher.
+    const contract = ctx.contracts.get('coc1_m2');
+    const mission = (await rows(ctx.service.from('missions').select('id').eq('mission_code', 'coc1_m2'), 'mission'))[0];
+    const published = mission ? await rows(ctx.service.from('activity_versions').select('id,learner_payload').eq('mission_id', mission.id).eq('status', 'published'), 'activity versions') : [];
+    if (!published.some((item) => item.learner_payload?.mode === 'assessment' && !item.learner_payload?.simulation_template && item.learner_payload?.definition_version === contract?.version)) {
+      publishSimulationAssessments(ctx); // fails with the opt-in message
+    }
+  }
   if (!options.summaryOnly) {
     ctx.fixtures = loadFixtures(ctx);
     say('\n[1/9] Learner accounts with an account before the roster import');
@@ -1450,7 +1487,7 @@ export async function main(argv = process.argv.slice(2)) {
     await gradeHomework(ctx);
     await optIntoLeaderboard(ctx);
   } else {
-    const store = readAccountStore();
+    const store = readAccountStore(ctx.target);
     for (const spec of LEARNERS) {
       const saved = store.learners[spec.key];
       if (saved?.password && saved.user_id) ctx.learners.set(spec.key, learnerSession(ctx, { ...spec, id: saved.user_id, password: saved.password }, ctx.createClient));

@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { appClientHeaders } from "./lib/app-client-version.mjs";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const publishableKey =
@@ -178,6 +179,7 @@ async function createAccounts() {
     if (profileError) throw profileError;
     const client = createClient(url, publishableKey, {
       auth: { autoRefreshToken: false, persistSession: false },
+      global: { headers: appClientHeaders() },
     });
     const { data: session, error: signInError } = await client.auth.signInWithPassword({
       email: account.email,
