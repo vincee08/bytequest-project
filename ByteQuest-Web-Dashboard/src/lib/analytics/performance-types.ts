@@ -13,6 +13,10 @@ const timestamp = z.string().nullable();
 
 export const periodSchema = z.object({ from: z.string(), to: z.string() });
 
+/** Evaluate -> Finalize -> Release -> Released (Evaluation Center mapping). */
+export const stageCountsSchema = z.object({ evaluate: count, finalize: count, release: count, released: count });
+export type StageCounts = z.infer<typeof stageCountsSchema>;
+
 export const filterOptionsSchema = z.object({
   classes: z.array(z.object({ id, title: z.string(), class_code: z.string().nullable() })),
   cocs: z.array(z.object({ code: z.string(), title: z.string() })),
@@ -38,9 +42,10 @@ export const overviewSchema = z.object({
     eligible: count, completed: count, completion_rate: metric,
   }),
   homework: z.object({
-    applicable: z.boolean(), eligible: count, submitted: count, graded: count, missing: count, late: count,
-    avg_percent: metric, completion_rate: metric,
+    applicable: z.boolean(), eligible: count, submitted: count, released: count, pending_evaluation: count,
+    missing: count, late: count, avg_percent: metric, completion_rate: metric,
   }),
+  evaluation: z.object({ technical: stageCountsSchema, homework: stageCountsSchema, total: stageCountsSchema }),
   missions: z.object({
     applicable: z.boolean(), verified: count, learners_verified: count, completion_rate: metric, runs: count,
     successful_runs: count, failed_runs: count, avg_duration_seconds: metric,
@@ -98,7 +103,7 @@ export const learnerRowSchema = z.object({
   performance_score: metric, quiz_avg: metric, quizzes_scored: count,
   assessment: z.object({ released: count, competent: count, pending: count }),
   missions_verified: count, practice_runs: count,
-  assignments: z.object({ submitted: count, missing: count, late: count }),
+  assignments: z.object({ submitted: count, missing: count, late: count, pending_evaluation: count }),
   last_activity_at: timestamp, status: z.enum(LEARNER_STATUSES), reasons: z.array(statusReasonSchema),
 });
 export type LearnerRow = z.infer<typeof learnerRowSchema>;
@@ -148,9 +153,12 @@ export const missionAnalyticsSchema = z.object({
   missions: z.array(z.object({
     mission_code: z.string(), title: z.string(), coc_code: z.string(),
     module: z.object({ id, code: z.string(), title: z.string() }).nullable(),
-    learners_in_scope: count, learners_attempted: count, learners_verified: count, completion_rate: metric,
-    runs: count, successful_runs: count, failed_runs: count, avg_runs_per_learner: metric,
-    avg_duration_seconds: metric, avg_invalid_actions: metric,
+    learners_in_scope: count,
+    // In the period:
+    learners_attempted: count, learners_verified: count, runs: count, successful_runs: count, failed_runs: count,
+    avg_runs_per_learner: metric, avg_duration_seconds: metric, avg_invalid_actions: metric,
+    // To date (by the period end):
+    learners_verified_to_date: count, completion_rate_to_date: metric,
   })),
   assessments: z.array(z.object({
     mission_code: z.string(), title: z.string(), coc_code: z.string(), attempts: count, submitted: count,
@@ -160,10 +168,13 @@ export const missionAnalyticsSchema = z.object({
 });
 export type MissionAnalytics = z.infer<typeof missionAnalyticsSchema>;
 
+export const CRITERION_SOURCES = ["assessment", "homework"] as const;
 const criterionSchema = z.object({
-  source: z.string(), criterion_id: id, code: z.string(), title: z.string(), mission_code: z.string().nullable(),
-  mission_title: z.string().nullable(), max: z.number().nullable(), avg: metric, percent: metric,
-  evaluated_learners: count, satisfied: count, not_satisfied: count,
+  source: z.enum(CRITERION_SOURCES), criterion_id: id, code: z.string(), title: z.string(),
+  mission_code: z.string().nullable(), mission_title: z.string().nullable(),
+  activity_title: z.string().nullable().optional().transform((value) => value ?? null),
+  max: z.number().nullable(), avg: metric, percent: metric,
+  evaluated_learners: count, satisfied: count.nullable(), not_satisfied: count.nullable(),
 });
 export type CriterionRow = z.infer<typeof criterionSchema>;
 
@@ -176,6 +187,11 @@ export const criteriaAnalyticsSchema = z.object({
 });
 export type CriteriaAnalytics = z.infer<typeof criteriaAnalyticsSchema>;
 
+export const EVALUATION_STAGES = ["evaluate", "finalize", "release", "released"] as const;
+export type EvaluationStage = (typeof EVALUATION_STAGES)[number];
+export const HOMEWORK_STATUSES = ["submitted", "graded", "finalized", "released", "missing", "open"] as const;
+export type HomeworkStatus = (typeof HOMEWORK_STATUSES)[number];
+
 export const learnerProfileSchema = z.object({
   period: periodSchema,
   learner: z.object({ id, name: z.string(), student_id: z.string().nullable(), email: z.string(), account_status: z.string() }),
@@ -184,8 +200,9 @@ export const learnerProfileSchema = z.object({
     status: z.enum(LEARNER_STATUSES), reasons: z.array(statusReasonSchema), last_activity_at: timestamp,
     progress_percent: metric, performance_score: metric, quiz_avg: metric, missions_verified: count, practice_runs: count,
     assessment: z.object({ released: count, competent: count, pending: count }),
-    assignments: z.object({ submitted: count, missing: count, late: count }),
+    assignments: z.object({ submitted: count, missing: count, late: count, pending_evaluation: count }),
   }).nullable(),
+  evaluation: stageCountsSchema,
   progress: z.object({
     overall_percent: metric, completed_items: count, total_items: count,
     cocs: z.array(z.object({
@@ -215,12 +232,14 @@ export const learnerProfileSchema = z.object({
   })),
   assignments: z.array(z.object({
     homework_id: id, title: z.string(), class_title: z.string().nullable(), deadline_at: timestamp,
-    submitted_at: timestamp, late: z.boolean(), status: z.enum(["graded", "submitted", "missing", "open"]),
-    score: z.number().nullable(), max_score: z.number().nullable(),
+    submitted_at: timestamp, late: z.boolean(), status: z.enum(HOMEWORK_STATUSES),
+    stage: z.enum(EVALUATION_STAGES).nullable(),
+    score: z.number().nullable(), max_score: z.number().nullable(), percent: metric,
   })),
   assessments: z.array(z.object({
     attempt_id: id, mission_code: z.string(), title: z.string(), assignment_title: z.string(),
-    class_title: z.string().nullable(), status: z.string(), submitted_at: timestamp, released_at: timestamp,
+    class_title: z.string().nullable(), status: z.string(), stage: z.enum(EVALUATION_STAGES).nullable(),
+    submitted_at: timestamp, released_at: timestamp,
     percent: metric, outcome: z.string().nullable(),
     criteria: z.array(z.object({
       criterion_id: id, code: z.string(), title: z.string(), observation: z.string().nullable(),

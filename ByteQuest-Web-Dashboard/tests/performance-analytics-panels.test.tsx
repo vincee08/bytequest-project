@@ -39,7 +39,12 @@ const emptyOverview = overviewSchema.parse({
   classes: [],
   assessments: { applicable: true, attempts: 0, submitted: 0, released: 0, competent: 0, not_yet_competent: 0, competent_rate: null, avg_percent: null, pending_release: 0 },
   quizzes: { applicable: true, submitted: 0, scored: 0, pending: 0, avg_percent: null, eligible: 0, completed: 0, completion_rate: null },
-  homework: { applicable: true, eligible: 0, submitted: 0, graded: 0, missing: 0, late: 0, avg_percent: null, completion_rate: null },
+  homework: { applicable: true, eligible: 0, submitted: 0, released: 0, pending_evaluation: 0, missing: 0, late: 0, avg_percent: null, completion_rate: null },
+  evaluation: {
+    technical: { evaluate: 0, finalize: 0, release: 0, released: 0 },
+    homework: { evaluate: 0, finalize: 0, release: 0, released: 0 },
+    total: { evaluate: 0, finalize: 0, release: 0, released: 0 },
+  },
   missions: { applicable: true, verified: 0, learners_verified: 0, completion_rate: null, runs: 0, successful_runs: 0, failed_runs: 0, avg_duration_seconds: null },
   learning_progress: { applicable: true, avg_percent: null, items_total: 24, definition: "Completed required items divided by required items." },
   trend: [],
@@ -50,6 +55,7 @@ test("overview renders an honest empty state instead of zero averages", () => {
   const html = renderToStaticMarkup(<OverviewPanel data={emptyOverview} query={query} pathname="/analytics" />);
   assert.match(html, /No submissions in this period/);
   assert.match(html, /No scored work in this period/);
+  assert.match(html, /No submitted work in this period/);
   assert.doesNotMatch(html, />0%</, "a missing average is never displayed as 0%");
   assert.match(html, /Population:/);
   assert.match(html, /Period:/);
@@ -62,6 +68,11 @@ test("overview cards state population and period and mark unlinked sources", () 
     classes: [{ id: CLASS_A, title: "CSS A", class_code: "CSS-A", enrolled: 3 }],
     assessments: { ...emptyOverview.assessments, released: 3, competent: 1, not_yet_competent: 2, competent_rate: 33.3, avg_percent: 66.7, pending_release: 1, submitted: 4, attempts: 4 },
     homework: { ...emptyOverview.homework, applicable: false },
+    evaluation: {
+      technical: { evaluate: 1, finalize: 1, release: 0, released: 3 },
+      homework: { evaluate: 1, finalize: 1, release: 1, released: 2 },
+      total: { evaluate: 2, finalize: 2, release: 1, released: 5 },
+    },
     trend: [{ date: "2026-11-18", assessments: 1, quizzes: 2, homework: 0, practice_runs: 3, verified: 1 }],
   });
   const html = renderToStaticMarkup(<OverviewPanel data={data} query={query} pathname="/analytics" />);
@@ -70,6 +81,11 @@ test("overview cards state population and period and mark unlinked sources", () 
   assert.match(html, /Not linked/);
   assert.match(html, /3 learners · /, "each card footer states the population");
   assert.match(html, /tab=learners&amp;class=11111111/, "class rows drill down to the learner list");
+  assert.ok(html.includes('<div class="relative overflow-x-auto"><table'),
+    "wide tables scroll in a positioned box, so their visually hidden link text cannot widen the page on phones");
+  assert.ok(html.includes("Evaluation status (Evaluate → Finalize → Release)"), "the evaluation pipeline panel is shown");
+  assert.ok(html.includes('>Finalize</td><td class="py-2 text-right">1</td><td class="py-2 text-right">1</td><td class="py-2 text-right font-semibold">2</td>'),
+    "the stage table backs the chart");
   const adminHtml = renderToStaticMarkup(<OverviewPanel data={data} query={query} pathname={null} scopeLabel="every active class" />);
   assert.doesNotMatch(adminHtml, /href="\/analytics/, "the admin overview never links into instructor-only routes");
   assert.match(adminHtml, /Active members of every active class/);
@@ -95,8 +111,8 @@ test("learner list shows status badges, readable reasons and profile links", () 
   const data = learnerPerformanceSchema.parse({
     period,
     learners: [
-      { id: LEARNER_B, name: "Ben", student_id: "S-2", email: "ben@example.invalid", classes: [{ id: CLASS_A, title: "CSS A" }], progress_percent: 0, completed_items: 0, total_items: 24, performance_score: 50, quiz_avg: 50, quizzes_scored: 1, assessment: { released: 0, competent: 0, pending: 1 }, missions_verified: 0, practice_runs: 0, assignments: { submitted: 0, missing: 1, late: 0 }, last_activity_at: "2026-10-30T07:00:00Z", status: "falling_behind", reasons: [{ code: "inactive", kind: "falling_behind", threshold_days: 14, days_inactive: 20, last_activity_at: "2026-10-30T07:00:00Z" }] },
-      { id: LEARNER_A, name: "Ana", student_id: "S-1", email: "ana@example.invalid", classes: [{ id: CLASS_A, title: "CSS A" }], progress_percent: 12.5, completed_items: 3, total_items: 24, performance_score: 82.5, quiz_avg: 100, quizzes_scored: 1, assessment: { released: 2, competent: 1, pending: 0 }, missions_verified: 3, practice_runs: 4, assignments: { submitted: 1, missing: 1, late: 0 }, last_activity_at: "2026-11-17T07:00:00Z", status: "on_track", reasons: [] },
+      { id: LEARNER_B, name: "Ben", student_id: "S-2", email: "ben@example.invalid", classes: [{ id: CLASS_A, title: "CSS A" }], progress_percent: 0, completed_items: 0, total_items: 24, performance_score: 50, quiz_avg: 50, quizzes_scored: 1, assessment: { released: 0, competent: 0, pending: 1 }, missions_verified: 0, practice_runs: 0, assignments: { submitted: 0, missing: 1, late: 0, pending_evaluation: 0 }, last_activity_at: "2026-10-30T07:00:00Z", status: "falling_behind", reasons: [{ code: "inactive", kind: "falling_behind", threshold_days: 14, days_inactive: 20, last_activity_at: "2026-10-30T07:00:00Z" }] },
+      { id: LEARNER_A, name: "Ana", student_id: "S-1", email: "ana@example.invalid", classes: [{ id: CLASS_A, title: "CSS A" }], progress_percent: 12.5, completed_items: 3, total_items: 24, performance_score: 82.5, quiz_avg: 100, quizzes_scored: 1, assessment: { released: 2, competent: 1, pending: 0 }, missions_verified: 3, practice_runs: 4, assignments: { submitted: 1, missing: 1, late: 0, pending_evaluation: 1 }, last_activity_at: "2026-11-17T07:00:00Z", status: "on_track", reasons: [] },
     ],
     thresholds: { inactivity_days: 14, progress_ratio_of_class_median: 0.5, quiz_average_below: 75, incomplete_runs_on_one_mission: 3 },
     counts: { on_track: 1, struggling: 0, falling_behind: 1 },
@@ -133,7 +149,7 @@ test("quiz list and detail render distribution, per-question and results tables"
 test("mission panel separates practice runs from technical assessments", () => {
   const data = missionAnalyticsSchema.parse({
     period,
-    missions: [{ mission_code: "coc1_m4", title: "Connect peripherals", coc_code: "coc1", module: { id: ITEM, code: "LO1.2", title: "Install OS" }, learners_in_scope: 3, learners_attempted: 1, learners_verified: 0, completion_rate: 0, runs: 3, successful_runs: 0, failed_runs: 3, avg_runs_per_learner: 3, avg_duration_seconds: null, avg_invalid_actions: 2 }],
+    missions: [{ mission_code: "coc1_m4", title: "Connect peripherals", coc_code: "coc1", module: { id: ITEM, code: "LO1.2", title: "Install OS" }, learners_in_scope: 3, learners_attempted: 1, learners_verified: 0, learners_verified_to_date: 0, completion_rate_to_date: 0, runs: 3, successful_runs: 0, failed_runs: 3, avg_runs_per_learner: 3, avg_duration_seconds: null, avg_invalid_actions: 2 }],
     assessments: [{ mission_code: "coc1_m2", title: "Install components", coc_code: "coc1", attempts: 4, submitted: 4, released: 3, competent: 1, not_yet_competent: 2, pending: 1, avg_percent: 66.7 }],
     generated_at,
   });
@@ -141,6 +157,7 @@ test("mission panel separates practice runs from technical assessments", () => {
   assert.match(html, /Practice missions/);
   assert.match(html, /Technical assessments by mission/);
   assert.match(html, /3 \(0 ok · 3 incomplete\)/);
+  assert.ok(html.includes(">Completion to date<") && html.includes(">Runs (period)<"), "practice columns are labelled period or to date");
   const none = renderToStaticMarkup(<MissionsPanel data={{ ...data, missions: [], assessments: [] }} query={query} />);
   assert.match(none, /No practice activity in this period/);
 });
@@ -148,10 +165,13 @@ test("mission panel separates practice runs from technical assessments", () => {
 test("criteria panel lists strongest and weakest skills", () => {
   const strong = { source: "assessment", criterion_id: CRITERION, code: "CR-A", title: "Wears ESD strap", mission_code: "coc1_m2", mission_title: "Install components", max: 1, avg: 1, percent: 100, evaluated_learners: 2, satisfied: 2, not_satisfied: 0 };
   const weak = { ...strong, criterion_id: ITEM, code: "CR-B", title: "Seats the CPU", avg: 0.5, percent: 50, satisfied: 1, not_satisfied: 1 };
-  const data = criteriaAnalyticsSchema.parse({ period, criteria: [strong, weak], strongest: [strong], weakest: [weak], generated_at });
+  const homework = { ...strong, source: "homework", criterion_id: `${ITEM}:HW-1`, code: "HW-1", title: "Report structure", activity_title: "Workstation report", max: 30, avg: 25, percent: 83.3, evaluated_learners: 1, satisfied: null, not_satisfied: null };
+  const data = criteriaAnalyticsSchema.parse({ period, criteria: [strong, weak, homework], strongest: [strong], weakest: [weak], generated_at });
   const html = renderToStaticMarkup(<CriteriaPanel data={data} query={query} />);
   assert.match(html, /Strongest skills/);
   assert.match(html, /Wears ESD strap/);
   assert.match(html, /Seats the CPU/);
   assert.match(html, /50%/);
+  assert.ok(html.includes("Points-based"), "homework criteria have no satisfied count");
+  assert.ok(html.includes("HW-1 · Workstation report"), "homework criteria name their homework");
 });

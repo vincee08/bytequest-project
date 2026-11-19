@@ -100,7 +100,7 @@ export function LearnersPanel({ data, query }: { data: LearnerPerformance; query
               <span>{row.missions_verified} verified<span className="block text-[11px] text-muted-foreground">{row.practice_runs} runs</span></span>
             ) },
             { key: "homework", label: "Homework", align: "right", render: (row) => (
-              <span>{row.assignments.submitted} submitted<span className="block text-[11px] text-muted-foreground">{row.assignments.missing} missing · {row.assignments.late} late</span></span>
+              <span>{row.assignments.submitted} submitted<span className="block text-[11px] text-muted-foreground">{row.assignments.pending_evaluation} awaiting evaluation · {row.assignments.missing} missing · {row.assignments.late} late</span></span>
             ) },
             { key: "activity", label: "Last activity", render: (row) => <span className="whitespace-nowrap text-xs text-muted-foreground">{formatDateTime(row.last_activity_at)}</span> },
           ]}

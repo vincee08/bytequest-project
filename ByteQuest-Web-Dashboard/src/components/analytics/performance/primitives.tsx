@@ -87,7 +87,9 @@ export function DataTable<T>({
 }) {
   if (!rows.length) return <EmptyState title={emptyTitle} />;
   return (
-    <div className="overflow-x-auto">
+    // `relative` keeps visually hidden (absolute) cell text inside the scroll
+    // box, so a wide table never widens the page on phones.
+    <div className="relative overflow-x-auto">
       <table className="w-full text-left text-sm" style={{ minWidth }}>
         <caption className="sr-only">{caption}</caption>
         <thead className="bg-muted/45 text-xs text-muted-foreground">
