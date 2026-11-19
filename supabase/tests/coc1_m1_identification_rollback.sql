@@ -3,6 +3,11 @@
 \echo 1..1
 begin;
 
+-- Isolate the COC1 quiz gate from lessons published in the target database
+-- (rolled back with everything else): this regression needs no curriculum
+-- topic, so none is required.
+update public.curriculum_topics set archived_at = now() where archived_at is null;
+
 do $test$
 declare
   v_user uuid := gen_random_uuid();
