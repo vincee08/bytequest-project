@@ -688,8 +688,10 @@ class _QuizTakingScreenState extends State<QuizTakingScreen>
     if (_locked) return false;
     setState(() {
       _saving = true;
-      if (!background) _error = null;
-      _answers[itemId] = value;
+      if (!background) {
+        _error = null;
+        _answers[itemId] = value;
+      }
     });
     try {
       await _service.saveAnswer(
@@ -701,10 +703,16 @@ class _QuizTakingScreenState extends State<QuizTakingScreen>
       if (mounted) setState(() => _essaySaveFailed = false);
       final isEssay =
           widget.attempt.questions.any((q) => q.id == itemId && q.isEssay);
-      if (isEssay && (_answers[itemId] ?? '').trim() == value) {
+      final latest = (_answers[itemId] ?? '').trim();
+      if (isEssay && latest == value) {
         unawaited(_drafts
             .clear(widget.attempt.attemptId, itemId)
             .catchError((Object _) {}));
+      } else if (isEssay && latest.isNotEmpty && mounted) {
+        // Writing continued while this save was in flight: save the newer text too.
+        _essayDebounce?.cancel();
+        _essayDebounce =
+            Timer(_essayAutosaveDelay, () => unawaited(_saveEssayNow()));
       }
       return true;
     } on LearnerQuizClosedException catch (error) {
