@@ -7,6 +7,7 @@ import '../../models/learner_learning_path_model.dart';
 import 'coc_details_screen.dart';
 import 'package:provider/provider.dart';
 import '../../services/mission_service.dart';
+import '../../data/learning_content_data.dart';
 import '../../data/mission_content_data.dart';
 import '../../widgets/practice_coc_session_panel.dart';
 
@@ -203,7 +204,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  '${MissionContentData.practiceMissionNumber(mission.number)} · ${mission.title}',
+                  '${LearningContentData.missionNumber(mission.number)} · ${mission.title}',
                   style: AppTheme.bodySmall,
                 ),
               ),
