@@ -137,13 +137,14 @@ void main() {
           data: MediaQueryData.fromView(tester.view)
               .copyWith(textScaler: const TextScaler.linear(2)),
           child: PracticeCocTimeLabel(
-              session: session, now: now.add(const Duration(minutes: 55))),
+              session: session,
+              now: now.add(const Duration(minutes: 55, seconds: 30))),
         ),
       ),
     ));
     expect(find.text(MissionContentData.practiceTimerWarningShort(5)),
         findsOneWidget);
-    expect(find.text('5:00'), findsOneWidget);
+    expect(find.text('4:30'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
@@ -154,5 +155,42 @@ void main() {
     expect(find.text(MissionContentData.practiceTimerExpiredShort),
         findsOneWidget);
     expect(find.text('0:00'), findsOneWidget);
+  });
+
+  // QA Q5: the warning names the threshold it is under, so it never reads
+  // as the remaining time ("10 min left" beside 6:26).
+  test('timer warnings are thresholds, not the remaining time', () {
+    int? under(int minutes, int seconds) =>
+        MissionContentData.practiceTimerThreshold(
+            Duration(minutes: minutes, seconds: seconds));
+    expect(under(10, 1), isNull);
+    expect(under(10, 0), isNull, reason: 'exactly 10:00 is not under 10');
+    expect(under(9, 59), 10);
+    expect(under(6, 26), 10);
+    expect(under(4, 57), 5);
+    expect(under(0, 59), 1);
+    expect(MissionContentData.practiceTimerWarningShort(10),
+        'Under 10 min left');
+    expect(MissionContentData.practiceTimerWarning(10),
+        'Less than 10 minutes remain in this COC practice session.');
+    expect(MissionContentData.practiceTimerWarning(1),
+        'Less than 1 minute remains in this COC practice session.');
+  });
+
+  testWidgets('the label at 6:26 says under 10 minutes', (tester) async {
+    final now = DateTime.utc(2026, 11, 9, 9);
+    final session = await const PracticeCocSessionService()
+        .start('timer-threshold-learner', 'coc1', now: now);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: PracticeCocTimeLabel(
+            session: session,
+            now: now.add(const Duration(minutes: 53, seconds: 34))),
+      ),
+    ));
+    expect(find.text('6:26'), findsOneWidget);
+    expect(find.text(MissionContentData.practiceTimerWarningShort(10)),
+        findsOneWidget);
+    expect(find.text('10 min left'), findsNothing);
   });
 }

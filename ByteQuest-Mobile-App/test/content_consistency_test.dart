@@ -1,9 +1,25 @@
 import 'package:bytequest/data/mission_content_data.dart';
 import 'package:bytequest/data/mission_simulation_definitions.dart';
+import 'package:bytequest/data/quiz_content_data.dart';
 import 'package:bytequest/screens/simulation/templates/coc2_cable_assessment_contract.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  // Rest Minors 1 and 11.
+  test('result and progress copy follows the binding rules', () {
+    for (final label in [
+      QuizContentData.itemCorrect,
+      QuizContentData.itemNeedsReview,
+    ]) {
+      expect(label, isNot(matches(RegExp(r'^(Correct|Wrong)\W*$'))),
+          reason: 'never a bare Correct or Wrong');
+    }
+    expect(MissionContentData.practiceSavedMessage,
+        isNot(contains('five missions')),
+        reason: 'the COC quiz follows module completion, lessons included');
+    expect(MissionContentData.practiceSavedMessage, contains('lesson'));
+  });
+
   test('COC 2 identification answer keys exist in their option sets', () {
     final questions = MissionContentData.getCOC2M1Questions();
 

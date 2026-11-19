@@ -9,6 +9,7 @@ import '../models/assigned_activity_model.dart';
 import '../models/attempt_history_model.dart';
 import '../screens/simulation/runtime/mission_evidence_gateway.dart';
 import '../screens/simulation/runtime/mission_runtime_models.dart';
+import 'app_version_service.dart';
 
 typedef AuthoritativeAssessmentRpc = Future<dynamic> Function(
   String function,
@@ -225,10 +226,20 @@ class AuthoritativeAssessmentService implements MissionEvidenceTransport {
     await preferences.setString(startPreference, startKey);
     await preferences.setString(submissionPreference, submissionKey);
 
-    final response = await _supabase.rpc('start_attempt', params: {
-      'p_assignment_id': assignment.id,
-      'p_client_start_key': startKey,
-    }) as Map<String, dynamic>;
+    final Map<String, dynamic> response;
+    try {
+      response = await _supabase.rpc('start_attempt', params: {
+        'p_assignment_id': assignment.id,
+        'p_client_start_key': startKey,
+      }) as Map<String, dynamic>;
+    } catch (error) {
+      // The server refuses the start, before anything is recorded, for an
+      // app version below the supported minimum.
+      if (isAppUpdateRequiredError(error)) {
+        throw const AssessmentUpdateRequiredException();
+      }
+      rethrow;
+    }
     final status = response['status'] as String? ?? 'in_progress';
     if (status != 'in_progress') {
       await _clearAttemptPreferences(preferences, userId, assignment.id);
