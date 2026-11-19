@@ -261,6 +261,7 @@ abstract final class MissionEquipmentSimulator {
           final operating = conditionsMet(check['requires'], state);
           if (!operating && check['counts'] is String) {
             chargedSteps.add(check['counts'] as String);
+            repairing.addAll(strings(check['repairs']));
             for (final condition in maps(check['requires'])) {
               final path = condition['path'];
               if (path is! String) continue;
@@ -309,7 +310,9 @@ abstract final class MissionEquipmentSimulator {
           recorded['reveals_fact_id'] =
               phase.presentation['test_reveals_fact_id'];
         }
-        feedback = MissionContentData.testResultRecordedFeedback;
+        feedback = assessment
+            ? MissionContentData.assessmentTestRecorded
+            : MissionContentData.testResultRecordedFeedback;
         break;
     }
     if (assessment &&

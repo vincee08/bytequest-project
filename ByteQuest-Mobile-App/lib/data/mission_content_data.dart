@@ -935,6 +935,7 @@ class MissionContentData {
       'A configuration value has an invalid format. Check the field specification.';
   static const testResultRecordedFeedback =
       'Measured output recorded. Inspect each reading before interpreting the result.';
+  static const assessmentTestRecorded = 'Measured output recorded.';
   static const confirmSequenceLabel = 'Apply procedure order';
   static const revisePhaseLabel = 'Review earlier phase';
   static const practiceHintLabel = 'Practice help';

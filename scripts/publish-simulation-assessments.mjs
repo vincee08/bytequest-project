@@ -188,7 +188,7 @@ export function buildSimulationPackage({ missionCode, contract, link }) {
       contract_version: contract.version,
       scoring_method: "binary_sum",
       competency_method: "all_required",
-      threshold_rule: "Each step allows at most two incorrect attempts (invalid actions plus corrections); safety-critical steps allow none.",
+      threshold_rule: "Each step allows at most two incorrect attempts: refused actions, corrections, confirmed wrong orders and, once per failed power-on test, a failing check of the step (repairs of what that test flagged are not counted). Safety-critical steps allow none.",
       client_score_authoritative: false,
     },
     criteria: simulationCriteria(missionCode, definition, link),

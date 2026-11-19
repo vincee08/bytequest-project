@@ -240,6 +240,42 @@ void main() {
     expect(harness.controller.state.acceptedEvidenceIds, contains('v2-1'));
   });
 
+  test('assessment restores every recorded action, even after a discard marker',
+      () async {
+    const current = MissionSimulationDefinitions.coc1M2AssemblyContractVersion;
+    final transport = _ServerTransport([
+      _action('coc1_m2', 'coc1_m2_p1', 'object_inspected',
+          {'runtime_action_type': 'object_inspected'},
+          target: 'cpu', id: 'before'),
+      _action('coc1_m2', 'coc1_m2_p1', 'practice_progress_discarded',
+          {'reason': 'definition_updated'},
+          id: 'marker'),
+      _action('coc1_m2', 'coc1_m2_p1', 'object_inspected',
+          {'runtime_action_type': 'object_inspected'},
+          target: 'psu', id: 'after'),
+    ]);
+    final controller = MissionRuntimeController(
+      userId: 'version-qa-assessment',
+      initialState: MissionRuntimeState.initial('coc1_m2',
+              mode: MissionRuntimeMode.assessment,
+              assessmentAttemptId: 'attempt-qa',
+              definitionVersion: current)
+          .copyWith(currentPhaseId: 'coc1_m2_p1'),
+      store: const SharedPreferencesMissionRuntimeStore(),
+      evidenceGateway: MissionEvidenceGateway(transport: transport),
+      restoreReducer: MissionRuntimeActionReducer(coc1M2),
+      submissionPhaseIds: {coc1M2.phases.last.id},
+      unstampedDefinitionVersion:
+          MissionSimulationDefinitions.unstampedContractVersion('coc1_m2'),
+    );
+    await controller.restore();
+    expect(controller.definitionChanged, isFalse);
+    expect(controller.state.acceptedEvidenceIds,
+        containsAll(['before', 'marker', 'after']),
+        reason: 'a marker never hides assessment evidence');
+    expect(transport.appended, isEmpty);
+  });
+
   testWidgets('an offline restart keeps the earlier progress and offers retry',
       (tester) async {
     final harness = _Harness(

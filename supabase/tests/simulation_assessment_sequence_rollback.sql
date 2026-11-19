@@ -8,8 +8,12 @@
 --   * two confirmed wrong orders, then the confirmed right one: satisfied
 --     (2 of 2 allowed); three confirmed wrong orders: not satisfied;
 --   * orders in progress before the confirmed answer are not counted;
---   * an attempt restarted with a practice_progress_discarded marker is
---     evaluated from the marker on.
+--   * confirming the same wrong order again is not a new attempt;
+--   * an assessment ignores a practice_progress_discarded marker (fix round 3,
+--     N1): earlier wrong orders still count.
+-- A class practice assignment of the same package keeps the practice rules:
+-- a marker restarts its evaluation, and a valid order completes the step
+-- without Confirm (fix round 3, N2).
 -- The other phases follow the exported happy path without its single
 -- prerequisite retry, so only the boot-order step changes between attempts.
 --
@@ -17,13 +21,14 @@
 -- (buildSimulationPackage for coc1_m3) and
 -- dart run tool/export_practice_contracts.dart --replay-fixtures <file>.
 begin;
-select plan(9);
+select plan(13);
 
 create temp table seq_ctx (
   admin uuid not null default gen_random_uuid(),
   instructor uuid not null default gen_random_uuid(),
   learner uuid not null default gen_random_uuid(),
-  source uuid, module_version uuid, activity uuid, rubric uuid, class uuid, assignment uuid
+  source uuid, module_version uuid, activity uuid, rubric uuid, class uuid, assignment uuid,
+  practice_assignment uuid
 ) on commit drop;
 insert into seq_ctx default values;
 insert into auth.users(instance_id,id,aud,role,email,encrypted_password,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
@@ -143,6 +148,11 @@ with s as (
   select class, activity, rubric, 'assessment', 'COC1 M3 simulation assessment', instructor from seq_ctx
   returning id)
 update seq_ctx set assignment = s.id from s;
+with s as (
+  insert into public.assignments(class_id, activity_version_id, rubric_version_id, assignment_type, title, assigned_by)
+  select class, activity, rubric, 'practice', 'COC1 M3 class practice', instructor from seq_ctx
+  returning id)
+update seq_ctx set practice_assignment = s.id from s;
 
 -- The boot-order answers. R is the right order; W1-W3 violate it.
 create function pg_temp.seq_order(p_order text[], p_confirmed boolean)
@@ -169,7 +179,12 @@ create function pg_temp.run(p_answer jsonb) returns jsonb language sql stable as
   select pg_temp.happy(1, 3) || p_answer || pg_temp.happy(6, 100)
 $$;
 
-create temp table seq_run(name text primary key, actions jsonb, attempt uuid) on commit drop;
+create function pg_temp.marker() returns jsonb language sql immutable as $$
+  select jsonb_build_object('phase_id', 'coc1_m3_p1', 'action_type', 'practice_progress_discarded', 'target', null,
+    'value', '{"reason": "definition_updated"}'::jsonb) $$;
+
+create temp table seq_run(name text primary key, actions jsonb, attempt uuid,
+  practice boolean not null default false) on commit drop;
 insert into seq_run(name, actions) values
 ('confirmed_right', pg_temp.run(jsonb_build_array(pg_temp.right_order(true)))),
 ('unconfirmed_right', pg_temp.run(jsonb_build_array(
@@ -183,10 +198,14 @@ insert into seq_run(name, actions) values
     pg_temp.seq_order(array['select_disk','boot_media','copy_files','configure_device'], false),
     pg_temp.seq_order(array['boot_media','copy_files','select_disk','configure_device'], false),
     pg_temp.right_order(true)))),
-('restarted', jsonb_build_array(pg_temp.wrong_order(1), pg_temp.wrong_order(2), pg_temp.wrong_order(3),
-    jsonb_build_object('phase_id', 'coc1_m3_p1', 'action_type', 'practice_progress_discarded', 'target', null,
-      'value', '{"reason": "definition_updated"}'::jsonb))
-    || pg_temp.run(jsonb_build_array(pg_temp.right_order(true))));
+('same_wrong_confirmed_repeatedly', pg_temp.run(jsonb_build_array(pg_temp.wrong_order(1), pg_temp.wrong_order(1),
+    pg_temp.wrong_order(1), pg_temp.right_order(true)))),
+('assessment_marker', jsonb_build_array(pg_temp.wrong_order(1), pg_temp.wrong_order(2), pg_temp.wrong_order(3),
+    pg_temp.marker()) || pg_temp.run(jsonb_build_array(pg_temp.right_order(true))));
+insert into seq_run(name, actions, practice) values
+('practice_marker', jsonb_build_array(pg_temp.wrong_order(1), pg_temp.wrong_order(2), pg_temp.wrong_order(3),
+    pg_temp.marker()) || pg_temp.run(jsonb_build_array(pg_temp.right_order(true))), true),
+('practice_unconfirmed', pg_temp.run(jsonb_build_array(pg_temp.right_order(false))), true);
 grant select, update on seq_run to authenticated;
 
 select set_config('request.jwt.claim.sub', (select learner::text from seq_ctx), true);
@@ -195,8 +214,10 @@ set local role authenticated;
 do $$
 declare r record; v_attempt uuid; a jsonb; n integer;
 begin
-  for r in select name, actions from seq_run order by name loop
-    select id into v_attempt from public.start_attempt((select assignment from seq_ctx), gen_random_uuid());
+  for r in select name, actions, practice from seq_run order by name loop
+    select id into v_attempt from public.start_attempt(
+      case when r.practice then (select practice_assignment from seq_ctx) else (select assignment from seq_ctx) end,
+      gen_random_uuid());
     n := 0;
     for a in select x from jsonb_array_elements(r.actions) x loop
       n := n + 1;
@@ -206,6 +227,10 @@ begin
         clock_timestamp());
     end loop;
     perform public.submit_attempt(v_attempt, gen_random_uuid(), 600);
+    -- Class practice is not evaluated on submit; the learner may request it.
+    if r.practice then
+      perform public.evaluate_submitted_attempt(v_attempt);
+    end if;
     update seq_run set attempt = v_attempt where name = r.name;
   end loop;
 end $$;
@@ -239,10 +264,20 @@ select is(pg_temp.not_satisfied('three_wrong_then_right'), array['COC1_M3_S2'],
 select is(jsonb_build_object('failed', pg_temp.not_satisfied('moves_then_right'), 'incorrect', pg_temp.step_incorrect('moves_then_right')),
   jsonb_build_object('failed', '{}'::text[], 'incorrect', 0),
   'orders in progress before the confirmed answer are not incorrect attempts');
-select is(pg_temp.not_satisfied('restarted'), '{}'::text[],
-  'an attempt is evaluated from its latest practice_progress_discarded marker');
+select is(jsonb_build_object('failed', pg_temp.not_satisfied('same_wrong_confirmed_repeatedly'),
+    'incorrect', pg_temp.step_incorrect('same_wrong_confirmed_repeatedly')),
+  jsonb_build_object('failed', '{}'::text[], 'incorrect', 1),
+  'confirming the same wrong order again is not a new incorrect attempt');
+select is(pg_temp.not_satisfied('assessment_marker'), array['COC1_M3_S2'],
+  'an assessment ignores a discard marker: the three earlier wrong orders still count');
+select is(pg_temp.step_incorrect('assessment_marker'), 3,
+  'every recorded assessment action is evaluated');
+select is(pg_temp.not_satisfied('practice_marker'), '{}'::text[],
+  'a class practice attempt is evaluated from its latest discard marker');
+select is(pg_temp.not_satisfied('practice_unconfirmed'), '{}'::text[],
+  'class practice completes the step on a valid order without Confirm');
 select is((select count(*)::integer from public.attempts where id in (select attempt from seq_run) and status = 'evaluated'),
-  6, 'every attempt is evaluated');
+  9, 'every attempt is evaluated');
 
 select * from finish();
 rollback;

@@ -134,7 +134,13 @@ class _SequencingInteractionState extends State<SequencingInteraction> {
           ),
           FilledButton.icon(
               key: ValueKey('sequence-confirm-${widget.phase.id}'),
-              onPressed: widget.enabled
+              // In assessment the order shown is already the confirmed
+              // answer until it is moved again; confirming it twice would
+              // only repeat the same answer.
+              onPressed: widget.enabled &&
+                      !(widget.state.mode == MissionRuntimeMode.assessment &&
+                          widget.state.interactionCompletedPhaseIds
+                              .contains(widget.phase.id))
                   ? () => _record('button', confirmed: true)
                   : null,
               icon: const Icon(Icons.playlist_add_check_rounded),
