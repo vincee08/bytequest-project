@@ -3,11 +3,20 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/config/app_release.dart';
 import '../core/config/supabase_config.dart';
 
-/// The version of this learner app build. The coordinator keeps it equal to
-/// the `pubspec.yaml` version name (build number excluded).
-const String kAppVersion = '1.2.0';
+export '../core/config/app_release.dart';
+
+/// True when the server refused an action because this app version is below
+/// the supported minimum (`APP_UPDATE_REQUIRED: ...`, SQLSTATE P0001). It
+/// should not happen for this build; the mapping stays for older minimums.
+bool isAppUpdateRequiredError(Object error) {
+  final text = error is PostgrestException
+      ? '${error.message} ${error.details ?? ''} ${error.hint ?? ''}'
+      : error.toString();
+  return text.contains(kAppUpdateRequiredCode);
+}
 
 /// Key of the minimum supported version in `public.app_release_config`.
 const String kMinimumAppVersionKey = 'min_supported_app_version';

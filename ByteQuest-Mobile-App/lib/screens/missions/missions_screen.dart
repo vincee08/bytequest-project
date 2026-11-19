@@ -164,7 +164,10 @@ class _MissionsScreenState extends State<MissionsScreen>
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to start this assignment: $error')),
+        SnackBar(
+            content: Text(error is AssessmentUpdateRequiredException
+                ? MissionContentData.assessmentUpdateRequired
+                : 'Unable to start this assignment: $error')),
       );
     } finally {
       if (mounted) setState(() => _startingAssignmentId = null);

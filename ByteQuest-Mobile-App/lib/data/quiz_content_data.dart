@@ -100,6 +100,12 @@ class QuizContentData {
   static const timeUpMessage =
       'Your saved answers are being submitted automatically.';
   static const timeUpChecking = 'Checking your automatic submission…';
+  static const timeUpCheckFailed =
+      'ByteQuest could not confirm the automatic submission. Your saved answers are kept on the server. Check your connection, then try again.';
+  static const deadlineExtendedResume =
+      'The deadline was extended. You can keep answering.';
+  static const submittedResultUnavailable =
+      'Your quiz was submitted. Its result could not be loaded yet. Check your connection, then try again.';
   static const timeLimitBriefing =
       'The timer starts when you begin and keeps running if you leave the app. When time runs out, your saved answers are submitted automatically.';
   static const deadlineAutoSubmitBriefing =
@@ -131,6 +137,8 @@ class QuizContentData {
   static const openingQuiz = 'Opening quiz…';
   static const openFailed =
       'This quiz could not be opened. Check its availability and try again.';
+  static const updateRequired =
+      'This quiz needs the latest version of ByteQuest. Update the app, then open the quiz again.';
   static const quizTypePreAssessment = 'Pre-assessment';
   static const quizTypeFormative = 'Formative';
   static const quizTypeSummative = 'Summative';
@@ -164,7 +172,8 @@ class QuizContentData {
   static const submittedAnswersHeading = 'Your submitted answers';
   static const submittedAnswersSupporting =
       'Scores appear after your Instructor releases the result.';
-  static const itemCorrect = 'Correct';
+  // Never a bare "Correct" (AGENTS.md §3.4): say what was compared.
+  static const itemCorrect = 'Matches the answer key';
   static const itemNeedsReview = 'Needs review';
   static const itemNotAnswered = 'Not answered';
   static const itemSubmitted = 'Submitted';

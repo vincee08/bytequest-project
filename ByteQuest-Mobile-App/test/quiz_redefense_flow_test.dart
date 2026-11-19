@@ -580,6 +580,126 @@ void main() {
     });
   }
 
+  // Rest I3: the end of a quiz never strands or misleads the learner.
+  testWidgets('an offline expiry retries with backoff, then offers Try again',
+      (tester) async {
+    usePhone(tester);
+    final service = _RecoveringQuizService(result: resultFrom(awaitingJson))
+      ..resultFailures = 1000;
+    var now = DateTime.utc(2035, 1, 1, 8);
+    await tester.pumpWidget(host(QuizTakingScreen(
+      attempt: essayAttempt(timeLimit: 1, expiresAt: '2035-01-01T08:01:00Z'),
+      service: service,
+      draftStore: MemoryDraftStore(),
+      now: () => now,
+    )));
+    now = now.add(const Duration(seconds: 61));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    expect(find.text(QuizContentData.timeUpTitle), findsWidgets);
+    for (final seconds in const [2, 4, 8, 16, 30]) {
+      expect(find.byKey(const ValueKey('quiz-finish-retry')), findsNothing,
+          reason: 'automatic retries come first');
+      now = now.add(Duration(seconds: seconds));
+      await tester.pump(Duration(seconds: seconds));
+      await tester.pump();
+    }
+    expect(service.resultCalls, 6, reason: 'one check and five retries');
+    expect(find.text(QuizContentData.timeUpCheckFailed), findsOneWidget);
+
+    service.resultFailures = 0; // The network is back.
+    await tester.tap(find.byKey(const ValueKey('quiz-finish-retry')));
+    await tester.pumpAndSettle();
+    expect(find.byType(QuizResultScreen), findsOneWidget);
+    expect(find.text(QuizContentData.autoSubmittedTimeLimit), findsOneWidget);
+  });
+
+  testWidgets('a deadline extended at the last moment resumes answering',
+      (tester) async {
+    usePhone(tester);
+    var now = DateTime.utc(2035, 1, 1, 8);
+    final service = _RecoveringQuizService()..resultFailures = 1000;
+    // The extension reaches the server after the app's last poll: the app
+    // learns about it only when it re-reads the attempt after expiry.
+    service.availability = () => [
+          LearnerQuizSummary.fromJson({
+            'assignment_id': 'assignment-1',
+            'quiz_version_id': 'version-1',
+            'quiz_id': 'quiz-1',
+            'title': 'Assembly essay check',
+            'class_id': 'class-1',
+            'class_title': 'CSS NC II',
+            'is_available': true,
+            'attempt_id': 'attempt-1',
+            'attempt_status': 'in_progress',
+            'server_now': now.toIso8601String(),
+            'due_at': service.resultCalls == 0
+                ? '2035-01-01T08:01:00Z'
+                : '2035-01-01T08:31:00Z',
+          }),
+        ];
+    await tester.pumpWidget(host(QuizTakingScreen(
+      attempt: essayAttempt(expiresAt: '2035-01-01T08:01:00Z'),
+      service: service,
+      draftStore: MemoryDraftStore(),
+      now: () => now,
+    )));
+    now = now.add(const Duration(seconds: 61));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump();
+    await tester.pump();
+
+    expect(service.resultCalls, 1);
+    expect(find.byType(QuizResultScreen), findsNothing);
+    expect(find.text(QuizContentData.deadlineExtendedResume), findsOneWidget);
+    expect(find.text(QuizContentData.timeUpChecking), findsNothing);
+    expect(find.text(QuizContentData.timeUpMessage), findsNothing);
+    final field = tester
+        .widget<TextField>(find.byKey(const ValueKey('quiz-essay-field')));
+    expect(field.enabled, isTrue, reason: 'the learner keeps answering');
+    await tester.enterText(find.byKey(const ValueKey('quiz-essay-field')),
+        'Ground yourself before touching the processor socket lever.');
+    await tester.pump(const Duration(milliseconds: 1600));
+    await tester.pump();
+    expect(service.saves.last.$2,
+        'Ground yourself before touching the processor socket lever.');
+  });
+
+  testWidgets(
+      'a submission whose result cannot load says it was submitted, not lost',
+      (tester) async {
+    usePhone(tester);
+    final service = _RecoveringQuizService(result: resultFrom(awaitingJson))
+      ..resultFailures = 1;
+    await tester.pumpWidget(host(QuizTakingScreen(
+      attempt: essayAttempt(
+          savedEssay:
+              'Ground yourself, open the lever and align the gold triangle.'),
+      service: service,
+      draftStore: MemoryDraftStore(),
+      now: () => DateTime.utc(2035, 1, 1, 8),
+    )));
+    await tester.pump();
+    await tester.tap(find.text(QuizContentData.reviewAndSubmit));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(QuizContentData.submit));
+    await tester.pumpAndSettle();
+
+    expect(service.submissions, 1);
+    expect(find.text(QuizContentData.submitFailed), findsNothing,
+        reason: 'the server recorded the submission');
+    expect(find.text(QuizContentData.submittedResultUnavailable),
+        findsOneWidget);
+    // The availability poll must not turn this into "Time is up".
+    await tester.pump(const Duration(seconds: 21));
+    expect(find.text(QuizContentData.timeUpTitle), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('quiz-result-retry')));
+    await tester.pumpAndSettle();
+    expect(find.byType(QuizResultScreen), findsOneWidget);
+    expect(service.submissions, 1, reason: 'Try again only reads the result');
+  });
+
   test('legacy closed quiz labels are unchanged', () {
     final closed = LearnerQuizSummary.fromJson({
       'assignment_id': 'a',
@@ -593,4 +713,37 @@ void main() {
     });
     expect(quizStatusLabel(closed), MissionContentData.quizClosedDeadline);
   });
+}
+
+/// A quiz service whose result reads fail a set number of times, whose
+/// availability list can be scripted, and whose submission always reaches
+/// the server.
+class _RecoveringQuizService extends FakeQuizService {
+  _RecoveringQuizService({super.result});
+
+  int resultFailures = 0;
+  int submissions = 0;
+  List<LearnerQuizSummary> Function()? availability;
+
+  @override
+  Future<LearnerQuizResult> getResult(String attemptId) async {
+    resultCalls++;
+    if (resultFailures > 0) {
+      resultFailures--;
+      throw StateError('QUIZ_RESULT_NOT_AVAILABLE');
+    }
+    final value = result;
+    if (value == null) throw StateError('QUIZ_RESULT_NOT_AVAILABLE');
+    return value;
+  }
+
+  @override
+  Future<List<LearnerQuizSummary>> getAvailableQuizzes() async {
+    final list = availability;
+    if (list == null) throw StateError('offline');
+    return list();
+  }
+
+  @override
+  Future<void> sendSubmission(String attemptId) async => submissions++;
 }

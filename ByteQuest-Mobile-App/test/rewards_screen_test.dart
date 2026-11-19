@@ -228,8 +228,10 @@ void main() {
         RewardsContentData.fallbackAchievementIcon);
     expect(RewardsContentData.emptyMessage(50),
         'Verify your first practice mission to earn 50 points.');
+    // Rest Minor 5: the consent names what is shared ("First L." names).
     expect(RewardsContentData.leaderboardToggleSubtitle,
-        'Show my first name and points to classmates.');
+        'Show my first name, last initial and points to classmates.');
+    expect(RewardsContentData.leaderboardShown, contains('last initial'));
     final copy = [
       RewardsContentData.separationNote,
       ...RewardsContentData.infoParagraphs,

@@ -1,6 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import 'app_release.dart';
 
 /// Supabase Configuration
 /// Centralized configuration for Supabase initialization and client access
@@ -68,16 +71,7 @@ class SupabaseConfig {
       }
 
       // Initialize Supabase with session persistence (enabled by default)
-      await Supabase.initialize(
-        url: supabaseUrl,
-        publishableKey: supabaseAnonKey,
-        authOptions: const FlutterAuthClientOptions(
-          authFlowType: AuthFlowType.pkce,
-          // Auto-refresh tokens before they expire (enabled by default)
-          autoRefreshToken: true,
-          // Session persistence is enabled by default in Supabase Flutter
-        ),
-      );
+      await initializeClient(url: supabaseUrl, publishableKey: supabaseAnonKey);
 
       debugPrint('✅ Supabase initialized successfully');
     } catch (e) {
@@ -85,6 +79,28 @@ class SupabaseConfig {
       rethrow;
     }
   }
+
+  /// Opens the Supabase client. Every request it sends (PostgREST, Auth,
+  /// Storage, Realtime) carries [kAppVersionHeaders], so the server can
+  /// refuse assessment and essay-quiz starts from unsupported app versions.
+  static Future<void> initializeClient({
+    required String url,
+    required String publishableKey,
+    http.Client? httpClient,
+    FlutterAuthClientOptions authOptions = const FlutterAuthClientOptions(
+      authFlowType: AuthFlowType.pkce,
+      // Auto-refresh tokens before they expire (enabled by default)
+      autoRefreshToken: true,
+      // Session persistence is enabled by default in Supabase Flutter
+    ),
+  }) =>
+      Supabase.initialize(
+        url: url,
+        publishableKey: publishableKey,
+        headers: kAppVersionHeaders,
+        httpClient: httpClient,
+        authOptions: authOptions,
+      );
 
   /// Get auth state changes stream
   static Stream<AuthState> get authStateChanges {

@@ -48,9 +48,14 @@ abstract final class AssemblyBenchLayout {
       : Rect.fromLTWH(_chassisBoardOrigin.dx, _chassisBoardOrigin.dy,
           500 * _chassisBoardScale, 500 * _chassisBoardScale);
 
+  /// Board-image pixels between neighbouring memory slots.
+  static const dimmPitch = 12.5;
+
+  static double _boardScaleIn(BenchView view) =>
+      view == BenchView.board ? boardScale : _chassisBoardScale;
+
   static Rect _board(BenchView view, double u, double v, double w, double h) {
-    final scale =
-        view == BenchView.board ? boardScale : _chassisBoardScale;
+    final scale = _boardScaleIn(view);
     final origin = view == BenchView.board ? boardOrigin : _chassisBoardOrigin;
     return Rect.fromLTWH(
         origin.dx + u * scale, origin.dy + v * scale, w * scale, h * scale);
@@ -129,13 +134,13 @@ abstract final class AssemblyBenchLayout {
   ];
 
   /// Touch area for a slot: never thinner than [minimum] logical units, and
-  /// memory slots claim the whole pitch between neighbours for a magnetic
-  /// snap.
+  /// memory slots claim exactly the pitch between neighbours (a magnetic
+  /// snap that never overlaps the next slot, in the close-up and the case).
   static Rect? target(String id, BenchView view, {double minimum = 64}) {
     final rect = slot(id, view);
     if (rect == null) return null;
-    final pitch = view == BenchView.board ? 12.5 * boardScale : 0.0;
-    final width = id.startsWith('dimm_') && pitch > 0
+    final pitch = dimmPitch * _boardScaleIn(view);
+    final width = id.startsWith('dimm_')
         ? pitch
         : rect.width < minimum
             ? minimum

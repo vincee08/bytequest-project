@@ -216,7 +216,10 @@ class _QuizDetailsScreenState extends State<QuizDetailsScreen> {
       debugPrint('Quiz start failed: $error');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text(QuizContentData.openFailed)),
+        SnackBar(
+            content: Text(error is LearnerQuizUpdateRequiredException
+                ? QuizContentData.updateRequired
+                : QuizContentData.openFailed)),
       );
     } finally {
       if (mounted) setState(() => _starting = false);

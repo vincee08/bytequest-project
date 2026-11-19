@@ -16,6 +16,10 @@ class AccountContentData {
   static const studentIdTakenSaveError =
       'This student ID is already registered to another learner. Check the ID or ask your instructor.';
 
+  // Installed app version (Settings, About).
+  static String appVersionLabel(String version, String build) =>
+      'Version $version (build $build)';
+
   // Minimum supported app version.
   static const updateRequiredTitle = 'Update ByteQuest';
   static String updateRequiredBody(String current, String minimum) =>

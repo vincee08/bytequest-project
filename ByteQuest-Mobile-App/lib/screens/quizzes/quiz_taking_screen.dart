@@ -67,7 +67,24 @@ class _QuizTakingScreenState extends State<QuizTakingScreen>
   bool _expired = false;
   bool _finishing = false;
   bool _essaySaveFailed = false;
-  bool get _locked => _closed || _unavailable || _expired;
+
+  /// The automatic submission could not be confirmed after every retry;
+  /// the learner can try again by hand.
+  bool _finishFailed = false;
+  int _finishAttempt = 0;
+
+  /// Submitted on the server, but the result could not be read yet.
+  bool _submittedUnloaded = false;
+  bool _loadingSubmitted = false;
+  static const _finishRetryDelays = [
+    Duration(seconds: 2),
+    Duration(seconds: 4),
+    Duration(seconds: 8),
+    Duration(seconds: 16),
+    Duration(seconds: 30),
+  ];
+  bool get _locked =>
+      _closed || _unavailable || _expired || _submittedUnloaded;
   bool get _timed => widget.attempt.timeLimitMinutes != null;
 
   LearnerQuizQuestion get _question => widget.attempt.questions[_index];
@@ -173,34 +190,107 @@ class _QuizTakingScreenState extends State<QuizTakingScreen>
   }
 
   /// The server submits saved answers at the expiry time; reading the result
-  /// lets it do so now and returns the automatic submission.
-  Future<void> _finishAutomatically([int attempt = 0]) async {
-    if (!mounted) return;
-    setState(() => _finishing = true);
+  /// lets it do so now and returns the automatic submission. A failed read
+  /// first re-reads the attempt (a deadline extended in the meantime keeps it
+  /// open), then retries with backoff and finally offers a manual retry.
+  Future<void> _finishAutomatically() async {
+    if (!mounted || _finishing || !_expired) return;
+    _finishRetry?.cancel();
+    setState(() {
+      _finishing = true;
+      _finishFailed = false;
+    });
     try {
       final result = await _service.getResult(widget.attempt.attemptId);
       if (!mounted) return;
-      await _clearDrafts();
-      if (!mounted) return;
-      await Navigator.pushReplacement(
-        context,
-        MaterialPageRoute<void>(
-          builder: (_) => QuizResultScreen(
-            attemptId: widget.attempt.attemptId,
-            initialResult: result,
-            service: _service,
-          ),
-        ),
-      );
+      await _openResult(result);
     } catch (error) {
       debugPrint('Quiz automatic submission check failed: $error');
       if (!mounted) return;
-      if (attempt < 5) {
-        _finishRetry = Timer(const Duration(seconds: 3),
-            () => unawaited(_finishAutomatically(attempt + 1)));
-      } else {
-        setState(() => _finishing = false);
+      if (await _resumeIfStillOpen()) return;
+      if (!mounted) return;
+      final retry = _finishAttempt < _finishRetryDelays.length;
+      setState(() {
+        _finishing = false;
+        _finishFailed = !retry;
+      });
+      if (retry) {
+        _finishRetry = Timer(_finishRetryDelays[_finishAttempt++],
+            () => unawaited(_finishAutomatically()));
       }
+    }
+  }
+
+  void _retryFinish() {
+    _finishAttempt = 0;
+    unawaited(_finishAutomatically());
+  }
+
+  /// The local clock said time is up, but the server still accepts answers
+  /// when the deadline was extended: re-read the attempt and keep going.
+  Future<bool> _resumeIfStillOpen() async {
+    try {
+      final quizzes = await _service.getAvailableQuizzes();
+      final matches =
+          quizzes.where((q) => q.attemptId == widget.attempt.attemptId);
+      final quiz = matches.isEmpty ? null : matches.first;
+      if (quiz == null ||
+          !quiz.isAvailable ||
+          quiz.attemptStatus != 'in_progress') {
+        return false;
+      }
+      if (quiz.serverNow != null) {
+        _serverOffset = quiz.serverNow!.difference(_deviceNow());
+        _clockSynced = true;
+      }
+      final expiry = quiz.expiresAt ?? quiz.dueAt;
+      if (expiry != null && !expiry.isAfter(_serverNow())) return false;
+      if (!mounted) return true;
+      _finishRetry?.cancel();
+      setState(() {
+        _expired = false;
+        _closed = false;
+        _unavailable = false;
+        _finishing = false;
+        _finishFailed = false;
+        _finishAttempt = 0;
+        _dueAt = quiz.dueAt;
+        _notice = QuizContentData.deadlineExtendedResume;
+        _setExpiry(expiry);
+      });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _openResult(LearnerQuizResult result) async {
+    await _clearDrafts();
+    if (!mounted) return;
+    await Navigator.pushReplacement(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => QuizResultScreen(
+          attemptId: widget.attempt.attemptId,
+          initialResult: result,
+          service: _service,
+        ),
+      ),
+    );
+  }
+
+  /// After a submission whose result could not be read: read it again.
+  Future<void> _loadSubmittedResult() async {
+    if (_loadingSubmitted || !mounted) return;
+    setState(() => _loadingSubmitted = true);
+    try {
+      final result = await _service.getResult(widget.attempt.attemptId);
+      if (!mounted) return;
+      await _openResult(result);
+    } catch (error) {
+      debugPrint('Quiz result read after submission failed: $error');
+    } finally {
+      if (mounted) setState(() => _loadingSubmitted = false);
     }
   }
 
@@ -240,7 +330,12 @@ class _QuizTakingScreenState extends State<QuizTakingScreen>
   }
 
   Future<void> _refreshAvailability() async {
-    if (_checkingAvailability || _submitting || _expired) return;
+    if (_checkingAvailability ||
+        _submitting ||
+        _expired ||
+        _submittedUnloaded) {
+      return;
+    }
     _checkingAvailability = true;
     try {
       final quizzes = await _service.getAvailableQuizzes();
@@ -279,6 +374,8 @@ class _QuizTakingScreenState extends State<QuizTakingScreen>
     if (state == AppLifecycleState.resumed) {
       _tick();
       unawaited(_refreshAvailability());
+      if (_expired && !_finishing) _retryFinish();
+      if (_submittedUnloaded) unawaited(_loadSubmittedResult());
     } else if (state == AppLifecycleState.paused) {
       unawaited(_saveEssayNow());
     }
@@ -403,10 +500,26 @@ class _QuizTakingScreenState extends State<QuizTakingScreen>
                                     ? MissionContentData.quizAttemptUnavailable
                                     : MissionContentData.homeworkDue(
                                         manilaDate(_dueAt))))),
-              if (_expired)
+              if (_submittedUnloaded)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-                  child: _TimeUpPanel(checking: _finishing, timed: _timed),
+                  child: _RetryPanel(
+                    key: const ValueKey('quiz-submitted-unloaded'),
+                    icon: Icons.cloud_done_outlined,
+                    message: QuizContentData.submittedResultUnavailable,
+                    busy: _loadingSubmitted,
+                    onRetry: () => unawaited(_loadSubmittedResult()),
+                  ),
+                )
+              else if (_expired)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                  child: _TimeUpPanel(
+                    checking: _finishing,
+                    timed: _timed,
+                    failed: _finishFailed,
+                    onRetry: _retryFinish,
+                  ),
                 )
               else if (_closed)
                 const Padding(
@@ -833,18 +946,22 @@ class _QuizTakingScreenState extends State<QuizTakingScreen>
     try {
       final result = await _service.submit(widget.attempt.attemptId);
       if (!mounted) return;
-      await _clearDrafts();
-      if (!mounted) return;
-      await Navigator.pushReplacement(
-        context,
-        MaterialPageRoute<void>(
-          builder: (_) => QuizResultScreen(
-            attemptId: widget.attempt.attemptId,
-            initialResult: result,
-            service: _service,
-          ),
-        ),
-      );
+      await _openResult(result);
+    } on LearnerQuizSubmittedException catch (error) {
+      // Submitted: only the result read failed. Never say "not submitted".
+      debugPrint('Quiz submitted; result read failed: ${error.cause}');
+      if (mounted) {
+        setState(() {
+          _submittedUnloaded = true;
+          _error = null;
+        });
+      }
+    } on LearnerQuizClosedException catch (error) {
+      debugPrint('Quiz submission refused: ${error.code}');
+      if (mounted) {
+        setState(() => _submitting = false);
+        await _onExpired();
+      }
     } catch (error) {
       debugPrint('Quiz submission failed: $error');
       if (mounted) {
@@ -938,11 +1055,20 @@ class _CountdownBanner extends StatelessWidget {
 }
 
 class _TimeUpPanel extends StatelessWidget {
-  const _TimeUpPanel({required this.checking, required this.timed});
+  const _TimeUpPanel({
+    required this.checking,
+    required this.timed,
+    required this.failed,
+    required this.onRetry,
+  });
   final bool checking;
 
   /// Deadline expiry is already announced by the closed-quiz label above.
   final bool timed;
+
+  /// Every automatic check failed: show why and a manual retry.
+  final bool failed;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) => Semantics(
@@ -973,8 +1099,75 @@ class _TimeUpPanel extends StatelessWidget {
                     Text(
                       checking
                           ? QuizContentData.timeUpChecking
-                          : QuizContentData.timeUpMessage,
+                          : failed
+                              ? QuizContentData.timeUpCheckFailed
+                              : QuizContentData.timeUpMessage,
                       style: AppTheme.bodySmall,
+                    ),
+                    if (failed && !checking) ...[
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        key: const ValueKey('quiz-finish-retry'),
+                        style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(48, 48)),
+                        onPressed: onRetry,
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text(QuizContentData.tryAgain),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+}
+
+/// A state the learner can retry by hand: icon, message, Try again.
+class _RetryPanel extends StatelessWidget {
+  const _RetryPanel({
+    super.key,
+    required this.icon,
+    required this.message,
+    required this.busy,
+    required this.onRetry,
+  });
+  final IconData icon;
+  final String message;
+  final bool busy;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        liveRegion: true,
+        container: true,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppTheme.backgroundPaleBlue,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppTheme.borderLight),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(icon, color: AppTheme.deepBlue),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(message, style: AppTheme.bodySmall),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      key: const ValueKey('quiz-result-retry'),
+                      style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(48, 48)),
+                      onPressed: busy ? null : onRetry,
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text(QuizContentData.tryAgain),
                     ),
                   ],
                 ),

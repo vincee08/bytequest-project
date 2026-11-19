@@ -7,6 +7,7 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/learner_ui.dart';
 import '../../core/widgets/supplementary_platform_notice.dart';
 import '../../data/learning_content_data.dart';
+import '../../data/quiz_content_data.dart';
 import '../../models/assigned_activity_model.dart';
 import '../../models/curriculum_model.dart';
 import '../../models/homework_model.dart';
@@ -56,6 +57,23 @@ class _QuizScore {
   const _QuizScore(this.quiz, this.result);
   final LearnerQuizSummary quiz;
   final LearnerQuizResult? result;
+
+  /// The same score the quiz result screen shows: released or immediate
+  /// points, or the correct count of a result recorded before points.
+  String get label {
+    final result = this.result;
+    if (quiz.awaitingEvaluation || result?.awaitingEvaluation == true) {
+      return LearningContentData.quizAwaitingEvaluation;
+    }
+    if (result == null) return LearningContentData.quizScorePending;
+    if (result.maxPoints != null) {
+      return LearningContentData.quizPoints(
+          QuizContentData.formatPoints(result.displayScore),
+          QuizContentData.formatPoints(result.displayMax));
+    }
+    return LearningContentData.quizScore(
+        result.correctCount, result.questionCount);
+  }
 }
 
 class ProgressScreen extends StatefulWidget {
@@ -145,8 +163,13 @@ class _ProgressScreenState extends State<ProgressScreen>
               quiz.attemptId != null)
           .take(12)
           .toList(growable: false);
-      scores = await Future.wait(completed.map((quiz) async => _QuizScore(quiz,
-          await _try(() => _sources.quizResult(quiz.attemptId!), () {}))));
+      // A quiz awaiting instructor evaluation has no score yet: it is not
+      // fetched, and never shown as a count of objective answers.
+      scores = await Future.wait(completed.map((quiz) async => _QuizScore(
+          quiz,
+          quiz.awaitingEvaluation
+              ? null
+              : await _try(() => _sources.quizResult(quiz.attemptId!), () {}))));
     }
     if (mounted) {
       setState(() {
@@ -456,8 +479,7 @@ class _ProgressScreenState extends State<ProgressScreen>
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: LearnerSurface(
-                semanticLabel:
-                    '${score.quiz.title}, ${score.result == null ? LearningContentData.quizScorePending : LearningContentData.quizScore(score.result!.correctCount, score.result!.questionCount)}',
+                semanticLabel: '${score.quiz.title}, ${score.label}',
                 child: Row(children: [
                   const Icon(Icons.quiz_outlined, color: AppTheme.primaryBlue),
                   const SizedBox(width: 12),
@@ -473,14 +495,13 @@ class _ProgressScreenState extends State<ProgressScreen>
                         ]),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    score.result == null
-                        ? LearningContentData.quizScorePending
-                        : LearningContentData.quizScore(
-                            score.result!.correctCount,
-                            score.result!.questionCount),
-                    style: AppTheme.labelMedium
-                        .copyWith(fontWeight: FontWeight.w800),
+                  Flexible(
+                    child: Text(
+                      score.label,
+                      textAlign: TextAlign.end,
+                      style: AppTheme.labelMedium
+                          .copyWith(fontWeight: FontWeight.w800),
+                    ),
                   ),
                 ]),
               ),

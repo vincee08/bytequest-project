@@ -1,9 +1,11 @@
+import '../config/app_release.dart';
+
 /// App-wide constants for ByteQuest
 class AppConstants {
   // App Information
   static const String appName = 'ByteQuest';
   static const String appTagline = 'Learn. Simulate. Master CSS NC II.';
-  static const String appVersion = '1.0.0';
+  static const String appVersion = kAppVersion;
 
   // Level Status
   static const String statusCompleted = 'completed';
