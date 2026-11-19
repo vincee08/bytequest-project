@@ -213,9 +213,12 @@ export default async function QuizDetailPage({
       attemptIds.length && essayItemIds.length
         ? db
             .from("quiz_essay_scores")
-            .select("id,attempt_id,item_id,criterion_scores,total,feedback,evaluated_by,evaluated_at")
+            .select("id,attempt_id,item_id,criterion_scores,total,feedback,evaluated_by,evaluated_at,sequence")
             .in("attempt_id", attemptIds)
+            // Current score first: latest evaluated_at, then the score recorded
+            // last. Same rule as the database totals, queue and released result.
             .order("evaluated_at", { ascending: false })
+            .order("sequence", { ascending: false })
         : Promise.resolve({ data: [], error: null }),
       attemptIds.length && essayItemIds.length
         ? db

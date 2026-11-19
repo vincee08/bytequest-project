@@ -143,6 +143,8 @@ export interface QuizEssayScoreRow {
   feedback: string | null;
   evaluated_by: string;
   evaluated_at: string;
+  /** Insert order; breaks evaluated_at ties so the last recorded score is current. */
+  sequence: number;
 }
 export interface QuizFinalizationRow {
   attempt_id: string;
