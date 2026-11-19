@@ -2,21 +2,26 @@
 //
 // Creates, idempotently, the clearly labelled demo class
 // "DEMO – Re-defense (synthetic learners)" (class code DEMO-REDEF) with twelve
-// synthetic learners (Demo Learner 01..12, demo.learnerNN@bytequest.invalid)
+// synthetic learners (Alex Demo .. Lou Demo, demo.learner01..12@bytequest.invalid)
 // who perform real activities through the same API routes and RPCs the
 // learner app and the dashboard use:
 //   * accounts: learner sign-up (GoTrue, as the app does); the instructor
 //     imports an Excel roster through the dashboard route (8 accounts enroll
 //     now, 4 emails stay pending and enroll automatically when they sign up);
+//     an already-seeded learner whose name differs renames itself through its
+//     own profile update, as the app's Edit profile screen does;
 //   * two LO1.1 lessons through the curriculum workflow (one published, one
 //     approved so an admin can publish it live);
 //   * practice through the app's evidence table and /api/learner/practice
 //     (action generators of scripts/test-practice-api-all-missions.mjs, with
 //     realistic mistakes and failed verifications), lessons through
 //     /api/learner/curriculum and the COC1 practice quiz;
-//   * the COC1 M2 simulation assessment (start_attempt / append_attempt_action
-//     / submit_attempt) and the Evaluation Center (record evaluation, finalize,
-//     release) through /api/evaluations;
+//   * the COC1 M2 simulation assessment, assigned exactly as the dashboard's
+//     "Assign published content" form does (approved rubric read under the
+//     instructor's own RLS, then the instructor's assign_activity), taken
+//     through start_attempt / append_attempt_action / submit_attempt, and the
+//     Evaluation Center (record evaluation, finalize, release) through
+//     /api/evaluations;
 //   * a curriculum quiz with a scenario essay (quiz RPCs, /api/quizzes/
 //     evaluation and /api/evaluations) and a homework with two criteria
 //     (/api/activities/homework and /api/evaluations);
@@ -57,14 +62,20 @@ export const CLASS_TITLE = 'DEMO – Re-defense (synthetic learners)';
 export const PREFIX = 'DEMO · ';
 const COURSE_SECTION = 'CSS NC II · Demo section';
 
-export const LEARNERS = Array.from({ length: 12 }, (_, index) => {
+// Synthetic first names (not project members) with the surname "Demo", so the
+// leaderboard's "First name L." display is distinct per learner and still
+// obviously demo data ("Alex D.", "Bea D.", ...).
+export const DEMO_FIRST_NAMES = ['Alex', 'Bea', 'Cris', 'Dani', 'Eli', 'Fran', 'Gale', 'Hal', 'Iya', 'Jules', 'Kai', 'Lou'];
+export const DEMO_SURNAME = 'Demo';
+
+export const LEARNERS = DEMO_FIRST_NAMES.map((firstName, index) => {
   const nn = String(index + 1).padStart(2, '0');
   return {
     key: `L${nn}`,
     email: `demo.learner${nn}@bytequest.invalid`,
-    name: `Demo Learner ${nn}`,
-    firstName: 'Demo',
-    lastName: `Learner ${nn}`,
+    name: `${firstName} ${DEMO_SURNAME}`,
+    firstName,
+    lastName: DEMO_SURNAME,
     studentId: `DEMO-RD-${nn}`,
     // Learners 09-12 have no account when the roster is imported: they are
     // pending roster entries that enroll automatically when they sign up.
@@ -702,6 +713,7 @@ async function ensureAccounts(ctx, specs) {
       } else {
         stepLog(spec.key, `account exists (${spec.email})`);
       }
+      if (profile.full_name !== spec.name) await renameLearner(session, spec, profile.full_name);
     } else {
       spec.password = newPassword();
       const { data, error } = await authRetry(() => session.client.auth.signUp({ email: spec.email, password: spec.password, options: { data: { full_name: spec.name, email: spec.email } } }), `sign up ${spec.email}`);
@@ -720,6 +732,21 @@ async function ensureAccounts(ctx, specs) {
     writeAccountStore(ctx, store);
     ctx.learners.set(spec.key, session);
   }
+}
+
+/**
+ * Renames an already-seeded learner (for example one created with an earlier
+ * name template) exactly as the app's Edit profile screen does: the learner's
+ * own update of profiles.full_name. The leaderboard entry follows through the
+ * server's profile trigger.
+ */
+async function renameLearner(session, spec, previous) {
+  await session.token();
+  const { error } = await session.client.from('profiles').update({ full_name: spec.name }).eq('user_id', spec.id);
+  if (error) fail(`${spec.key} could not update the profile name: ${error.message}`);
+  const current = (await rows(session.client.from('profiles').select('full_name').eq('user_id', spec.id), 'own profile'))[0];
+  if (current?.full_name !== spec.name) fail(`${spec.key}: the profile name is still "${current?.full_name}" after the update.`);
+  stepLog(spec.key, `renamed "${previous}" → "${spec.name}" (own profile update, as the app's Edit profile does)`);
 }
 
 async function ensureClass(ctx) {
@@ -991,27 +1018,25 @@ async function ensureAssessmentAssignment(ctx) {
     activity = await findActivity();
   }
   if (!activity) fail('No published COC1 M2 simulation assessment for the current contract after publishing.');
-  // The dashboard's assign form lists the approved rubrics the instructor can
-  // read. RLS (rubric_versions_staff_select) hides rubrics of packages the
-  // instructor neither created nor assigned yet, so the id is then resolved
-  // with a read-only service lookup (as scripts/authenticated-*-e2e.mjs do);
-  // the assignment itself is still made by the instructor's assign_activity.
-  let rubric = (await rows(ctx.instructor.client.from('rubric_versions').select('id').eq('activity_version_id', activity.id).eq('status', 'approved'), 'rubric'))[0];
+  // Exactly as the dashboard's "Assign published content" form
+  // (src/app/classes/[id]/page.tsx and AssignActivityForm): the approved
+  // rubrics the instructor reads under their own RLS, matched to the activity
+  // version, then the instructor's own assign_activity.
+  const rubrics = await rows(ctx.instructor.client.from('rubric_versions').select('id,title,activity_version_id').eq('status', 'approved').order('title'), 'approved rubrics');
+  const rubric = rubrics.find((item) => item.activity_version_id === activity.id);
   if (!rubric) {
-    rubric = (await rows(ctx.service.from('rubric_versions').select('id').eq('activity_version_id', activity.id).eq('status', 'approved'), 'rubric (service lookup)'))[0];
-    if (!rubric) fail('The COC1 M2 simulation assessment has no approved rubric.');
-    ctx.notes.push('The instructor cannot read the approved rubric of the COC1 M2 simulation assessment before it is assigned (RLS rubric_versions_staff_select), so the dashboard "Assign published content" form reports "no approved matching rubric"; the rubric id was resolved with a read-only service lookup.');
+    fail('The instructor cannot read an approved rubric for the COC1 M2 simulation assessment, so the dashboard would report "This activity has no approved matching rubric". Apply supabase/migrations/20261119180000_instructor_assignable_rubric_visibility.sql to this database first.');
   }
   let assignment = (await rows(ctx.instructor.client.from('assignments').select('id,attempts_allowed,retry_after_seconds').eq('class_id', ctx.ids.class).eq('activity_version_id', activity.id).eq('assignment_type', 'assessment').eq('status', 'active'), 'assignments'))[0];
   if (!assignment) {
+    // The same arguments as the form: no availability window or due date.
     assignment = await rpc(ctx.instructor.client, 'assign_activity', {
       p_class_id: ctx.ids.class, p_activity_version_id: activity.id, p_rubric_version_id: rubric.id, p_assignment_type: 'assessment',
-      p_title: ASSESSMENT.title, p_instructions: ASSESSMENT.instructions, p_available_at: null,
-      p_due_at: new Date(Date.now() + 7 * 86_400_000).toISOString(),
+      p_title: ASSESSMENT.title, p_instructions: ASSESSMENT.instructions,
     });
-    stepLog('assess', `assigned ${ASSESSMENT.title} (${assignment.id})`);
+    stepLog('assess', `assigned ${ASSESSMENT.title} with rubric "${rubric.title}" (${assignment.id})`);
   } else {
-    stepLog('assess', `${ASSESSMENT.title} already assigned (${assignment.id})`);
+    stepLog('assess', `${ASSESSMENT.title} already assigned (${assignment.id}); the instructor reads its approved rubric "${rubric.title}"`);
   }
   if (assignment.attempts_allowed !== 2) {
     await rpc(ctx.instructor.client, 'configure_assignment_access', {
@@ -1323,7 +1348,7 @@ async function summarize(ctx) {
   const analyticsOverview = await rpc(ctx.instructor.client, 'get_analytics_overview', { p_filters: { class_id: classId } });
   const performance = await rpc(ctx.instructor.client, 'get_learner_performance', { p_filters: { class_id: classId } });
   const statuses = Object.fromEntries((performance.learners ?? [])
-    .map((row) => [keyOf.get(row.id) ?? row.name ?? row.id, { status: row.status, reasons: row.reasons, progress_percent: row.progress_percent, completed_items: row.completed_items, total_items: row.total_items, quiz_avg: row.quiz_avg, missions_verified: row.missions_verified, practice_runs: row.practice_runs }])
+    .map((row) => [keyOf.get(row.id) ?? row.name ?? row.id, { name: row.name, status: row.status, reasons: row.reasons, progress_percent: row.progress_percent, completed_items: row.completed_items, total_items: row.total_items, quiz_avg: row.quiz_avg, missions_verified: row.missions_verified, practice_runs: row.practice_runs }])
     .sort(([a], [b]) => String(a).localeCompare(String(b))));
 
   const rewards = {};
@@ -1346,7 +1371,7 @@ async function summarize(ctx) {
   say('\nLearner statuses (analytics):');
   for (const [key, value] of Object.entries(statuses)) {
     const reasons = (value.reasons ?? []).map((reason) => (typeof reason === 'string' ? reason : reason?.message ?? reason?.code ?? JSON.stringify(reason)));
-    say(`  ${key} ${value.status} · progress ${value.progress_percent ?? '-'}% (${value.completed_items ?? 0}/${value.total_items ?? 0}) · quiz avg ${value.quiz_avg ?? '-'}${reasons.length ? ` · ${reasons.join('; ')}` : ''}`);
+    say(`  ${key} ${value.name ? `(${value.name}) ` : ''}${value.status} · progress ${value.progress_percent ?? '-'}% (${value.completed_items ?? 0}/${value.total_items ?? 0}) · quiz avg ${value.quiz_avg ?? '-'}${reasons.length ? ` · ${reasons.join('; ')}` : ''}`);
   }
   say('\nRewards:');
   for (const [key, value] of Object.entries(rewards)) say(`  ${key} ${String(value.points).padStart(4)} points · level ${value.level} · ${value.achievements.length ? value.achievements.join(', ') : 'no achievements yet'}`);
