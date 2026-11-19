@@ -6,6 +6,7 @@ import '../../core/widgets/learner_navigation_shell.dart';
 import 'dashboard_screen.dart';
 import '../learn/learn_screen.dart';
 import '../practice/practice_screen.dart';
+import '../progress/performance_section.dart';
 import '../progress/progress_screen.dart';
 import '../leaderboard/leaderboard_screen.dart';
 
@@ -24,7 +25,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     const DashboardScreen(), // Home: to-do, notifications, class work shortcuts
     const LearnScreen(), // Learn: COC -> module lessons and outcomes
     const PracticeScreen(), // Practice: module-gated 2D missions
-    const ProgressScreen(), // Progress: one learning projection + released results
+    // Progress: one learning projection + released results; the A7
+    // Performance summary fills the screen's performance slot.
+    const ProgressScreen(performanceSection: PerformanceSection(compact: true)),
     const LeaderboardScreen(), // Rewards (slice A6)
   ];
 
