@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:bytequest/data/mission_content_data.dart';
 import 'package:bytequest/data/mission_simulation_definitions.dart';
 import 'package:bytequest/screens/simulation/runtime/mission_equipment_simulator.dart';
 import 'package:bytequest/screens/simulation/runtime/mission_phase_completion_policy.dart';
@@ -8,6 +9,7 @@ import 'package:bytequest/screens/simulation/runtime/mission_runtime_models.dart
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/equipment_practice_driver.dart';
+import 'support/legacy_assembly_fixture.dart';
 
 void main() {
   test('tool contact validates actual categories and records an observation',
@@ -53,7 +55,7 @@ void main() {
 
   test('all assembly item/destination pairs enforce physical compatibility',
       () {
-    final definition = MissionSimulationDefinitions.byId('coc1_m2');
+    final definition = legacyAssemblyDefinition;
     final phase = definition.phases[1];
     for (final item in practicePlacements.keys
         .where((id) => id != 'replacement_component')) {
@@ -80,8 +82,9 @@ void main() {
     test('${entry.key}: reversed unsafe chronology cannot complete the phase',
         () {
       final missionId = entry.key.substring(0, entry.key.lastIndexOf('_p'));
-      final driver =
-          EquipmentPracticeDriver(MissionSimulationDefinitions.byId(missionId));
+      final driver = EquipmentPracticeDriver(missionId == 'legacy_m2'
+          ? legacyAssemblyDefinition
+          : MissionSimulationDefinitions.byId(missionId));
       final phase = driver.definition.phases
           .singleWhere((phase) => phase.id == entry.key);
       final response = driver.act(phase, 'sequence_reordered', phase.id,
@@ -177,7 +180,7 @@ void main() {
 
   test('placement rejects incompatible slot, premature CPU and rotated keying',
       () {
-    final definition = MissionSimulationDefinitions.byId('coc1_m2');
+    final definition = legacyAssemblyDefinition;
     final driver = EquipmentPracticeDriver(definition);
     final phase = definition.phases[1];
     for (final values in [
@@ -278,21 +281,148 @@ void main() {
         false);
   });
 
-  test(
-      'assessment evidence bypasses the practice model without local evaluation',
+  // Re-defense decision 4: assessment runs the same physical model as
+  // practice, but feedback is neutral and never names a target or step.
+  test('assessment applies the physical model with neutral feedback only', () {
+    final definition = MissionSimulationDefinitions.byId('coc1_m2');
+    final phase = definition.phases[1];
+    final state = MissionRuntimeState.initial(definition.id,
+        mode: MissionRuntimeMode.assessment,
+        assessmentAttemptId: 'assessment-test');
+    final refused = MissionEquipmentSimulator.describeAction(
+        definition: definition,
+        phase: phase,
+        state: state,
+        actionType: 'placement_attempted',
+        target: 'dimm_a1',
+        value: const {'item_id': 'cpu', 'destination_id': 'dimm_a1'});
+    expect(refused['simulation_valid'], false);
+    expect(refused['compatible'], false);
+    expect(refused['simulation_feedback'],
+        MissionContentData.assessmentNeutralPlacement);
+    final accepted = MissionEquipmentSimulator.describeAction(
+        definition: definition,
+        phase: phase,
+        state: state,
+        actionType: 'equipment_operation',
+        target: 'open_cpu_lever',
+        value: const {});
+    expect(accepted['simulation_valid'], true);
+    expect(accepted['simulation_feedback'],
+        MissionContentData.assessmentNeutralRecorded);
+    expect((accepted['equipment_snapshot'] as Map)['cpu_lever'], 'open',
+        reason: 'the snapshot restores physical state after a restart');
+    final practice = MissionEquipmentSimulator.describeAction(
+        definition: definition,
+        phase: phase,
+        state: MissionRuntimeState.initial(definition.id),
+        actionType: 'placement_attempted',
+        target: 'cpu_socket',
+        value: const {
+          'item_id': 'cpu',
+          'destination_id': 'cpu_socket',
+          'orientation': '0'
+        });
+    expect(practice['simulation_feedback'],
+        MissionContentData.benchRequirementFeedback['cpu'],
+        reason: 'practice names the physical reason');
+  });
+
+  test('bench parts declare requires, removal resets fastening, reseat counts',
       () {
     final definition = MissionSimulationDefinitions.byId('coc1_m2');
-    const value = {'item_id': 'cpu', 'destination_id': 'ram_slot'};
-    final output = MissionEquipmentSimulator.describeAction(
-        definition: definition,
-        phase: definition.phases[1],
-        state: MissionRuntimeState.initial(definition.id,
-            mode: MissionRuntimeMode.assessment,
-            assessmentAttemptId: 'assessment-test'),
-        actionType: 'placement_attempted',
-        target: 'ram_slot',
-        value: value);
-    expect(output, same(value));
-    expect(output.containsKey('equipment_snapshot'), false);
+    final driver = EquipmentPracticeDriver(definition)
+      ..complete(definition.phases[0])
+      ..complete(definition.phases[1]);
+    final caseInstall = definition.phases[2];
+    driver.act(caseInstall, 'placement_attempted', 'board_standoffs',
+        {'item_id': 'motherboard', 'destination_id': 'board_standoffs'});
+    final shield = driver.act(caseInstall, 'placement_attempted', 'io_cutout',
+        {'item_id': 'io_shield', 'destination_id': 'io_cutout'});
+    expect(shield['simulation_valid'], false,
+        reason: 'the I/O shield cannot pass an installed motherboard');
+    driver.act(caseInstall, 'equipment_operation', 'pick_screwdriver');
+    driver.act(caseInstall, 'equipment_operation', 'fasten_motherboard');
+    expect(driver.state.equipmentState['board_fastened'], true);
+    final removed = driver.act(caseInstall, 'placement_removed', 'motherboard',
+        {'item_id': 'motherboard'});
+    expect(removed['simulation_valid'], true);
+    expect(driver.state.placements.containsKey('motherboard'), false);
+    expect(driver.state.equipmentState['board_fastened'], false);
+    expect((driver.state.equipmentState['counts'] as Map)['corrections'], 1);
+    expect(
+        driver.act(caseInstall, 'placement_removed', 'motherboard',
+            {'item_id': 'motherboard'})['simulation_valid'],
+        false,
+        reason: 'nothing left to remove');
+    expect(
+        driver.act(caseInstall, 'placement_attempted', 'io_cutout', {
+          'item_id': 'io_shield',
+          'destination_id': 'io_cutout'
+        })['simulation_valid'],
+        true);
+  });
+
+  test(
+      'a missed thermal compound found at POST costs one fault; taking the '
+      'cooler off to fix it is the repair', () {
+    final definition = MissionSimulationDefinitions.byId('coc1_m2');
+    final driver = EquipmentPracticeDriver(definition)
+      ..complete(definition.phases[0]);
+    final board = definition.phases[1];
+    for (final step in practiceScripts[board.id]!) {
+      if (step.$2 == 'apply_thermal_compound') continue;
+      driver.act(board, step.$1, step.$2, step.$3);
+    }
+    driver
+      ..complete(definition.phases[2])
+      ..complete(definition.phases[3]);
+    final post = definition.phases[4];
+    driver.act(post, 'test_started', 'coc1_m2_post', {'test_status': 'running'});
+    driver.act(post, 'test_completed', 'coc1_m2_post',
+        {'test_status': 'completed'});
+    driver.act(post, 'placement_removed', 'cooler', {'item_id': 'cooler'});
+    driver.act(post, 'equipment_operation', 'apply_thermal_compound');
+    driver.act(post, 'placement_attempted', 'cooler_mount',
+        {'item_id': 'cooler', 'destination_id': 'cooler_mount'});
+    final counts = driver.state.equipmentState['counts'] as Map;
+    expect(counts['faults'], 1);
+    expect(counts['repairs'], 1);
+    expect(counts['corrections'], isNull);
+  });
+
+  test('missing cables and wrong DIMMs pass their phase but fail the POST',
+      () {
+    final definition = MissionSimulationDefinitions.byId('coc1_m2');
+    final driver = EquipmentPracticeDriver(definition)
+      ..complete(definition.phases[0]);
+    final board = definition.phases[1];
+    for (final step in practiceScripts[board.id]!) {
+      final value = Map<String, dynamic>.from(step.$3);
+      if (value['item_id'] == 'ram_1') value['destination_id'] = 'dimm_a1';
+      if (value['item_id'] == 'ram_2') value['destination_id'] = 'dimm_a2';
+      driver.act(board, step.$1, step.$2, value);
+    }
+    expect(MissionPhaseCompletionPolicy.canAdvance(board, driver.state), true);
+    driver.complete(definition.phases[2]);
+    final cables = definition.phases[3];
+    driver.act(cables, 'connection_created', 'board_atx24',
+        {'source_id': 'atx_24pin', 'destination_id': 'board_atx24'});
+    expect(MissionPhaseCompletionPolicy.canAdvance(cables, driver.state), true,
+        reason: 'only the 24-pin cable is required to leave the phase');
+    final post = definition.phases[4];
+    driver.act(post, 'test_started', 'coc1_m2_post', {'test_status': 'running'});
+    final result = driver.act(post, 'test_completed', 'coc1_m2_post',
+        {'test_status': 'completed'});
+    final readings = {
+      for (final reading in ((result['measured_result'] as Map)['readings']
+          as List))
+        reading['id']: reading['operating']
+    };
+    expect(readings['memory_channels'], false);
+    expect(readings['cpu_power'], false);
+    expect(readings['boot_device'], false);
+    expect(readings['cpu_detection'], true);
+    expect(MissionPhaseCompletionPolicy.canAdvance(post, driver.state), false);
   });
 }

@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import type { Json } from '@/types/database.generated';
-import { practiceServerClient } from '@/lib/practice/database';
+import { practiceServerClient, practiceVerificationPort } from '@/lib/practice/database';
+import { verifyPracticeMission } from '@/lib/practice/verification';
 import { selectPracticeQuestions } from '@/lib/practice/question-bank';
 import { generatePracticeQuestions } from '@/lib/practice/free-quiz';
 import { practiceQuizView } from '@/lib/practice/quiz-view';
@@ -47,8 +48,10 @@ export async function POST(request:Request) {
     const parsed=requestSchema.safeParse(body); if(!parsed.success) return reply({error:'Invalid practice request.'},400);
     const input=parsed.data;
     if(input.action==='verify') {
-      const {error}=await user.client.rpc('practice_verify_mission',{p_learner:user.id,p_mission:input.mission});
-      return error ? reply({error:'Complete and verify each work phase before submitting practice evidence.'},error.code==='42501'?403:422) : reply({verified:true});
+      // Verified and failed verifications are summarised by the database as
+      // practice runs; the reply carries those server-computed metrics.
+      const outcome=await verifyPracticeMission(practiceVerificationPort(user.client),user.id,input.mission);
+      return reply(outcome.body,outcome.status);
     }
     if(input.action==='begin') {
       const id=randomUUID();

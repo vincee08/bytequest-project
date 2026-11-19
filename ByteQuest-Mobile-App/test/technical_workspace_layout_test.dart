@@ -263,12 +263,15 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    // COC1 M2 now uses the assembly bench: the motherboard assembly is
+    // dragged from the parts tray onto the case standoffs.
     final definition = MissionSimulationDefinitions.byId('coc1_m2');
     final plan = EquipmentPracticeDriver(definition)
-      ..complete(definition.phases.first);
+      ..complete(definition.phases[0])
+      ..complete(definition.phases[1]);
     await tester.pumpWidget(_host(definition,
         initialState:
-            plan.state.copyWith(currentPhaseId: definition.phases[1].id)));
+            plan.state.copyWith(currentPhaseId: definition.phases[2].id)));
     await tester.pumpAndSettle();
     final controller = tester
         .widget<MissionSimulationScreen>(find.byType(MissionSimulationScreen))
@@ -276,19 +279,15 @@ void main() {
     final before = controller.state.acceptedEvidenceIds.length;
     await tester.tap(find.byKey(const ValueKey('mission-controls-toggle')));
     await tester.pumpAndSettle();
-    final source = find.byKey(const ValueKey('workspace-source-motherboard'));
-    final target =
-        find.byKey(const ValueKey('workspace-destination-motherboard_area'));
+    final source = find.byKey(const ValueKey('bench-part-motherboard'));
+    final target = find.byKey(const ValueKey('bench-slot-board_standoffs'));
     await tester.ensureVisible(source);
     await tester.ensureVisible(target);
     await tester.pumpAndSettle();
     await tester.dragFrom(tester.getCenter(source),
         tester.getCenter(target) - tester.getCenter(source));
     await tester.pumpAndSettle();
-    await tester
-        .tap(find.byKey(const ValueKey('workspace-orientation-aligned')));
-    await tester.pumpAndSettle();
-    expect(controller.state.placements['motherboard'], 'motherboard_area');
+    expect(controller.state.placements['motherboard'], 'board_standoffs');
     expect(controller.state.acceptedEvidenceIds.length, before + 1);
     expect(controller.state.pendingEvidence, isEmpty);
     expect(tester.takeException(), isNull);

@@ -13,7 +13,8 @@ void main() {
     final missions = MissionSimulationDefinitions.all;
     final phases = missions.expand((mission) => mission.phases).toList();
     expect(missions.length, 20);
-    expect(phases.length, 115);
+    // 116: COC1 M2 gained a sixth phase on the assembly bench.
+    expect(phases.length, 116);
     expect(phases.map((phase) => phase.resolvedInteraction).toSet().length, 13);
     for (final mission in missions) {
       for (final phase in mission.phases) {
@@ -200,7 +201,7 @@ void main() {
     expect(generic, isEmpty);
   });
 
-  test('all 115 production phases resolve to rendered control identities', () {
+  test('all 116 production phases resolve to rendered control identities', () {
     var count = 0;
     for (final mission in MissionSimulationDefinitions.all) {
       for (final phase in mission.phases) {
@@ -302,7 +303,7 @@ void main() {
         }
       }
     }
-    expect(count, 115);
+    expect(count, 116);
   });
 
   test('graded decisions do not name the required correction button', () {

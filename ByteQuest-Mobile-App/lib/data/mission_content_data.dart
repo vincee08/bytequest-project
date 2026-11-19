@@ -677,6 +677,252 @@ class MissionContentData {
 
   static const orientationFeedback =
       'The keyed connector is not aligned. Inspect the notch before seating the component.';
+
+  // Assembly bench (COC1 M2): practice feedback names the physical reason.
+  static const Map<String, String> benchOrientationFeedback = {
+    'cpu':
+        'The processor only drops into the socket one way: rotate it until its gold triangle sits on the triangle printed on the socket.',
+    'ram_1':
+        'The module notch does not meet the slot key. Rotate the module so the notch lines up with the key, then press it in.',
+    'ram_2':
+        'The module notch does not meet the slot key. Rotate the module so the notch lines up with the key, then press it in.',
+    'psu':
+        'The power supply does not sit flat in the bay this way. Turn it so its fan faces the intake vent in the bay floor.',
+  };
+  static const Map<String, String> benchRequirementFeedback = {
+    'cpu':
+        'The socket load plate is closed. Open the load lever before seating the processor.',
+    'cooler':
+        'The cooler mounts over the processor. Seat the processor in the socket first.',
+    'ram_1':
+        'The DIMM latches are closed. Open them before inserting a module.',
+    'ram_2':
+        'The DIMM latches are closed. Open them before inserting a module.',
+    'io_shield':
+        'The I/O shield snaps in from inside the case and cannot pass the installed motherboard. Remove the motherboard, fit the shield, then reinstall the board.',
+  };
+  static const benchRemovalFeedback =
+      'Part removed. Reseat it correctly, then run the test again.';
+  static const benchRemovalUnavailable =
+      'That part is not installed, so there is nothing to remove.';
+
+  // Assembly bench chrome.
+  static String benchStepPosition(int step, int total, String label) =>
+      'Step $step of $total · $label';
+  static String benchStepsDone(int total) =>
+      'All $total steps done · continue when ready';
+  static const benchAssessmentHeader = 'Assessment · work without hints';
+  static String benchElapsedSemantics(String time) => 'Elapsed time $time';
+  static String benchCountsSemantics(
+          int valid, int invalid, int corrections, int faults) =>
+      '$valid actions accepted, $invalid refused, $corrections corrections, '
+      '$faults power-on faults';
+  static const benchMatView = 'Anti-static mat';
+  static const benchBoardView = 'Motherboard close-up';
+  static const benchChassisView = 'Open case';
+  static const benchShowBoard = 'Show the motherboard close-up';
+  static const benchShowCase = 'Show the whole case';
+  static const benchPartsHint =
+      'Drag a part onto the bench, or tap it and then tap where it goes.';
+  static const benchCablesHint =
+      'Drag a connector onto its header, or tap the cable and then the header.';
+  static const benchInspectHint =
+      'Tap each part on the mat to inspect it, then prepare ESD protection.';
+  static String benchPartSelected(String part) =>
+      '$part selected — tap where it goes, or rotate it first.';
+  static String benchCableSelected(String cable) =>
+      '$cable selected — tap the header it plugs into.';
+  static String benchInstalledSelected(String part) =>
+      '$part is installed. Remove it to reseat it.';
+  static const benchRotateLabel = 'Rotate';
+  static String benchRotateSemantics(String part, String degrees) =>
+      'Rotate $part by 90 degrees. Now turned $degrees degrees.';
+  static const benchRemoveLabel = 'Remove';
+  static String benchRemoveSemantics(String part) =>
+      'Remove $part from where it is installed';
+  static const benchCancelLabel = 'Cancel';
+  static String benchPartSemantics(String part, bool installed) => installed
+      ? '$part, installed. Double tap to select it.'
+      : '$part. Drag it to the bench, or double tap to select it.';
+  static String benchCableSemantics(String cable, String? header) =>
+      header == null
+          ? '$cable, not connected. Double tap to select it.'
+          : '$cable, connected to $header. Double tap to select it.';
+  static String benchSlotSemantics(String slot, String? part) => part == null
+      ? '$slot, empty. Double tap to install the selected part here.'
+      : '$slot, holds $part.';
+  static String benchHeaderSemantics(String header) =>
+      '$header. Double tap to connect the selected cable here.';
+  static String benchInspectSemantics(String part, bool inspected) =>
+      inspected ? '$part, inspected' : '$part. Double tap to inspect.';
+  static String benchOperationSemantics(String label, bool enabled) =>
+      enabled ? label : '$label — not available yet';
+  static String benchInstallChip(String slot) => slot;
+  static const benchInspectionTitle = 'Inspection';
+  static const benchReadMore = 'Read the full note';
+  static const benchDismissInformation = 'Hide this note';
+  static const benchDropOnTarget =
+      'Release the part over a slot, bay or header on the bench.';
+
+  // Assessment mode chrome.
+  static const assessmentModeLabel = 'Assessment';
+  static const assessmentModeHint =
+      'No hints are shown. Work as you would on the real equipment.';
+  static const assessmentSubmitLabel = 'Submit assessment';
+  static const assessmentSubmitTitle = 'Submit this assessment?';
+  static const assessmentSubmitMessage =
+      'Your recorded work is evaluated on the server. Steps you have not finished are evaluated as not satisfied, and you cannot change the work after submitting.';
+  static const assessmentSubmitConfirm = 'Submit';
+  static const assessmentSubmittedLabel = 'Submitted';
+  static const assessmentSubmittedMessage =
+      'Assessment submitted for evaluation. Your instructor releases the result.';
+  static const assessmentContinueStatus =
+      'Continue when you have finished this phase.';
+  static const assessmentUpdateTitle = 'Update required';
+  static const assessmentUpdateRequired =
+      'This assessment needs the latest version of ByteQuest. Update the app, then open the assessment again.';
+
+  // Assessment mode: neutral physical feedback that never names a target.
+  static const assessmentNeutralPlacement = 'Component not seated.';
+  static const assessmentNeutralRemoval = 'Nothing to remove there.';
+  static const assessmentNeutralConnection = 'Connector not seated.';
+  static const assessmentNeutralOperation =
+      'No change — the equipment is not in a state for that action.';
+  static const assessmentNeutralTool = 'No effect on the selected target.';
+  static const assessmentNeutralRecorded = 'Action recorded.';
+
+  // Assessment mode: goal-level task text, neutral part descriptions and
+  // symptom-only test readouts. None of them names the slot, header, cable
+  // or step that is expected; practice keeps the specific technical wording.
+  static const Map<String, String> assessmentPhaseInstructions = {
+    'coc1_m2_p1': 'Prepare the work area and inspect the parts before assembly.',
+    'coc1_m2_p2': 'Prepare the motherboard on the anti-static mat.',
+    'coc1_m2_p3': 'Install the components into the case.',
+    'coc1_m2_p4': 'Connect the required power and data cables.',
+    'coc1_m2_p5':
+        'Power on the system, resolve any fault you observe, then interpret the result.',
+  };
+  static String? assessmentInstruction(String phaseId) =>
+      assessmentPhaseInstructions[phaseId];
+
+  static const Map<String, String> benchAssessmentInspection = {
+    'system_case':
+        'ATX mid-tower with the side panel removed. Standoffs, a rear I/O cutout, a bottom bay and a drive bay are visible.',
+    'motherboard':
+        'ATX motherboard on the anti-static mat: processor socket with a load lever, memory slots, fan headers, power headers, SATA ports and case headers.',
+    'cpu': 'LGA processor in its tray. A gold triangle marks one corner.',
+    'cooler':
+        'Tower cooler without pre-applied thermal compound. It has a 4-pin fan cable.',
+    'ram': 'Two identical DDR4 modules with an off-centre notch.',
+    'psu':
+        'ATX power supply, switched off and unplugged, with its modular power cables attached.',
+    'storage':
+        '3.5-inch SATA hard disk drive with separate power and data ports.',
+  };
+
+  static const assessmentReadingNominal = 'Operating normally';
+  static const assessmentReadingFault = 'Fault detected';
+
+  /// Assessment readouts that state what the technician observes, keyed
+  /// `<phase>.<check>`: the COC1 M2 power-on test, and diagnostic traces whose
+  /// result is the finding itself. Two causes may share one symptom (both CPU
+  /// checks show the debug LED), so the learner diagnoses instead of reading
+  /// the answer. Other checks read [assessmentReadingNominal] or
+  /// [assessmentReadingFault].
+  static const Map<String, ({String label, String nominal, String fault})>
+      assessmentReadingSymptoms = {
+    'coc4_m3_p4.route': (
+      label: 'Route trace',
+      nominal: 'Gateway 192.168.1.1 replies; hop 2 times out.',
+      fault: 'No request has been traced yet.',
+    ),
+    'coc1_m2_p5.psu_mounting': (
+      label: 'Pre-power inspection',
+      nominal: 'Power supply secure.',
+      fault: 'The power supply moves in its bay.',
+    ),
+    'coc1_m2_p5.board_mounting': (
+      label: 'Pre-power inspection',
+      nominal: 'Motherboard secure.',
+      fault: 'The motherboard moves when it is touched.',
+    ),
+    'coc1_m2_p5.drive_mounting': (
+      label: 'Pre-power inspection',
+      nominal: 'Drive secure.',
+      fault: 'The drive moves in its bay.',
+    ),
+    'coc1_m2_p5.power_switch': (
+      label: 'Power-on',
+      nominal: 'The system powers on.',
+      fault: 'Pressing the case power button does nothing.',
+    ),
+    'coc1_m2_p5.cpu_power': (
+      label: 'POST',
+      nominal: 'POST passes the processor stage.',
+      fault: 'No POST: the fans spin but the CPU debug LED stays lit.',
+    ),
+    'coc1_m2_p5.cpu_detection': (
+      label: 'POST',
+      nominal: 'Processor detected.',
+      fault: 'No POST: the fans spin but the CPU debug LED stays lit.',
+    ),
+    'coc1_m2_p5.cpu_fan': (
+      label: 'Cooling',
+      nominal: 'CPU fan speed reported.',
+      fault: 'CPU fan error at power-on.',
+    ),
+    'coc1_m2_p5.cpu_temperature': (
+      label: 'Cooling',
+      nominal: 'CPU temperature stable.',
+      fault: 'CPU over-temperature warning within seconds of power-on.',
+    ),
+    'coc1_m2_p5.memory_detection': (
+      label: 'Memory',
+      nominal: 'Memory detected.',
+      fault: 'Memory not detected: the DRAM debug LED is lit and the board beeps.',
+    ),
+    'coc1_m2_p5.memory_channels': (
+      label: 'Memory',
+      nominal: 'Memory is running in dual-channel mode.',
+      fault: 'Memory is running in single-channel mode.',
+    ),
+    'coc1_m2_p5.drive_power': (
+      label: 'Boot',
+      nominal: 'The drive spins up.',
+      fault: 'No boot device detected.',
+    ),
+    'coc1_m2_p5.boot_device': (
+      label: 'Boot',
+      nominal: 'Boot drive detected.',
+      fault: 'No boot device detected.',
+    ),
+  };
+
+  static String assessmentReading(
+      String phaseId, String? checkId, bool operating) {
+    final symptom = assessmentReadingSymptoms['$phaseId.$checkId'];
+    if (symptom != null) return operating ? symptom.nominal : symptom.fault;
+    return operating ? assessmentReadingNominal : assessmentReadingFault;
+  }
+
+  static String assessmentReadingLabel(
+          String phaseId, String? checkId, String label) =>
+      assessmentReadingSymptoms['$phaseId.$checkId']?.label ?? label;
+
+  // A practice session saved for an earlier version of a mission.
+  static const missionUpdatedTitle = 'Mission updated';
+  static const missionUpdatedNotice =
+      'This mission was updated. Your earlier verified result is kept; start the new version.';
+  static const missionUpdatedDismiss = 'Start the new version';
+  static const missionUpdateFailed =
+      'This mission was updated, but the new version could not be started. Check your connection, then retry.';
+
+  // Assembly-bench board silkscreen (printed header names on the board).
+  static const benchSilkscreenCpuFan = 'CPU_FAN';
+  static const benchSilkscreenSysFan = 'SYS_FAN';
+  static const benchSilkscreenAtx24 = '24-PIN';
+  static const benchSilkscreenEps8 = '8-PIN';
+  static const benchSilkscreenFrontPanel = 'F_PANEL';
   static const placementPrerequisiteFeedback =
       'The mounting support or safety preparation is not installed yet.';
   static const occupiedDestinationFeedback =
@@ -689,6 +935,7 @@ class MissionContentData {
       'A configuration value has an invalid format. Check the field specification.';
   static const testResultRecordedFeedback =
       'Measured output recorded. Inspect each reading before interpreting the result.';
+  static const assessmentTestRecorded = 'Measured output recorded.';
   static const confirmSequenceLabel = 'Apply procedure order';
   static const revisePhaseLabel = 'Review earlier phase';
   static const practiceHintLabel = 'Practice help';
@@ -726,6 +973,35 @@ class MissionContentData {
       'No complete test circuit is connected. Connect both endpoints before interpreting continuity.';
   static const connectedToolReading =
       'A test circuit is connected. Run the wire-map procedure to inspect each conductor.';
+
+  // Assessment mode: what the tool shows, without the next step.
+  static const Map<String, String> assessmentToolObservations = {
+    'anti_static_strap':
+        'The wrist strap clips to the bare chassis ground point.',
+    'screwdriver':
+        'The Phillips driver fits the case fastener without contacting nearby components.',
+    'firmware_inventory':
+        'The firmware console enumerates the selected storage controller.',
+    'wire_stripper':
+        'The stripping jaws engage the outer cable jacket; conductor insulation remains intact.',
+    'crimping_tool': 'The termination jaws engage the prepared connector.',
+    'interface_inspection_light':
+        'The interface keying and contact surfaces are visible; no bent contacts are observed.',
+    'lan_loopback_adapter':
+        'Loopback contacts engage the Ethernet interface.',
+    'esd_driver':
+        'The screwdriver engages the retaining-screw head without contacting the board.',
+    'device_manager':
+        'The device inventory contains an uninitialized peripheral.',
+    'port_tester': 'The known-good probe is detected on the alternate USB port.',
+    'cable_tester':
+        'The selected video lead loses continuity when flexed near the connector.',
+  };
+  static const assessmentToolContact =
+      'Tool contact established with the selected target.';
+  static const assessmentDisconnectedToolReading =
+      'No complete test circuit is connected.';
+  static const assessmentConnectedToolReading = 'A test circuit is connected.';
   static const exitMissionTitle = 'Save and Exit Mission?';
   static const exitMissionMessage =
       'Your current mission progress will remain available when you return.';

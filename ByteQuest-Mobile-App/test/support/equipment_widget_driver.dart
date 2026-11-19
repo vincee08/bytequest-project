@@ -1,3 +1,4 @@
+import 'package:bytequest/screens/simulation/components/assembly/assembly_bench.dart';
 import 'package:bytequest/screens/simulation/runtime/mission_equipment_simulator.dart';
 import 'package:bytequest/screens/simulation/runtime/mission_runtime_controller.dart';
 import 'package:bytequest/screens/simulation/runtime/mission_runtime_models.dart';
@@ -41,6 +42,15 @@ Future<void> performEquipmentAction(
   final equipment =
       MissionEquipmentSimulator.map(phase.presentation['equipment']);
   final before = controller.state.acceptedEvidenceIds.length;
+  if (find.byType(AssemblyBench).evaluate().isNotEmpty &&
+      await _performBenchAction(tester, phase, action)) {
+    await waitForEquipmentState(
+        tester,
+        () =>
+            controller.state.acceptedEvidenceIds.length > before &&
+            controller.state.pendingEvidence.isEmpty);
+    return;
+  }
   switch (action.actionType) {
     case 'object_inspected':
       await tapEquipmentControl(
@@ -220,4 +230,52 @@ Future<void> performEquipmentAction(
       () =>
           controller.state.acceptedEvidenceIds.length > before &&
           controller.state.pendingEvidence.isEmpty);
+}
+
+/// Drives the assembly bench (COC1 M2) through its parts tray: select a part
+/// or cable, rotate it to the recorded orientation, then tap its slot or
+/// header. Returns false for actions handled by the standard controls.
+Future<bool> _performBenchAction(WidgetTester tester,
+    MissionPhaseDefinition phase, MissionEvidenceAction action) async {
+  final value = action.value;
+  Finder key(String id) => find.byKey(ValueKey(id));
+  switch (action.actionType) {
+    case 'object_inspected':
+      await tapEquipmentControl(tester, key('bench-inspect-chip-${action.target}'));
+    case 'equipment_operation':
+      await tapEquipmentControl(tester, key('bench-operation-${action.target}'));
+    case 'placement_attempted':
+      final part = value['item_id'] as String;
+      await tapEquipmentControl(tester, key('bench-part-$part'));
+      await tester.pumpAndSettle();
+      if (value['orientation'] case final String orientation) {
+        int quarter() =>
+            (tester
+                        .widget<AnimatedRotation>(
+                            key('bench-rotation-$part').first)
+                        .turns *
+                    4)
+                .round() %
+            4;
+        final desired = int.parse(orientation) ~/ 90;
+        while (quarter() != desired) {
+          await tapEquipmentControl(tester, key('bench-rotate'));
+          await tester.pumpAndSettle();
+        }
+      }
+      await tapEquipmentControl(
+          tester, key('bench-slot-chip-${value['destination_id']}'));
+    case 'placement_removed':
+      await tapEquipmentControl(tester, key('bench-part-${value['item_id']}'));
+      await tester.pumpAndSettle();
+      await tapEquipmentControl(tester, key('bench-remove'));
+    case 'connection_created':
+      await tapEquipmentControl(tester, key('bench-cable-${value['source_id']}'));
+      await tester.pumpAndSettle();
+      await tapEquipmentControl(
+          tester, key('bench-header-chip-${value['destination_id']}'));
+    default:
+      return false;
+  }
+  return true;
 }

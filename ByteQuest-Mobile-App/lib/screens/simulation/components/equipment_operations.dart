@@ -12,6 +12,8 @@ import '../runtime/mission_runtime_models.dart';
 import 'tool_tray.dart';
 
 /// Optional operations compose with the existing phase interaction and scene.
+/// They are equipment controls, not hints, so practice and assessment render
+/// them alike; assessment feedback stays neutral in the simulator.
 class EquipmentOperations extends StatelessWidget {
   const EquipmentOperations(
       {super.key,
@@ -26,8 +28,6 @@ class EquipmentOperations extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (state.mode != MissionRuntimeMode.practice)
-      return const SizedBox.shrink();
     final spec = MissionEquipmentSimulator.map(phase.presentation['equipment']);
     final operations = MissionEquipmentSimulator.maps(spec['operations']);
     final hasTools = spec['tools'] is List && spec['targets'] is List;

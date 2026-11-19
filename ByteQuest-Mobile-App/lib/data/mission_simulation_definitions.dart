@@ -1,6 +1,7 @@
 import '../screens/simulation/runtime/mission_runtime_models.dart';
 import 'mission_content_data.dart';
 
+part 'mission_definitions/assembly_bench_content.dart';
 part 'mission_definitions/coc1_definitions.dart';
 part 'mission_definitions/coc2_definitions.dart';
 part 'mission_definitions/coc3_definitions.dart';
@@ -35,6 +36,30 @@ abstract final class MissionSimulationDefinitions {
     }
     return definition;
   }
+
+  /// Server contract version published for each typed definition. The
+  /// practice verifier and simulation assessments store this value; the app
+  /// refuses an assessment whose published version differs from its own.
+  static String contractVersion(String id) {
+    byId(id);
+    return switch (id) {
+      'coc1_m1' => 'css-sag-20261109-v3',
+      'coc1_m2' => coc1M2AssemblyContractVersion,
+      _ when id.startsWith('coc4') => 'css-sag-20261009-v1',
+      _ => 'css-sag-20261011-v2',
+    };
+  }
+
+  static const coc1M2AssemblyContractVersion = 'css-assembly-20261119-v3';
+
+  /// Contract version of practice progress saved before runtime snapshots and
+  /// actions carried a definition version. Only missions whose contract has
+  /// changed since then name one; their earlier progress restarts on the new
+  /// version (verified completions keep counting on the server).
+  static String? unstampedContractVersion(String id) => switch (id) {
+        'coc1_m2' => 'css-sag-20261011-v2',
+        _ => null,
+      };
 }
 
 final class _PhaseSpec {
@@ -230,9 +255,13 @@ SimulationSceneDefinition _scene(
       'replaceableAssets': true,
       'statusLabel': 'Awaiting inspection',
       'sceneKind': _sceneKindForMission(missionId),
+      if (missionId == 'coc1_m2') 'workspace': assemblyBenchWorkspace,
     },
   );
 }
+
+/// Scene marker for definitions rendered by the realistic assembly bench.
+const assemblyBenchWorkspace = 'assembly_bench';
 
 String _sceneKindForMission(String missionId) => switch (missionId) {
       'coc1_m1' || 'coc1_m4' => 'workbench',
@@ -298,6 +327,7 @@ String? _backgroundAssetForMission(String missionId) {
 
 String? _imageAssetForObject(String missionId, String objectId) {
   final coc = missionId.substring(0, 4);
+  if (missionId == 'coc1_m2') return _assemblyImageAssets[objectId];
   if (coc == 'coc1') {
     if (objectId == 'system_unit') {
       return 'assets/COC1/Mission 3/System Unit.png';

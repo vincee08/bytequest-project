@@ -4,7 +4,6 @@ import 'package:bytequest/core/theme/app_theme.dart';
 import 'package:bytequest/core/widgets/app_button.dart';
 import 'package:bytequest/core/widgets/learner_navigation_shell.dart';
 import 'package:bytequest/data/mission_content_data.dart';
-import 'package:bytequest/data/mission_simulation_definitions.dart';
 import 'package:bytequest/models/profile_model.dart';
 import 'package:bytequest/screens/auth/login_screen.dart';
 import 'package:bytequest/screens/auth/forgot_password_screen.dart';
@@ -24,6 +23,10 @@ import 'package:bytequest/widgets/app_top_bar.dart';
 import 'package:bytequest/widgets/bytequest_bottom_nav.dart';
 import 'package:bytequest/widgets/practice_progress_panel.dart';
 import 'package:bytequest/models/practice_progress_model.dart';
+
+// The retired COC1 M2 v2 workflow (legacy_m2 fixture) keeps the generic
+// task-status rules covered; COC1 M2 itself now runs on the assembly bench.
+import 'support/legacy_assembly_fixture.dart';
 
 void main() {
   testWidgets(
@@ -117,8 +120,8 @@ void main() {
     }
   });
   test('preparing COC1 M2 still identifies all six pending inspections', () {
-    final phase = MissionSimulationDefinitions.byId('coc1_m2').phases.first;
-    final state = MissionRuntimeState.initial('coc1_m2').copyWith(placements: {
+    final phase = legacyAssemblyDefinition.phases.first;
+    final state = MissionRuntimeState.initial('legacy_m2').copyWith(placements: {
       'esd_mat': 'esd_mat_position',
       'service_chassis': 'service_chassis_position',
     });
@@ -126,22 +129,22 @@ void main() {
   });
 
   test('COC1 M2 phase three explains both connections and procedure', () {
-    final phase = MissionSimulationDefinitions.byId('coc1_m2').phases[2];
-    expect(missionPendingTasks(phase, MissionRuntimeState.initial('coc1_m2')),
+    final phase = legacyAssemblyDefinition.phases[2];
+    expect(missionPendingTasks(phase, MissionRuntimeState.initial('legacy_m2')),
         [
           'Connections: 0 of 2',
           MissionContentData.sequencePendingLabel,
           'Work-order checks: 0 of 2'
         ]);
-    final connected = MissionRuntimeState.initial('coc1_m2')
+    final connected = MissionRuntimeState.initial('legacy_m2')
         .copyWith(connectedNodePairs: {'atx>board_power', 'sata>storage_data'});
     expect(missionPendingTasks(phase, connected),
         [MissionContentData.sequencePendingLabel]);
   });
 
   test('assessment status excludes practice preparation requirements', () {
-    final phase = MissionSimulationDefinitions.byId('coc1_m2').phases.first;
-    final state = MissionRuntimeState.initial('coc1_m2',
+    final phase = legacyAssemblyDefinition.phases.first;
+    final state = MissionRuntimeState.initial('legacy_m2',
         mode: MissionRuntimeMode.assessment,
         assessmentAttemptId: 'assessment-qa');
     expect(missionPendingTasks(phase, state), ['Inspections: 0 of 6']);
