@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowRight, CheckCircle2, ClipboardCheck, Loader2, Send, ShieldCheck } from "lucide-react";
@@ -10,8 +10,9 @@ import {
   AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import { bulkRequestBodies, queueActionLabel, queueScoreText, queueStatusText } from "@/lib/evaluations/display";
 import {
-  EVALUATION_STAGES, KIND_LABEL, STAGE_COPY, type BulkItemResult, type EvaluationKind, type EvaluationStage, type QueueItem,
+  EVALUATION_STAGES, KIND_LABEL, STAGE_COPY, type BulkItemResult, type EvaluationStage, type QueueItem,
 } from "@/lib/evaluations/requests";
 
 type Outcome = { action: "finalize" | "release"; results: (BulkItemResult & { title: string })[] };
@@ -19,17 +20,6 @@ type Outcome = { action: "finalize" | "release"; results: (BulkItemResult & { ti
 function when(value: string | null) {
   if (!value) return "Not submitted";
   return new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" }).format(new Date(value));
-}
-function scoreText(item: QueueItem) {
-  if (item.score === null || item.score === undefined) return item.kind === "homework" ? "No score" : "—";
-  return item.max_score ? `${Number(item.score)} / ${Number(item.max_score)}` : String(item.score);
-}
-function statusText(item: QueueItem) {
-  const map: Record<string, string> = {
-    evaluated: "Evaluated (automatic)", under_review: "Evaluation recorded", finalized: "Finalized", released: "Released",
-    submitted: "Submitted", graded: "Grade saved", pending: "Essays not scored", evaluation_pending: "Essays not scored",
-  };
-  return map[item.status] ?? item.status.replaceAll("_", " ");
 }
 
 export function EvaluationCenter({
@@ -71,11 +61,9 @@ export function EvaluationCenter({
     setBusy(true); setError(""); setOutcome(null);
     const results: Outcome["results"] = [];
     try {
-      const groups = new Map<EvaluationKind, QueueItem[]>();
-      for (const item of chosen) groups.set(item.kind, [...(groups.get(item.kind) ?? []), item]);
-      for (const [kind, group] of groups) {
-        const ids = group.map((item) => item.id);
-        const body = kind === "homework" ? { kind, action: bulkAction, submission_ids: ids } : { kind, action: bulkAction, attempt_ids: ids };
+      // Mixed selections send one request per kind (technical, homework, quiz).
+      for (const body of bulkRequestBodies(chosen, bulkAction)) {
+        const group = chosen.filter((item) => item.kind === body.kind);
         const response = await fetch("/api/evaluations", {
           method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(60000),
         });
@@ -192,11 +180,11 @@ export function EvaluationCenter({
                   <p className="truncate text-xs text-muted-foreground">{item.class.title ?? "Class"} · {when(item.submitted_at)}</p>
                 </div>
                 <div className="text-sm">
-                  <p className="font-medium tabular-nums">{scoreText(item)}</p>
-                  <p className="text-xs text-muted-foreground">{statusText(item)}</p>
+                  <p className="font-medium tabular-nums">{queueScoreText(item)}</p>
+                  <p className="text-xs text-muted-foreground">{queueStatusText(item)}</p>
                 </div>
                 <Button asChild variant={stage === "released" ? "ghost" : "outline"} className="min-h-11 justify-self-start md:justify-self-end">
-                  <Link href={item.link}>{stage === "evaluate" ? "Evaluate" : "Open"}<ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" /></Link>
+                  <Link href={item.link}>{queueActionLabel(stage, item)}<ArrowRight className="ml-2 h-4 w-4" aria-hidden="true" /></Link>
                 </Button>
               </li>
             ))}
