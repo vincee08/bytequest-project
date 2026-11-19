@@ -3,6 +3,11 @@
 begin;
 select plan(30);
 
+-- Isolate the expected progress values from lessons published in the target
+-- database (rolled back with everything else): the fixtures below define the
+-- only curriculum topics.
+update public.curriculum_topics set archived_at = now() where archived_at is null;
+
 create function pg_temp.lp_learner(p_tag text) returns uuid language plpgsql as $$
 declare v_id uuid := gen_random_uuid();
 begin
