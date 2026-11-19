@@ -782,6 +782,9 @@ class MissionContentData {
   static const benchDismissInformation = 'Hide this note';
   static const benchDropOnTarget =
       'Release the part over a slot, bay or header on the bench.';
+  // Neutral in both modes: it names the equipment, never the next step.
+  static String benchOperationNotYet(String label) =>
+      '$label is not possible yet. Finish the work it depends on first.';
 
   // Orientation markers on keyed parts. The name states where the marker is
   // now, in quarter turns clockwise from 0°; it never says whether that

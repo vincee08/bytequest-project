@@ -1225,4 +1225,162 @@ void main() {
     }
     semantics.dispose();
   });
+
+  // QA audit 2026-11-20 (live Android run): the rings drawn on the bench
+  // were dead under the slot and header targets, so the lever, the thermal
+  // compound and every screw could only be worked from the tray, and a tap
+  // on a ring with a part in hand counted as a refused placement.
+  group('rings on the bench take their tap', () {
+    Future<void> tapRing(WidgetTester tester, String operation) async {
+      await tester.tap(find.byKey(ValueKey('bench-hotspot-$operation')));
+      await tester.pumpAndSettle();
+    }
+
+    int invalid(_Harness harness) =>
+        ((harness.controller.state.equipmentState['counts'] as Map?)?['invalid']
+            as int?) ??
+        0;
+
+    testWidgets('the socket lever and the thermal compound work at their ring',
+        (tester) async {
+      final harness = await _pump(tester, _stateAt(2));
+      await tapRing(tester, 'open_cpu_lever');
+      expect(harness.controller.state.equipmentState['cpu_lever'], 'open');
+      await _tapKey(tester, 'bench-part-cpu');
+      for (var i = 0; i < 3; i++) {
+        await _tapKey(tester, 'bench-rotate');
+      }
+      await _tapKey(tester, 'bench-slot-chip-cpu_socket');
+      expect(harness.controller.state.placements['cpu'], 'cpu_socket');
+      await tapRing(tester, 'close_cpu_lever');
+      expect(harness.controller.state.equipmentState['cpu_lever'], 'closed');
+      await tapRing(tester, 'apply_thermal_compound');
+      expect(
+          harness.controller.state.equipmentState['thermal_compound'], isTrue);
+      expect(find.byKey(const ValueKey('bench-hotspot-apply_thermal_compound')),
+          findsNothing,
+          reason: 'applied compound leaves no ring to work again');
+      final paste =
+          tester.getRect(find.byKey(const ValueKey('bench-thermal-compound')));
+      expect(
+          tester
+              .getRect(find.byKey(const ValueKey('bench-placed-cpu')))
+              .contains(paste.center),
+          isTrue,
+          reason: 'the compound dot sits over the seated processor photograph');
+      expect(_enabled(tester, 'bench-operation-apply_thermal_compound'), isTrue,
+          reason: 'the tray still lists the operation');
+      expect(invalid(harness), 0);
+    });
+
+    testWidgets(
+        'a ring tapped with a part in hand works the ring, not a placement',
+        (tester) async {
+      final harness = await _pump(tester, _stateAt(2));
+      await _tapKey(tester, 'bench-part-cpu');
+      await tapRing(tester, 'open_cpu_lever');
+      expect(harness.controller.state.equipmentState['cpu_lever'], 'open');
+      expect(harness.lastValue('placement_attempted'), isNull,
+          reason: 'the lever tap is not a CPU drop');
+      expect(invalid(harness), 0);
+      expect(find.byKey(const ValueKey('bench-rotate')), findsOneWidget,
+          reason: 'the processor stays in hand for the next move');
+    });
+
+    testWidgets('screws are fastened at the ring over their bay',
+        (tester) async {
+      final harness = await _pump(tester, _stateAt(3));
+      await _tapKey(tester, 'bench-part-psu');
+      await _tapKey(tester, 'bench-rotate');
+      await _tapKey(tester, 'bench-rotate');
+      await _tapKey(tester, 'bench-slot-chip-psu_bay');
+      expect(harness.controller.state.placements['psu'], 'psu_bay');
+      await _tapKey(tester, 'bench-operation-pick_screwdriver');
+      await tapRing(tester, 'fasten_psu');
+      expect(harness.controller.state.equipmentState['psu_fastened'], isTrue);
+      expect(
+          find.byKey(const ValueKey('bench-hotspot-fasten_psu')), findsNothing);
+      expect(invalid(harness), 0);
+    });
+
+    testWidgets('a drop that misses every slot says where to release the part',
+        (tester) async {
+      final harness = await _pump(tester, _stateAt(2));
+      final part = find.byKey(const ValueKey('bench-part-cpu'));
+      await tester.ensureVisible(part);
+      await tester.pumpAndSettle();
+      final scene = tester.getRect(find.byType(SimulationScene));
+      final from = tester.getCenter(part);
+      // Straight up, then into the empty top-left corner of the bench.
+      final gesture = await tester.startGesture(from);
+      await gesture.moveBy(const Offset(0, -60));
+      await tester.pump();
+      await gesture.moveTo(scene.topLeft + const Offset(14, 70));
+      await tester.pump();
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(harness.controller.state.placements.containsKey('cpu'), isFalse);
+      expect(harness.lastValue('placement_attempted'), isNull);
+      expect(find.text(MissionContentData.benchDropOnTarget), findsOneWidget);
+    });
+
+    testWidgets('the mat ground stud explains itself before the strap is on',
+        (tester) async {
+      final harness = await _pump(tester, _stateAt(1));
+      await tester.tap(find
+          .byKey(const ValueKey('bench-hotspot-blocked-ground_wrist_strap')));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('is not possible yet'), findsOneWidget);
+      expect(harness.lastValue('equipment_operation'), isNull,
+          reason: 'nothing is recorded for a tap that changes nothing');
+      expect(
+          harness.controller.state.equipmentState['esd_grounded'], isNot(true));
+      await _tapKey(tester, 'bench-operation-wear_wrist_strap');
+      expect(find.byKey(const ValueKey('bench-hotspot-wear_wrist_strap')),
+          findsNothing,
+          reason: 'the worn strap has no ring left');
+      await tapRing(tester, 'ground_wrist_strap');
+      expect(harness.controller.state.equipmentState['esd_grounded'], isTrue);
+    });
+
+    testWidgets('a screen-reader tap on a bench slot places the part in hand',
+        (tester) async {
+      // A semantic tap carries no pointer position, so it must never be
+      // routed to a ring that happens to overlap the slot (the thermal
+      // compound ring sits over the cooler mount).
+      final semantics = tester.ensureSemantics();
+      final harness = await _pump(tester, _stateAt(2));
+      Future<void> semanticTap(String key) async {
+        final finder = find.byKey(ValueKey(key)).first;
+        await tester.ensureVisible(finder);
+        await tester.pumpAndSettle();
+        final node = tester.getSemantics(finder);
+        expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue,
+            reason: '$key has a semantic tap action');
+        node.owner!.performAction(node.id, SemanticsAction.tap);
+        await tester.pumpAndSettle();
+      }
+
+      await tapRing(tester, 'open_cpu_lever');
+      await _tapKey(tester, 'bench-part-cpu');
+      for (var i = 0; i < 3; i++) {
+        await _tapKey(tester, 'bench-rotate');
+      }
+      await semanticTap('bench-slot-cpu_socket');
+      expect(harness.controller.state.placements['cpu'], 'cpu_socket');
+      await tapRing(tester, 'close_cpu_lever');
+      expect(find.byKey(const ValueKey('bench-hotspot-apply_thermal_compound')),
+          findsOneWidget,
+          reason: 'the compound ring is live over the socket');
+      await _tapKey(tester, 'bench-part-cooler');
+      await semanticTap('bench-slot-cooler_mount');
+      expect(harness.lastValue('placement_attempted')?['destination_id'],
+          'cooler_mount',
+          reason: 'the semantic tap is a cooler placement');
+      expect(harness.controller.state.equipmentState['thermal_compound'],
+          isNot(true),
+          reason: 'the compound ring was not worked by the slot tap');
+      semantics.dispose();
+    });
+  });
 }
