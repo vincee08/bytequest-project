@@ -4,8 +4,8 @@ import Link from "next/link";
 import { CountBarChart, PercentBarChart } from "@/components/analytics/performance/charts";
 import { DataTable, EmptyState, NotApplicable, Panel, Stat } from "@/components/analytics/performance/primitives";
 import type { ChartConfig } from "@/components/ui/chart";
-import { describePeriod, formatDateTime, formatPercent } from "@/lib/analytics/format";
-import type { QuizAnalytics } from "@/lib/analytics/performance-types";
+import { describePeriod, formatDateTime, formatNumber, formatPercent } from "@/lib/analytics/format";
+import type { QuizAnalytics, ReleaseMode } from "@/lib/analytics/performance-types";
 import { analyticsHref, type AnalyticsQuery } from "@/lib/analytics/query";
 import { cn } from "@/lib/utils";
 
@@ -19,13 +19,26 @@ const RESULT_STATUS: Record<QuizAnalytics["results"][number]["status"], string> 
   other_class: "Taken in another class",
 };
 
+const RELEASE_MODE: Record<ReleaseMode, string> = {
+  immediate: "Immediate",
+  instructor_release: "After instructor release",
+};
+
+const STAGE: Record<NonNullable<QuizAnalytics["results"][number]["stage"]>, string> = {
+  evaluate: "Evaluate",
+  finalize: "Finalize",
+  release: "Release",
+  released: "Released",
+};
+
 type QuizListRow = QuizAnalytics["quizzes"][number];
 type QuizResultRow = QuizAnalytics["results"][number];
 type QuestionRow = QuizAnalytics["per_question"][number];
 
 export function QuizzesPanel({ data, query, pathname }: { data: QuizAnalytics; query: AnalyticsQuery; pathname: string }) {
   const period = describePeriod(data.period);
-  const notApplicable = Boolean(query.moduleId || query.topicId || query.missionCode);
+  // Quizzes are positioned by COC, module (quiz_modules) and topic, never by mission.
+  const notApplicable = Boolean(query.missionCode);
 
   return (
     <div className="space-y-6">
@@ -44,6 +57,7 @@ export function QuizzesPanel({ data, query, pathname }: { data: QuizAnalytics; q
               ) },
               { key: "coc", label: "COC", render: (row) => row.coc_code?.toUpperCase() ?? "Not mapped" },
               { key: "status", label: "Status", render: (row) => <span className="capitalize">{row.status}</span> },
+              { key: "results", label: "Results", render: (row) => (row.release_mode ? RELEASE_MODE[row.release_mode] : "—") },
               { key: "participants", label: "Participants", align: "right", render: (row) => `${row.participants} / ${row.eligible}` },
               { key: "completion", label: "Completion", align: "right", render: (row) => formatPercent(row.completion_rate) },
               { key: "average", label: "Average", align: "right", render: (row) => formatPercent(row.average) },
@@ -67,9 +81,10 @@ export function QuizzesPanel({ data, query, pathname }: { data: QuizAnalytics; q
 function QuizDetail({ data }: { data: QuizAnalytics }) {
   const quiz = data.quiz!;
   const hasScores = data.distribution.length > 0;
+  const objective = data.per_question.filter((row) => row.correct_rate !== null);
   return (
     <div className="space-y-6">
-      <Panel title={quiz.title} description={`${quiz.coc_code?.toUpperCase() ?? "Not mapped to a COC"} · ${quiz.question_count} questions · status ${quiz.status} · ${describePeriod(data.period)}`}>
+      <Panel title={quiz.title} description={`${quiz.coc_code?.toUpperCase() ?? "Not mapped to a COC"} · ${quiz.question_count} questions · status ${quiz.status}${quiz.release_mode ? ` · results ${RELEASE_MODE[quiz.release_mode].toLowerCase()}` : ""} · ${describePeriod(data.period)}`}>
         <div className="grid gap-3 p-4 sm:grid-cols-3 sm:p-5 xl:grid-cols-7">
           <Stat label="Participants" value={data.participants} helper="Submitted in the selected classes" />
           <Stat label="Eligible" value={data.eligible} helper="Learners with the quiz assigned" />
@@ -77,7 +92,7 @@ function QuizDetail({ data }: { data: QuizAnalytics }) {
           <Stat label="Average" value={formatPercent(data.average)} />
           <Stat label="Highest" value={formatPercent(data.highest)} />
           <Stat label="Lowest" value={formatPercent(data.lowest)} />
-          <Stat label="Pending" value={data.pending} helper="Excluded from averages" />
+          <Stat label="Pending" value={data.pending} helper="Awaiting evaluation or release; excluded from averages" />
         </div>
       </Panel>
 
@@ -95,14 +110,14 @@ function QuizDetail({ data }: { data: QuizAnalytics }) {
             </div>
           ) : <EmptyState title="No submissions in this period" description="The distribution appears once learners submit this quiz." />}
         </Panel>
-        <Panel title="Per-question correctness" description="Share of scored attempts that answered each approved question correctly.">
-          {data.per_question.length ? (
+        <Panel title="Per-question results" description="Objective questions: share of scored attempts answered correctly. Essays: mean current rubric score of released attempts.">
+          {objective.length ? (
             <div className="p-4 sm:p-5">
-              <PercentBarChart data={data.per_question.map((row) => ({ question: row.code, correct_rate: row.correct_rate }))} config={QUESTION_CONFIG}
+              <PercentBarChart data={objective.map((row) => ({ question: row.code, correct_rate: row.correct_rate }))} config={QUESTION_CONFIG}
                 categoryKey="question" series={["correct_rate"]} categoryLabel="Question" valueLabel="Correct (%)" ariaLabel="Per-question correctness"
-                layout="vertical" height={Math.max(180, data.per_question.length * 38)} />
+                layout="vertical" height={Math.max(180, objective.length * 38)} />
             </div>
-          ) : <EmptyState title="No scored answers yet" />}
+          ) : <EmptyState title="No scored objective answers yet" />}
           <DataTable<QuestionRow>
             caption="Per-question correctness table"
             rows={data.per_question}
@@ -113,13 +128,15 @@ function QuizDetail({ data }: { data: QuizAnalytics }) {
               { key: "code", label: "Question", render: (row) => <div className="max-w-[340px]"><p className="font-medium">{row.code}</p><p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{row.prompt}</p></div> },
               { key: "type", label: "Type", render: (row) => <span className="text-xs">{row.type.replaceAll("_", " ")}</span> },
               { key: "answered", label: "Answered", align: "right", render: (row) => row.answered },
-              { key: "correct", label: "Correct", align: "right", render: (row) => `${row.correct} (${formatPercent(row.correct_rate)})` },
+              { key: "correct", label: "Correct / essay score", align: "right", render: (row) => (row.correct === null
+                ? `${formatNumber(row.avg_points, 2)} of ${formatNumber(row.points)} pts (${formatPercent(row.avg_percent)})`
+                : `${row.correct} (${formatPercent(row.correct_rate)})`) },
             ]}
           />
         </Panel>
       </div>
 
-      <Panel title="Individual results" description="One row per eligible learner: scored, awaiting evaluation, not submitted, or taken in another class.">
+      <Panel title="Individual results" description="One row per eligible learner: scored, awaiting evaluation, not submitted, or taken in another class. Instructor-release results count once released; scores are points of the maximum.">
         <DataTable<QuizResultRow>
           caption="Individual quiz results"
           rows={data.results}
@@ -129,8 +146,10 @@ function QuizDetail({ data }: { data: QuizAnalytics }) {
           columns={[
             { key: "learner", label: "Learner", render: (row) => <div><p className="font-medium">{row.name}</p><p className="mt-0.5 text-xs text-muted-foreground">{row.student_id ?? "No student ID"}</p></div> },
             { key: "class", label: "Class", render: (row) => row.class_title ?? "—" },
-            { key: "status", label: "Submission", render: (row) => RESULT_STATUS[row.status] },
-            { key: "score", label: "Score", align: "right", render: (row) => (row.score === null ? "—" : `${row.score} / ${row.max_score}`) },
+            { key: "status", label: "Submission", render: (row) => (
+              <span>{RESULT_STATUS[row.status]}{row.status === "pending" && row.stage ? <span className="block text-[11px] text-muted-foreground">Evaluation Center: {STAGE[row.stage]}</span> : null}</span>
+            ) },
+            { key: "score", label: "Score", align: "right", render: (row) => (row.score === null ? "—" : `${formatNumber(row.score)} / ${formatNumber(row.max_score)}`) },
             { key: "percent", label: "Percent", align: "right", render: (row) => formatPercent(row.percent) },
             { key: "submitted", label: "Submitted", render: (row) => <span className="whitespace-nowrap text-xs text-muted-foreground">{formatDateTime(row.submitted_at)}</span> },
           ]}
