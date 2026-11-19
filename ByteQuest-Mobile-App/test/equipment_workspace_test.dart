@@ -13,13 +13,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/equipment_practice_driver.dart';
+import 'support/legacy_assembly_fixture.dart';
 
 void main() {
   testWidgets(
       'feedback stays outside the canvas and expires without covering targets',
       (tester) async {
     final driver =
-        EquipmentPracticeDriver(MissionSimulationDefinitions.byId('coc1_m2'));
+        EquipmentPracticeDriver(legacyAssemblyDefinition);
     const feedback =
         'Inspect the socket alignment before seating the component.';
     await tester.pumpWidget(
@@ -41,7 +42,7 @@ void main() {
   });
   testWidgets('Show me how outlines the real placement mode', (tester) async {
     final driver =
-        EquipmentPracticeDriver(MissionSimulationDefinitions.byId('coc1_m2'));
+        EquipmentPracticeDriver(legacyAssemblyDefinition);
     await tester.pumpWidget(_host(driver, driver.definition.phases[1],
         highlightTarget: MissionGuideTarget.place));
     final chip = tester
@@ -68,7 +69,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final definition = MissionSimulationDefinitions.byId('coc1_m2');
+    final definition = legacyAssemblyDefinition;
     final driver = EquipmentPracticeDriver(definition);
     driver.complete(definition.phases.first);
     final phase = definition.phases[1];
@@ -106,7 +107,7 @@ void main() {
 
   testWidgets('an installed part image renders only at its destination',
       (tester) async {
-    final definition = MissionSimulationDefinitions.byId('coc1_m2');
+    final definition = legacyAssemblyDefinition;
     final driver = EquipmentPracticeDriver(definition);
     driver.complete(definition.phases.first);
     final phase = definition.phases[1];
@@ -133,7 +134,7 @@ void main() {
   testWidgets('a drag while saving cannot move the equipment out of reach',
       (tester) async {
     final driver =
-        EquipmentPracticeDriver(MissionSimulationDefinitions.byId('coc1_m2'));
+        EquipmentPracticeDriver(legacyAssemblyDefinition);
     await tester.pumpWidget(
         _host(driver, driver.definition.phases.first, enabled: false));
     final panel = MissionEquipmentSimulator.map(
@@ -154,7 +155,7 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final driver =
-        EquipmentPracticeDriver(MissionSimulationDefinitions.byId('coc1_m2'));
+        EquipmentPracticeDriver(legacyAssemblyDefinition);
     driver.complete(driver.definition.phases.first);
     final phase = driver.definition.phases[1];
     final initialActions = driver.actions.length;
@@ -170,15 +171,16 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  for (final mission in ['coc1_m2', 'coc1_m4']) {
+  for (final mission in ['legacy_m2', 'coc1_m4']) {
     testWidgets('$mission connects every cable in a phone-sized canvas',
         (tester) async {
       tester.view.physicalSize = const Size(412, 915);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      final driver =
-          EquipmentPracticeDriver(MissionSimulationDefinitions.byId(mission));
+      final driver = EquipmentPracticeDriver(mission == 'legacy_m2'
+          ? legacyAssemblyDefinition
+          : MissionSimulationDefinitions.byId(mission));
       for (final phase in driver.definition.phases.take(2)) {
         driver.complete(phase);
       }
@@ -199,8 +201,11 @@ void main() {
     });
   }
 
-  for (final definition in MissionSimulationDefinitions.all
-      .where((d) => d.cocId != 'coc4' && d.id != 'coc1_m1')) {
+  // COC1 M2 runs on the assembly bench (test/assembly_bench_test.dart).
+  for (final definition in MissionSimulationDefinitions.all.where((d) =>
+      d.cocId != 'coc4' &&
+      d.id != 'coc1_m1' &&
+      !MissionEquipmentSimulator.isAssemblyBench(d))) {
     testWidgets(
         '${definition.id} records a real placement from the main canvas',
         (tester) async {
@@ -300,7 +305,7 @@ void main() {
 
   testWidgets('assembly requires an explicit orientation after a canvas drop',
       (tester) async {
-    final definition = MissionSimulationDefinitions.byId('coc1_m2');
+    final definition = legacyAssemblyDefinition;
     final driver = EquipmentPracticeDriver(definition);
     await tester.pumpWidget(_host(driver, definition.phases[1]));
     await _drag(tester, 'motherboard', 'motherboard_area');

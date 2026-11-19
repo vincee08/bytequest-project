@@ -44,7 +44,8 @@ const practiceConfiguration = <String, dynamic>{
   'raceway_material': 'pvc',
 };
 const practiceOrders = {
-  'coc1_m2_p3': ['isolate', 'board', 'cooling', 'power'],
+  // Retired COC1 M2 v2 contract (test/support/legacy_assembly_fixture.dart).
+  'legacy_m2_p3': ['isolate', 'board', 'cooling', 'power'],
   'coc1_m3_p2': ['boot_media', 'select_disk', 'copy_files', 'configure_device'],
   'coc2_m1_p3': ['measure', 'strip', 'arrange', 'terminate', 'inspect'],
   'coc2_m2_p2': [
@@ -87,6 +88,118 @@ const practiceConnections = {
   'router': 'switch',
   'workstation_a': 'switch',
   'workstation_b': 'switch',
+};
+/// Scripted work orders for the COC1 M2 assembly bench, in physical order.
+/// Each step is (action type, target, value).
+const practiceScripts = <String, List<(String, String?, Map<String, dynamic>)>>{
+  'coc1_m2_p1': [
+    ('object_inspected', 'system_case', {}),
+    ('object_inspected', 'motherboard', {}),
+    ('object_inspected', 'cpu', {}),
+    ('object_inspected', 'cooler', {}),
+    ('object_inspected', 'ram', {}),
+    ('object_inspected', 'psu', {}),
+    ('object_inspected', 'storage', {}),
+    ('equipment_operation', 'wear_wrist_strap', {}),
+    ('equipment_operation', 'ground_wrist_strap', {}),
+  ],
+  'coc1_m2_p2': [
+    ('equipment_operation', 'open_cpu_lever', {}),
+    (
+      'placement_attempted',
+      'cpu_socket',
+      {'item_id': 'cpu', 'destination_id': 'cpu_socket', 'orientation': '0'}
+    ),
+    ('equipment_operation', 'close_cpu_lever', {}),
+    ('equipment_operation', 'apply_thermal_compound', {}),
+    (
+      'placement_attempted',
+      'cooler_mount',
+      {'item_id': 'cooler', 'destination_id': 'cooler_mount'}
+    ),
+    (
+      'connection_created',
+      'cpu_fan_header',
+      {'source_id': 'cooler_fan', 'destination_id': 'cpu_fan_header'}
+    ),
+    ('equipment_operation', 'open_dimm_latches', {}),
+    (
+      'placement_attempted',
+      'dimm_a2',
+      {'item_id': 'ram_1', 'destination_id': 'dimm_a2', 'orientation': '0'}
+    ),
+    (
+      'placement_attempted',
+      'dimm_b2',
+      {'item_id': 'ram_2', 'destination_id': 'dimm_b2', 'orientation': '0'}
+    ),
+    ('equipment_operation', 'close_dimm_latches', {}),
+  ],
+  'coc1_m2_p3': [
+    (
+      'placement_attempted',
+      'psu_bay',
+      {'item_id': 'psu', 'destination_id': 'psu_bay', 'orientation': '0'}
+    ),
+    ('equipment_operation', 'pick_screwdriver', {}),
+    ('equipment_operation', 'fasten_psu', {}),
+    (
+      'placement_attempted',
+      'io_cutout',
+      {'item_id': 'io_shield', 'destination_id': 'io_cutout'}
+    ),
+    (
+      'placement_attempted',
+      'board_standoffs',
+      {'item_id': 'motherboard', 'destination_id': 'board_standoffs'}
+    ),
+    ('equipment_operation', 'fasten_motherboard', {}),
+    (
+      'placement_attempted',
+      'drive_bay',
+      {'item_id': 'storage', 'destination_id': 'drive_bay'}
+    ),
+    ('equipment_operation', 'fasten_drive', {}),
+  ],
+  'coc1_m2_p4': [
+    (
+      'connection_created',
+      'board_atx24',
+      {'source_id': 'atx_24pin', 'destination_id': 'board_atx24'}
+    ),
+    (
+      'connection_created',
+      'board_eps8',
+      {'source_id': 'eps_8pin', 'destination_id': 'board_eps8'}
+    ),
+    (
+      'connection_created',
+      'drive_power',
+      {'source_id': 'sata_power', 'destination_id': 'drive_power'}
+    ),
+    (
+      'connection_created',
+      'drive_data',
+      {'source_id': 'sata_data', 'destination_id': 'drive_data'}
+    ),
+    (
+      'connection_created',
+      'board_front_panel',
+      {'source_id': 'front_panel', 'destination_id': 'board_front_panel'}
+    ),
+  ],
+  'coc1_m2_p5': [
+    ('test_started', 'coc1_m2_post', {'test_status': 'running'}),
+    ('test_completed', 'coc1_m2_post', {'test_status': 'completed'}),
+    (
+      'result_interpreted',
+      'coc1_m2_p5',
+      {
+        'interpretation':
+            'POST passed: CPU, dual-channel memory, CPU fan and boot drive detected; the system is ready for OS installation.'
+      }
+    ),
+  ],
 };
 const practicePlacements = {
   'motherboard': 'motherboard_area',
@@ -135,6 +248,17 @@ class EquipmentPracticeDriver {
     state = state.copyWith(currentPhaseId: phase.id);
     final p = phase.presentation;
     final eq = MissionEquipmentSimulator.map(p['equipment']);
+    final script = practiceScripts[phase.id];
+    if (script != null) {
+      for (final step in script) {
+        act(phase, step.$1, step.$2, step.$3);
+      }
+      if (!MissionPhaseCompletionPolicy.canAdvance(phase, state)) {
+        throw StateError(
+            'Work order cannot advance ${phase.id}: ${state.equipmentState}');
+      }
+      return;
+    }
     void configure(Object? fields) {
       act(phase, 'configuration_applied', phase.id, {
         'values': {

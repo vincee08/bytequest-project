@@ -677,6 +677,117 @@ class MissionContentData {
 
   static const orientationFeedback =
       'The keyed connector is not aligned. Inspect the notch before seating the component.';
+
+  // Assembly bench (COC1 M2): practice feedback names the physical reason.
+  static const Map<String, String> benchOrientationFeedback = {
+    'cpu':
+        'The processor only drops into the socket one way: rotate it until its gold triangle sits on the triangle printed on the socket.',
+    'ram_1':
+        'The module notch does not meet the slot key. Rotate the module so the notch lines up with the key, then press it in.',
+    'ram_2':
+        'The module notch does not meet the slot key. Rotate the module so the notch lines up with the key, then press it in.',
+    'psu':
+        'The power supply does not sit flat in the bay this way. Turn it so its fan faces the intake vent in the bay floor.',
+  };
+  static const Map<String, String> benchRequirementFeedback = {
+    'cpu':
+        'The socket load plate is closed. Open the load lever before seating the processor.',
+    'cooler':
+        'The cooler mounts over the processor. Seat the processor in the socket first.',
+    'ram_1':
+        'The DIMM latches are closed. Open them before inserting a module.',
+    'ram_2':
+        'The DIMM latches are closed. Open them before inserting a module.',
+    'io_shield':
+        'The I/O shield snaps in from inside the case and cannot pass the installed motherboard. Remove the motherboard, fit the shield, then reinstall the board.',
+  };
+  static const benchRemovalFeedback =
+      'Part removed. Reseat it correctly, then run the test again.';
+  static const benchRemovalUnavailable =
+      'That part is not installed, so there is nothing to remove.';
+
+  // Assembly bench chrome.
+  static String benchStepPosition(int step, int total, String label) =>
+      'Step $step of $total · $label';
+  static String benchStepsDone(int total) =>
+      'All $total steps done · continue when ready';
+  static const benchAssessmentHeader = 'Assessment · work without hints';
+  static String benchElapsedSemantics(String time) => 'Elapsed time $time';
+  static String benchCountsSemantics(int valid, int invalid, int corrections) =>
+      '$valid actions accepted, $invalid refused, $corrections corrections';
+  static const benchMatView = 'Anti-static mat';
+  static const benchBoardView = 'Motherboard close-up';
+  static const benchChassisView = 'Open case';
+  static const benchShowBoard = 'Show the motherboard close-up';
+  static const benchShowCase = 'Show the whole case';
+  static const benchPartsHint =
+      'Drag a part onto the bench, or tap it and then tap where it goes.';
+  static const benchCablesHint =
+      'Drag a connector onto its header, or tap the cable and then the header.';
+  static const benchInspectHint =
+      'Tap each part on the mat to inspect it, then prepare ESD protection.';
+  static String benchPartSelected(String part) =>
+      '$part selected — tap where it goes, or rotate it first.';
+  static String benchCableSelected(String cable) =>
+      '$cable selected — tap the header it plugs into.';
+  static String benchInstalledSelected(String part) =>
+      '$part is installed. Remove it to reseat it.';
+  static const benchRotateLabel = 'Rotate';
+  static String benchRotateSemantics(String part, String degrees) =>
+      'Rotate $part by 90 degrees. Now turned $degrees degrees.';
+  static const benchRemoveLabel = 'Remove';
+  static String benchRemoveSemantics(String part) =>
+      'Remove $part from where it is installed';
+  static const benchCancelLabel = 'Cancel';
+  static String benchPartSemantics(String part, bool installed) => installed
+      ? '$part, installed. Double tap to select it.'
+      : '$part. Drag it to the bench, or double tap to select it.';
+  static String benchCableSemantics(String cable, String? header) =>
+      header == null
+          ? '$cable, not connected. Double tap to select it.'
+          : '$cable, connected to $header. Double tap to select it.';
+  static String benchSlotSemantics(String slot, String? part) => part == null
+      ? '$slot, empty. Double tap to install the selected part here.'
+      : '$slot, holds $part.';
+  static String benchHeaderSemantics(String header) =>
+      '$header. Double tap to connect the selected cable here.';
+  static String benchInspectSemantics(String part, bool inspected) =>
+      inspected ? '$part, inspected' : '$part. Double tap to inspect.';
+  static String benchOperationSemantics(String label, bool enabled) =>
+      enabled ? label : '$label — not available yet';
+  static String benchInstallChip(String slot) => slot;
+  static const benchInspectionTitle = 'Inspection';
+  static const benchReadMore = 'Read the full note';
+  static const benchDismissInformation = 'Hide this note';
+  static const benchDropOnTarget =
+      'Release the part over a slot, bay or header on the bench.';
+
+  // Assessment mode chrome.
+  static const assessmentModeLabel = 'Assessment';
+  static const assessmentModeHint =
+      'No hints are shown. Work as you would on the real equipment.';
+  static const assessmentSubmitLabel = 'Submit assessment';
+  static const assessmentSubmitTitle = 'Submit this assessment?';
+  static const assessmentSubmitMessage =
+      'Your recorded work is evaluated on the server. Steps you have not finished are evaluated as not satisfied, and you cannot change the work after submitting.';
+  static const assessmentSubmitConfirm = 'Submit';
+  static const assessmentSubmittedLabel = 'Submitted';
+  static const assessmentSubmittedMessage =
+      'Assessment submitted for evaluation. Your instructor releases the result.';
+  static const assessmentContinueStatus =
+      'Continue when you have finished this phase.';
+  static const assessmentUpdateTitle = 'Update required';
+  static const assessmentUpdateRequired =
+      'This assessment needs the latest version of ByteQuest. Update the app, then open the assessment again.';
+
+  // Assessment mode: neutral physical feedback that never names a target.
+  static const assessmentNeutralPlacement = 'Component not seated.';
+  static const assessmentNeutralRemoval = 'Nothing to remove there.';
+  static const assessmentNeutralConnection = 'Connector not seated.';
+  static const assessmentNeutralOperation =
+      'No change — the equipment is not in a state for that action.';
+  static const assessmentNeutralTool = 'No effect on the selected target.';
+  static const assessmentNeutralRecorded = 'Action recorded.';
   static const placementPrerequisiteFeedback =
       'The mounting support or safety preparation is not installed yet.';
   static const occupiedDestinationFeedback =
