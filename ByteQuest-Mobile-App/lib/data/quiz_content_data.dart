@@ -100,6 +100,12 @@ class QuizContentData {
   static const timeUpMessage =
       'Your saved answers are being submitted automatically.';
   static const timeUpChecking = 'Checking your automatic submission…';
+  static const timeUpCheckFailed =
+      'ByteQuest could not confirm the automatic submission. Your saved answers are kept on the server. Check your connection, then try again.';
+  static const deadlineExtendedResume =
+      'The deadline was extended. You can keep answering.';
+  static const submittedResultUnavailable =
+      'Your quiz was submitted. Its result could not be loaded yet. Check your connection, then try again.';
   static const timeLimitBriefing =
       'The timer starts when you begin and keeps running if you leave the app. When time runs out, your saved answers are submitted automatically.';
   static const deadlineAutoSubmitBriefing =

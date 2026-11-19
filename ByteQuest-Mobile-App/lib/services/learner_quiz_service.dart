@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show protected;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
@@ -15,6 +16,15 @@ class LearnerQuizClosedException implements Exception {
 
   @override
   String toString() => 'LearnerQuizClosedException($code)';
+}
+
+/// The quiz was submitted on the server, but its result could not be read.
+class LearnerQuizSubmittedException implements Exception {
+  const LearnerQuizSubmittedException(this.cause);
+  final Object cause;
+
+  @override
+  String toString() => 'LearnerQuizSubmittedException($cause)';
 }
 
 /// The server refused to start the quiz because this app version cannot
@@ -113,15 +123,34 @@ class LearnerQuizService {
     }
   }
 
+  /// Records the learner's submission (idempotent: a completed attempt
+  /// returns its payload). Separate from [submit] so the two steps can fail
+  /// apart.
+  @protected
+  Future<void> sendSubmission(String attemptId) async {
+    try {
+      await _client.rpc(
+        'submit_learner_quiz',
+        params: {
+          'p_attempt_id': attemptId,
+          'p_submission_key': _uuid.v4(),
+        },
+      );
+    } catch (error) {
+      _rethrow(error);
+    }
+  }
+
+  /// Submits, then reads the result. A failed result read after a
+  /// successful submission throws [LearnerQuizSubmittedException], so the
+  /// learner is never told the quiz was not submitted when it was.
   Future<LearnerQuizResult> submit(String attemptId) async {
-    await _client.rpc(
-      'submit_learner_quiz',
-      params: {
-        'p_attempt_id': attemptId,
-        'p_submission_key': _uuid.v4(),
-      },
-    );
-    return getResult(attemptId);
+    await sendSubmission(attemptId);
+    try {
+      return await getResult(attemptId);
+    } catch (error) {
+      throw LearnerQuizSubmittedException(error);
+    }
   }
 
   /// Reading a result also lets the server finalise an attempt whose time
