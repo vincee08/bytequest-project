@@ -15,6 +15,9 @@
 //   * an activity_curriculum_links row (delivery_kind 'simulation').
 // It also links every existing form-based package to its module
 // ('form_based'; the protected COC2 cable package 'protected_reference').
+// A freshly reset database has no TESDA source yet: the official ELCCSS213
+// source is then registered, approved and activated through the governed
+// RPCs first (production already has it active, so nothing changes there).
 //
 // Usage (service role; local stack by default):
 //   node scripts/publish-simulation-assessments.mjs [--dry-run] [--contracts <file.json>]
@@ -31,6 +34,14 @@ import { pathToFileURL } from "node:url";
 
 const SOURCE_NOTE =
   "TR Computer Systems Servicing NC II (Amended December 2013); ByteQuest supplementary simulation assessment, not an official TESDA certification.";
+// Same official source as scripts/publish-coc2-reference-assessment.mjs.
+export const TESDA_SOURCE = {
+  qualificationCode: "ELCCSS213",
+  title: "Training Regulations: Computer Systems Servicing NC II",
+  edition: "Amended December 2013",
+  reference: "https://tesda.gov.ph/Downloadables/TRs/TR%20Computer%20Systems%20Servicing%20NC%20II%20.pdf",
+  sha256: "42D85DAD87D0566B8B965AC0868E0F92E6CBB4C578028EFF648DB21BE421D147",
+};
 const BINARY_RULE = {
   status: "APPROVED",
   method: "binary",
@@ -323,6 +334,50 @@ async function retireGovernancePrincipal(service, principal) {
   }
 }
 
+async function ensureActiveSource(service, principal) {
+  const { data: active, error } = await service.from("tesda_sources")
+    .select("id,edition,status").eq("qualification_code", TESDA_SOURCE.qualificationCode).eq("status", "active").maybeSingle();
+  if (error) throw error;
+  if (active) return active;
+  const { data: existing, error: lookupError } = await service.from("tesda_sources").select("id,edition,status")
+    .eq("qualification_code", TESDA_SOURCE.qualificationCode).eq("title", TESDA_SOURCE.title)
+    .eq("edition", TESDA_SOURCE.edition).maybeSingle();
+  if (lookupError) throw lookupError;
+  let source = existing;
+  if (!source) {
+    const { data, error: registerError } = await principal.client.rpc("register_tesda_source", {
+      p_qualification_code: TESDA_SOURCE.qualificationCode,
+      p_title: TESDA_SOURCE.title,
+      p_edition: TESDA_SOURCE.edition,
+      p_effective_date: null,
+      p_publication_date: null,
+      p_source_reference: TESDA_SOURCE.reference,
+      p_document_storage_path: null,
+      p_validation_notes: `Official TESDA primary source verified by SHA-256 ${TESDA_SOURCE.sha256}.`,
+    });
+    if (registerError) throw registerError;
+    source = data;
+  }
+  if (source.status === "pending_tesda_validation") {
+    const { data, error: approveError } = await principal.client.rpc("approve_tesda_source", {
+      p_source_id: source.id,
+      p_validation_notes: `TESDA_OFFICIAL_APPROVED: official amended December 2013 CSS NC II Training Regulations; SHA-256 ${TESDA_SOURCE.sha256}.`,
+    });
+    if (approveError) throw approveError;
+    source = data;
+  }
+  if (source.status === "approved") {
+    const { data, error: activateError } = await principal.client.rpc("activate_tesda_source", {
+      p_source_id: source.id,
+      p_reason: "Activate the verified official source that carries the simulation-based assessments.",
+    });
+    if (activateError) throw activateError;
+    source = data;
+  }
+  if (source.status !== "active") throw new Error(`TESDA source is ${source.status}, not active.`);
+  return source;
+}
+
 async function ensurePublishedModule(service, principal, source, cocModule) {
   const { data: versions, error } = await service.from("module_versions").select("*")
     .eq("module_id", cocModule.id).eq("tesda_source_id", source.id).order("version_number", { ascending: false });
@@ -466,9 +521,6 @@ export async function main(argv = process.argv.slice(2)) {
   const validation = validateSimulationPackages(packages);
   if (options.dryRun) return { status: "VALIDATED", target: options.target, ...validation };
 
-  const { data: source, error: sourceError } = await service.from("tesda_sources")
-    .select("id,edition,status").eq("qualification_code", "ELCCSS213").eq("status", "active").single();
-  if (sourceError) throw sourceError;
   const [{ data: cocModules, error: moduleError }, { data: missions, error: missionError }] = await Promise.all([
     service.from("coc_modules").select("id,coc_code"),
     service.from("missions").select("id,mission_code"),
@@ -483,6 +535,7 @@ export async function main(argv = process.argv.slice(2)) {
   const principal = await createGovernancePrincipal(service, url, publishableKey, createClient);
   const published = [];
   try {
+    const source = await ensureActiveSource(service, principal);
     const moduleCache = new Map();
     for (const pkg of packages) {
       const coc = pkg.missionCode.slice(0, 4);
