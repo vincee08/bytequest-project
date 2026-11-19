@@ -33,7 +33,8 @@ export async function POST(request: Request) {
     if (!activityWriteOriginAllowed(request)) return reply({ error: 'Origin not allowed.' }, 403);
     if (Number(request.headers.get('content-length') ?? 0) > 4096) return reply({ error: 'Request too large.' }, 413);
     const actor = await activityActor(request);
-    const raw = await request.text();
+    // Answer 401/403 before reading a (possibly chunked) body.
+    const raw = actor?.role === 'learner' ? await request.text() : '';
     const result = await handleLearnerCurriculumPost(actor, raw, {
       rpc: async (action, payload) => {
         const { data, error } = await curriculumClient(actor!.service).rpc('manage_curriculum_content', {

@@ -3,7 +3,8 @@ import { Badge } from "@/components/ui/badge";
 import type { PublicationEvent, TopicRevision } from "@/lib/curriculum/types";
 import { statusLabels } from "@/lib/curriculum/workflow";
 
-const dateTime = new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeStyle: "short" });
+// A fixed zone: the server (UTC on Vercel) and the browser render the same text.
+const dateTime = new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" });
 
 export function ContentStatusBadge({ status }: { status: TopicRevision["status"] }) {
   const variant = status === "published" ? "secondary" : status === "needs_revision" || status === "archived" ? "destructive" : status === "unpublished" ? "outline" : "default";

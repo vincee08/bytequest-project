@@ -60,6 +60,7 @@ import { QuizDeadlineControls } from "./QuizDeadlineControls";
 import { QuizCurriculumFields } from "./QuizCurriculumFields";
 import { QuizResultsPanel, type ResultAttempt } from "./QuizResultsPanel";
 import { manilaInputToUtc } from "@/lib/activities/dates";
+import { formatDateTime } from "@/lib/analytics/format";
 import { AiQuizPanel, type QuizGroundingCatalog } from "./AiQuizPanel";
 
 interface Version {
@@ -1035,7 +1036,7 @@ export function QuizAuthoringWorkspace({
                     </p>
                     {item.publishedAt ? (
                       <p className="text-xs text-muted-foreground">
-                        Published {new Date(item.publishedAt).toLocaleString()}
+                        Published {formatDateTime(item.publishedAt)}
                       </p>
                     ) : null}
                   </div>

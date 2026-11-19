@@ -103,7 +103,7 @@ export function LearnersPanel({ data, query }: { data: LearnerPerformance; query
               <span>{row.assignments.submitted} submitted<span className="block text-[11px] text-muted-foreground">{row.assignments.pending_evaluation} awaiting evaluation · {row.assignments.missing} missing · {row.assignments.late} late</span></span>
             ) },
             { key: "activity", label: "Last activity", render: (row) => <span className="whitespace-nowrap text-xs text-muted-foreground">{formatDateTime(row.last_activity_at)}</span> },
-            // A6 points and level: engagement, not competency or a score.
+            // Engagement points and level: engagement, not competency or a score.
             { key: "engagement", label: "Engagement", align: "right", render: (row) => (
               <span className="whitespace-nowrap">{row.engagement.points} pts
                 <span className="block text-[11px] text-muted-foreground">{row.engagement.level_title ?? "No level"} · +{row.engagement.points_in_period} in period</span></span>
@@ -111,7 +111,7 @@ export function LearnersPanel({ data, query }: { data: LearnerPerformance; query
           ]}
         />
         <p className="border-t border-border/70 px-5 py-2.5 text-xs text-muted-foreground">
-          Engagement shows A6 points and level. Points reward activity; they are not a competency judgement and are not part of the performance score.
+          Engagement shows points and level. Points reward activity; they are not a competency judgement and are not part of the performance score.
         </p>
       </Panel>
     </div>
