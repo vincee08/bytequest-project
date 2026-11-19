@@ -15,14 +15,21 @@ class PracticeProgressService {
         .toList();
   }
 
+  /// Server access check before a practice mission opens. Uses the same
+  /// module-level rule as the evidence gate (`practice_mission_unlocked`), so
+  /// a locked module can never be started from any screen. The error code is
+  /// kept for the simulation screen, which maps it to the locked message.
   Future<void> requireMissionAccess(String mission) async {
     if (!RegExp(r'^coc[1-4]_m[1-5]$').hasMatch(mission)) {
       throw StateError('INVALID_MISSION');
     }
-    final progress = await getProgress();
-    if (!progress.any((p) => p.coc == mission.substring(0, 4) && p.unlocked)) {
-      throw StateError('PRACTICE_COC_LOCKED');
-    }
+    final learner = SupabaseConfig.currentUserId;
+    if (learner == null) throw StateError('AUTHENTICATION_REQUIRED');
+    final unlocked = await SupabaseConfig.client.rpc(
+      'practice_mission_unlocked',
+      params: {'p_mission': mission, 'p_learner': learner},
+    );
+    if (unlocked != true) throw StateError('PRACTICE_COC_LOCKED');
   }
 
   Future<void> verifyMission(String mission) async {

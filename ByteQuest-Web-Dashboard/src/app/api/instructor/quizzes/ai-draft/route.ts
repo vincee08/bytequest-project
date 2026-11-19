@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import {
   getQuizAiConfiguration,
@@ -7,6 +8,7 @@ import {
 } from "@/lib/ai/config";
 import {
   loadApprovedQuizGrounding,
+  loadCurriculumQuizGrounding,
   QuizGroundingError,
 } from "@/lib/ai/quiz-grounding";
 import {
@@ -34,7 +36,7 @@ const requestSchema = z
   .object({
     quizVersionId: z.string().uuid(),
     sourceMode: z
-      .enum(["approved_coc", "class_resource"])
+      .enum(["curriculum", "approved_coc", "class_resource"])
       .default("approved_coc"),
     activityVersionId: z.string().uuid().optional(),
     classId: z.string().uuid().optional(),
@@ -45,14 +47,26 @@ const requestSchema = z
     instructorContext: z.string().trim().max(2000).optional(),
     difficulty: z.enum(["foundation", "intermediate", "advanced"]),
     itemCount: z.number().int().min(1).max(10),
-    itemTypes: z.array(quizItemTypeSchema).min(1).max(4),
+    itemTypes: z.array(quizItemTypeSchema).min(1).max(5),
+    // "Regenerate this question": replace one draft question in one step.
+    replaceItemId: z.string().uuid().optional(),
+    replaceReason: z.string().trim().min(3).max(500).optional(),
   })
   .refine((value) =>
     value.sourceMode === "class_resource"
       ? Boolean(
           value.classId && value.resourceId && value.externalConsent === true,
         )
-      : Boolean(value.activityVersionId),
+      : value.sourceMode === "approved_coc"
+        ? Boolean(value.activityVersionId)
+        : value.externalConsent === true,
+  )
+  .refine(
+    (value) =>
+      !value.replaceItemId ||
+      (value.itemCount === 1 &&
+        value.itemTypes.length === 1 &&
+        Boolean(value.replaceReason)),
   );
 
 export async function GET() {
@@ -88,7 +102,7 @@ export async function POST(request: Request) {
   );
   if (!parsed.success)
     return jsonError(
-      "Choose a source, valid quiz settings and question types. For a class PDF, confirm that its content may be sent to OpenRouter.",
+      "Choose a source, valid quiz settings and question types, and confirm that the content may be sent to OpenRouter. Regeneration needs a reason.",
       400,
     );
   const input = parsed.data;
@@ -110,8 +124,26 @@ export async function POST(request: Request) {
       "You can generate drafts only for your own active quiz.",
       403,
     );
+  if (input.replaceItemId) {
+    const { data: original } = await supabase
+      .from("quiz_items")
+      .select("id,item_type,removed_at,quiz_version_id")
+      .eq("id", input.replaceItemId)
+      .maybeSingle();
+    if (
+      !original ||
+      original.removed_at ||
+      original.quiz_version_id !== version.id ||
+      (original.item_type as string) !== input.itemTypes[0]
+    )
+      return jsonError(
+        "Choose an active question of this draft to regenerate.",
+        422,
+      );
+  }
   const admin = createAdminSupabaseClient();
   let grounding: QuizDraftRequest["grounding"];
+  let curriculum: QuizDraftRequest["curriculum"];
   let resource: Awaited<ReturnType<typeof authorizeResourceSource>> | undefined;
   try {
     if (input.sourceMode === "class_resource") {
@@ -121,6 +153,8 @@ export async function POST(request: Request) {
         input.classId!,
         input.resourceId!,
       );
+    } else if (input.sourceMode === "curriculum") {
+      curriculum = await loadCurriculumQuizGrounding(supabase, quiz.id);
     } else {
       if (!quiz.coc_module_id)
         return jsonError(
@@ -138,7 +172,9 @@ export async function POST(request: Request) {
       return jsonError(error.publicMessage, error.status);
     if (error instanceof QuizGroundingError)
       return jsonError(
-        "The selected activity needs complete, active approved COC content. Choose another approved activity or author manually.",
+        input.sourceMode === "curriculum"
+          ? "Map this quiz to a COC, its modules and a focus in Settings before generating from the curriculum."
+          : "The selected activity needs complete, active approved COC content. Choose another approved activity or author manually.",
         422,
       );
     return jsonError(
@@ -169,17 +205,25 @@ export async function POST(request: Request) {
     draft_only: true,
     external_content_confirmed: input.externalConsent === true,
     instructor_context_supplied: Boolean(input.instructorContext),
+    ...(input.replaceItemId ? { replace_item_id: input.replaceItemId } : {}),
     ...(resource
       ? { class_id: resource.class_id, resource_id: resource.id }
-      : {
-          tesda_source_id: grounding!.source.id,
-          coc_module_id: grounding!.coc.id,
-          competency_id: grounding!.competency.id,
-          module_version_id: grounding!.module.id,
-          activity_version_id: grounding!.activity.id,
-          mission_id: grounding!.mission.id,
-          rubric_version_id: grounding!.rubric.id,
-        }),
+      : curriculum
+        ? {
+            coc_module_id: curriculum.coc.id,
+            module_ids: curriculum.modules.map((module) => module.id),
+            outcome_ids: curriculum.outcomes.map((outcome) => outcome.id),
+            topic_id: curriculum.topic?.id ?? null,
+          }
+        : {
+            tesda_source_id: grounding!.source.id,
+            coc_module_id: grounding!.coc.id,
+            competency_id: grounding!.competency.id,
+            module_version_id: grounding!.module.id,
+            activity_version_id: grounding!.activity.id,
+            mission_id: grounding!.mission.id,
+            rubric_version_id: grounding!.rubric.id,
+          }),
   };
   const { data: generation, error: beginError } = await supabase.rpc(
     "begin_ai_quiz_generation",
@@ -229,6 +273,7 @@ export async function POST(request: Request) {
         itemCount: input.itemCount,
         itemTypes,
         grounding,
+        curriculum,
         resource: selectedResource,
       },
       configuration,
@@ -241,23 +286,28 @@ export async function POST(request: Request) {
         resource.class_id,
         resource.id,
       );
-    const { data: count, error: completionError } = await admin.rpc(
-      "complete_ai_quiz_generation",
+    const service = admin as unknown as SupabaseClient;
+    const { data: completion, error: completionError } = await service.rpc(
+      "complete_ai_quiz_draft",
       {
+        p_actor: actor.userId,
         p_generation_id: generation.id,
-        p_actor_id: actor.userId,
         p_provider: configuration.provider,
         p_model: configuration.model,
         p_items: items,
+        p_replace_item_id: input.replaceItemId ?? null,
+        p_replace_reason: input.replaceReason ?? null,
       },
     );
-    if (completionError || count === null)
+    const result = completion as { generated_count?: number } | null;
+    if (completionError || !result?.generated_count)
       throw new Error("AI_DRAFT_COMMIT_FAILED");
     return NextResponse.json(
       {
         generationId: generation.id,
         provider: configuration.provider,
-        generatedCount: count,
+        generatedCount: result.generated_count,
+        replaced: Boolean(input.replaceItemId),
         status: "draft_review_required",
       },
       { status: 201 },
