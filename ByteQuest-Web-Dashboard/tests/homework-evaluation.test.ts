@@ -1,10 +1,43 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  criteriaTotal, homeworkActionSchema, homeworkErrorMessage, homeworkStatusLabel,
-  learnerSubmissionView, staffSubmissionView,
+  criteriaTotal, curriculumFromHomework, curriculumPayload, emptyCurriculum, homeworkActionSchema, homeworkErrorMessage,
+  homeworkStatusLabel, learnerSubmissionView, selectCoc, selectMission, staffSubmissionView,
 } from '../src/lib/evaluations/homework';
-import type { HomeworkSubmissionRecord } from '../src/lib/evaluations/types';
+import type { CurriculumOptions, HomeworkSubmissionRecord } from '../src/lib/evaluations/types';
+
+const options: CurriculumOptions = {
+  cocs: [{ id: '00000000-0000-4000-8000-0000000c0c01', coc_code: 'coc1', title: 'Install and Configure Computer Systems' }, { id: '00000000-0000-4000-8000-0000000c0c02', coc_code: 'coc2', title: 'Set-up Computer Networks' }],
+  missions: [{ mission_code: 'coc1_m2', title: 'Install Internal Components', coc_id: '00000000-0000-4000-8000-0000000c0c01' }, { mission_code: 'coc2_m2', title: 'Create Network Cables', coc_id: '00000000-0000-4000-8000-0000000c0c02' }],
+  modules: [{ id: '00000000-0000-4000-8000-00000000a011', coc_module_id: '00000000-0000-4000-8000-0000000c0c01', coc_code: 'coc1', code: 'LO1.1', title: 'Assemble computer hardware', sequence_order: 1 },
+    { id: '00000000-0000-4000-8000-00000000a021', coc_module_id: '00000000-0000-4000-8000-0000000c0c02', coc_code: 'coc2', code: 'LO2.1', title: 'Install network cables', sequence_order: 1 }],
+  links: [{ mission_code: 'coc1_m2', module_id: '00000000-0000-4000-8000-00000000a011' }, { mission_code: 'coc2_m2', module_id: '00000000-0000-4000-8000-00000000a021' }],
+};
+
+test('authoring derives the module from the mission and keeps COC choices consistent', () => {
+  const chosen = selectMission(emptyCurriculum(), 'coc1_m2', options);
+  assert.equal(chosen.coc_module_id, '00000000-0000-4000-8000-0000000c0c01');
+  assert.equal(chosen.module_id, '00000000-0000-4000-8000-00000000a011');
+  const switched = selectCoc(chosen, '00000000-0000-4000-8000-0000000c0c02', options);
+  assert.equal(switched.mission_code, '');
+  assert.equal(switched.module_id, '');
+  const kept = selectCoc(chosen, '00000000-0000-4000-8000-0000000c0c01', options);
+  assert.equal(kept.mission_code, 'coc1_m2');
+  const payload = curriculumPayload({ ...chosen, learning_objectives: [' Apply ESD precautions ', ''], criteria: [
+    { id: 'safety', criterion: ' Safety checks ', description: '', max_points: '30' },
+    { id: 'blank', criterion: '', description: '', max_points: '' },
+  ], max_score: '80', submission_requirements: '  PDF  ' });
+  assert.deepEqual(payload.criteria, [{ id: 'safety', criterion: 'Safety checks', description: null, max_points: 30 }]);
+  assert.equal(payload.max_score, null, 'the server computes the maximum from the criteria');
+  assert.deepEqual(payload.learning_objectives, ['Apply ESD precautions']);
+  assert.equal(payload.submission_requirements, 'PDF');
+  assert.equal(curriculumPayload(emptyCurriculum()).max_score, 100);
+  assert.equal(curriculumPayload(emptyCurriculum()).mission_code, null);
+  const restored = curriculumFromHomework({ criteria: [{ id: 'a', criterion: 'A', description: null, max_points: 5 }], max_score: 5 });
+  assert.equal(restored.criteria[0].max_points, '5');
+  assert.equal(restored.max_score, '5');
+  assert.equal(homeworkActionSchema.safeParse({ action: 'edit', assignment_id: uuid(2), title: 'Report', instructions: 'Write it.', deadline_at: null, ...payload }).success, true);
+});
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const base: HomeworkSubmissionRecord = {

@@ -30,6 +30,14 @@ export type AttemptEvaluationRecordRow = {
   criterion_overrides: Json; adjustment_revision_id: string | null; note: string | null;
 };
 
+/** COC -> mission -> module catalog used by homework authoring and filters. */
+export type CurriculumOptions = {
+  cocs: { id: string; coc_code: string; title: string }[];
+  missions: { mission_code: string; title: string; coc_id: string }[];
+  modules: { id: string; coc_module_id: string; coc_code: string; code: string; title: string; sequence_order: number }[];
+  links: { mission_code: string; module_id: string }[];
+};
+
 type Table<T> = { Row: T; Insert: Partial<T>; Update: Partial<T>; Relationships: [] };
 type ActivitiesPublic = ActivitiesDatabase['public'];
 export type EvaluationsDatabase = Omit<ActivitiesDatabase, 'public'> & {

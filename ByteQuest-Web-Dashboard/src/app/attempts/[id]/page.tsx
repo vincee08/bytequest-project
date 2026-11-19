@@ -2,10 +2,13 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, CheckCircle2, Circle, Clock3, ShieldCheck } from "lucide-react";
 import { FinalizeAttemptForm, ReleaseAttemptForm } from "@/components/attempts/AttemptReviewActions";
+import { RecordEvaluationForm } from "@/components/attempts/RecordEvaluationForm";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { requireStaffProfile } from "@/lib/auth/server";
+import { namesFor } from "@/lib/evaluations/server";
+import { evaluationsClient } from "@/lib/evaluations/types";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { ReviewCriterion } from "@/lib/attempts/criterion-adjustment";
 
@@ -81,10 +84,17 @@ function criterionCount(value: unknown) {
   return `${satisfied} / ${value.length} criteria satisfied`;
 }
 
-const lifecycleSteps = ["evaluated", "finalized", "released"] as const;
+// Objective 4: Evaluate (automatic, then instructor) -> Finalize -> Release.
+const lifecycleSteps = [
+  { status: "evaluated", label: "Evaluated (automatic)" },
+  { status: "under_review", label: "Instructor evaluation recorded" },
+  { status: "finalized", label: "Finalized" },
+  { status: "released", label: "Released" },
+] as const;
 
 export default async function AttemptDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireStaffProfile(["instructor"]);
+  const profile = await requireStaffProfile(["instructor", "admin"]);
+  const canAct = profile.role === "instructor";
   const { id } = await params;
   const supabase = await createServerSupabaseClient();
   const { data: attempt } = await supabase
@@ -94,6 +104,12 @@ export default async function AttemptDetailPage({ params }: { params: Promise<{ 
     .maybeSingle();
   if (!attempt) notFound();
 
+  const { data: evaluationRecord } = await evaluationsClient(supabase)
+    .from("attempt_evaluation_records")
+    .select("recorded_by,recorded_at,outcome,note,adjustment_revision_id")
+    .eq("attempt_id", id)
+    .maybeSingle();
+  const recorder = evaluationRecord ? (await namesFor([evaluationRecord.recorded_by]).catch(() => null))?.get(evaluationRecord.recorded_by) : null;
   const [learner, classroom, assignment, source, rubric, actions, criteria, revisions, releases] = await Promise.all([
     supabase.from("profiles").select("full_name,email").eq("user_id", attempt.learner_id).maybeSingle(),
     supabase.from("classes").select("title,class_code").eq("id", attempt.class_id).maybeSingle(),
@@ -145,13 +161,16 @@ export default async function AttemptDetailPage({ params }: { params: Promise<{ 
   }));
   const revisionRows = revisions.data ?? [];
   const provisional = [...revisionRows].reverse().find((row) => row.revision_type === "automated_provisional");
-  const lifecycleIndex = lifecycleSteps.indexOf(attempt.status as (typeof lifecycleSteps)[number]);
+  const latest = revisionRows[revisionRows.length - 1];
+  const lifecycleIndex = lifecycleSteps.findIndex((step) => step.status === attempt.status);
   const satisfiedCount = criterionRows.filter((row) => row.observation === "satisfied").length;
   const authorityLabel = attempt.status === "released"
     ? "Released"
     : attempt.status === "finalized"
       ? "Instructor final"
-      : "Automated / provisional";
+      : attempt.status === "under_review"
+        ? "Instructor evaluation recorded"
+        : "Automated / provisional";
 
   return (
     <DashboardLayout>
@@ -173,27 +192,35 @@ export default async function AttemptDetailPage({ params }: { params: Promise<{ 
         <section aria-labelledby="review-lifecycle-title" className="rounded-xl border border-border bg-card p-5 shadow-xs">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h2 id="review-lifecycle-title" className="font-semibold">Assessment authority lifecycle</h2>
+              <h2 id="review-lifecycle-title" className="font-semibold">Evaluate → Finalize → Release</h2>
               <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Automated evidence remains provisional until Instructor finalization. Learner visibility begins only after release.
+                Automated evidence stays provisional until the instructor records an evaluation and finalizes it. Learner visibility begins only after release.
               </p>
             </div>
-            <div className="grid min-w-0 grid-cols-3 gap-2" aria-label={`Current lifecycle state: ${attempt.status.replaceAll("_", " ")}`}>
+            <ol className="grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4" aria-label={`Current stage: ${lifecycleIndex >= 0 ? lifecycleSteps[lifecycleIndex].label : "awaiting automatic evaluation"}`}>
               {lifecycleSteps.map((step, index) => {
                 const complete = lifecycleIndex >= index;
+                const current = lifecycleIndex === index;
                 return (
-                  <div key={step} className="flex min-w-0 items-center gap-2 rounded-lg border border-border px-3 py-2">
+                  <li key={step.status} aria-current={current ? "step" : undefined} className={`flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2 ${current ? "border-primary bg-primary/[0.05]" : "border-border"}`}>
                     {complete ? (
                       <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-700" aria-hidden="true" />
                     ) : (
                       <Circle className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
                     )}
-                    <span className="truncate text-xs font-semibold capitalize">{step}</span>
-                  </div>
+                    <span className="text-xs font-semibold">{index + 1}. {step.label}</span>
+                  </li>
                 );
               })}
-            </div>
+            </ol>
           </div>
+          {evaluationRecord ? (
+            <p className="mt-4 border-t border-border pt-3 text-xs text-muted-foreground">
+              Evaluation recorded by {recorder?.name ?? "the class instructor"} on {formatTimestamp(evaluationRecord.recorded_at)} · outcome {evaluationRecord.outcome.replaceAll("_", " ")}
+              {evaluationRecord.adjustment_revision_id ? " · with a reasoned adjustment" : " · automated result confirmed"}
+              {evaluationRecord.note ? ` · Note: ${evaluationRecord.note}` : ""}
+            </p>
+          ) : null}
         </section>
 
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
@@ -296,8 +323,10 @@ export default async function AttemptDetailPage({ params }: { params: Promise<{ 
               )}
             </section>
 
-            {attempt.status === "evaluated" && provisional ? <section className="rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">Instructor review and finalization</h2><p className="mb-4 mt-1 text-sm leading-relaxed text-muted-foreground">Confirm the trusted provisional result or make a justified, append-only adjustment.</p><FinalizeAttemptForm attemptId={id} scoringMethod={rubric.data?.scoring_method ?? null} passingMethod={typeof rubric.data?.passing_rule === "object" && rubric.data.passing_rule !== null && !Array.isArray(rubric.data.passing_rule) ? String(rubric.data.passing_rule.method ?? "") : null} criteria={reviewCriteria} provisional={{ totalValue: provisional.total_value, maxValue: provisional.max_value, percentage: provisional.percentage, outcome: provisional.outcome, criterionValues: provisional.criterion_values }} /></section> : null}
-            {attempt.status === "finalized" ? <section className="rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">Release to learner</h2><p className="mb-4 mt-1 text-sm leading-relaxed text-muted-foreground">Only released final results become visible to the learner. The release RPC is idempotent.</p><ReleaseAttemptForm attemptId={id} /></section> : null}
+            {!canAct && ["evaluated", "under_review", "finalized"].includes(attempt.status) ? <section className="rounded-xl border border-border bg-muted/40 p-5 text-sm"><h2 className="font-semibold">Read-only admin view</h2><p className="mt-1 text-muted-foreground">The class instructor records the evaluation, finalizes and releases this result.</p></section> : null}
+            {canAct && attempt.status === "evaluated" && provisional ? <section className="rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">Step 2 · Record instructor evaluation</h2><p className="mb-4 mt-1 text-sm leading-relaxed text-muted-foreground">Confirm the automated result or correct a criterion or the outcome with a reason. Finalization is available after this step.</p><RecordEvaluationForm attemptId={id} scoringMethod={rubric.data?.scoring_method ?? null} passingMethod={typeof rubric.data?.passing_rule === "object" && rubric.data.passing_rule !== null && !Array.isArray(rubric.data.passing_rule) ? String(rubric.data.passing_rule.method ?? "") : null} criteria={reviewCriteria} provisional={{ totalValue: provisional.total_value, maxValue: provisional.max_value, outcome: provisional.outcome, criterionValues: provisional.criterion_values }} /></section> : null}
+            {canAct && attempt.status === "under_review" && latest ? <section className="rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">Step 3 · Finalize</h2><p className="mb-4 mt-1 text-sm leading-relaxed text-muted-foreground">Finalize the recorded evaluation as it stands, or make a final append-only adjustment with a reason.</p><FinalizeAttemptForm attemptId={id} scoringMethod={rubric.data?.scoring_method ?? null} passingMethod={typeof rubric.data?.passing_rule === "object" && rubric.data.passing_rule !== null && !Array.isArray(rubric.data.passing_rule) ? String(rubric.data.passing_rule.method ?? "") : null} criteria={reviewCriteria} provisional={{ totalValue: latest.total_value, maxValue: latest.max_value, percentage: latest.percentage, outcome: latest.outcome, criterionValues: latest.criterion_values }} /></section> : null}
+            {canAct && attempt.status === "finalized" ? <section className="rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">Step 4 · Release to learner</h2><p className="mb-4 mt-1 text-sm leading-relaxed text-muted-foreground">Only released final results become visible to the learner. Releasing again is harmless.</p><ReleaseAttemptForm attemptId={id} /></section> : null}
             {attempt.status === "released" ? <section className="rounded-xl border border-emerald-300 bg-emerald-50 p-5 text-emerald-950"><h2 className="font-semibold">Result released</h2><p className="mt-1 text-sm">Released {formatTimestamp(attempt.released_at)}. The learner can view the current final revision.</p>{releases.data?.[0]?.release_reason ? <p className="mt-2 text-sm">Note: {releases.data[0].release_reason}</p> : null}</section> : null}
           </aside>
         </div>

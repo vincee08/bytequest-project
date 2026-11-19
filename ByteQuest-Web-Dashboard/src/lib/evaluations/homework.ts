@@ -1,5 +1,56 @@
 import { z } from 'zod';
-import type { HomeworkCriterion, HomeworkStatus, HomeworkSubmissionRecord } from './types';
+import type { CurriculumOptions, HomeworkCriterion, HomeworkRecord, HomeworkStatus, HomeworkSubmissionRecord } from './types';
+
+/** Editable form state for COC -> mission -> module, objectives and criteria. */
+export type CurriculumDraft = {
+  coc_module_id: string; mission_code: string; module_id: string;
+  learning_objectives: string[];
+  criteria: { id: string; criterion: string; description: string; max_points: string }[];
+  max_score: string; submission_requirements: string;
+};
+export function emptyCurriculum(): CurriculumDraft {
+  return { coc_module_id: '', mission_code: '', module_id: '', learning_objectives: [], criteria: [], max_score: '100', submission_requirements: '' };
+}
+export function curriculumFromHomework(h: Partial<HomeworkRecord>): CurriculumDraft {
+  return {
+    coc_module_id: h.coc_module_id ?? '', mission_code: h.mission_code ?? '', module_id: h.module_id ?? '',
+    learning_objectives: [...(h.learning_objectives ?? [])],
+    criteria: (h.criteria ?? []).map((c) => ({ id: c.id, criterion: c.criterion, description: c.description ?? '', max_points: String(c.max_points) })),
+    max_score: String(h.max_score ?? 100), submission_requirements: h.submission_requirements ?? '',
+  };
+}
+/** Request fields for manage_homework create/edit (server recomputes and validates). */
+export function curriculumPayload(draft: CurriculumDraft) {
+  const criteria = draft.criteria
+    .filter((c) => c.criterion.trim() || c.max_points.trim())
+    .map((c) => ({ id: c.id, criterion: c.criterion.trim(), description: c.description.trim() || null, max_points: Number(c.max_points) }));
+  return {
+    coc_module_id: draft.coc_module_id || null,
+    mission_code: draft.mission_code || null,
+    module_id: draft.module_id || null,
+    learning_objectives: draft.learning_objectives.map((o) => o.trim()).filter(Boolean),
+    criteria,
+    max_score: criteria.length ? null : Number(draft.max_score || 100),
+    submission_requirements: draft.submission_requirements.trim() || null,
+  };
+}
+/** Choosing a mission selects its COC and, by default, its curriculum module. */
+export function selectMission(draft: CurriculumDraft, missionCode: string, options: CurriculumOptions): CurriculumDraft {
+  const mission = options.missions.find((m) => m.mission_code === missionCode);
+  const link = options.links.find((l) => l.mission_code === missionCode);
+  return {
+    ...draft,
+    mission_code: missionCode,
+    coc_module_id: mission?.coc_id ?? draft.coc_module_id,
+    module_id: link?.module_id ?? (missionCode ? draft.module_id : draft.module_id),
+  };
+}
+/** Changing the COC clears a mission or module that belongs to another COC. */
+export function selectCoc(draft: CurriculumDraft, cocId: string, options: CurriculumOptions): CurriculumDraft {
+  const missionOk = options.missions.some((m) => m.mission_code === draft.mission_code && m.coc_id === cocId);
+  const moduleOk = options.modules.some((m) => m.id === draft.module_id && m.coc_module_id === cocId);
+  return { ...draft, coc_module_id: cocId, mission_code: missionOk ? draft.mission_code : '', module_id: moduleOk ? draft.module_id : '' };
+}
 
 const uuid = z.string().uuid();
 const deadline = z.string().datetime({ offset: true }).nullable();
