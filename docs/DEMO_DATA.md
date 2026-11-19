@@ -9,19 +9,22 @@ Spec: `docs/superpowers/specs/2026-11-19-redefense-revision-design.md`, section 
 | Item | Details |
 |---|---|
 | Class | **DEMO – Re-defense (synthetic learners)**, class code `DEMO-REDEF`, owned by the demo instructor. |
-| Learners | **Demo Learner 01 … 12**, `demo.learner01..12@bytequest.invalid`, student IDs `DEMO-RD-01..12`. Each account signs up through Supabase Auth as the app does. The instructor imports an Excel roster through the dashboard (`/api/roster/template`, `/preview`, `/import`). Learners 01–08 already have accounts and enroll immediately. Learners 09–12 are pending entries that enroll automatically when they sign up ("Joined via roster"). Credentials go only to the gitignored `.tmp/demo-accounts.json`. |
+| Learners | Twelve synthetic learners with the surname **Demo**: Alex, Bea, Cris, Dani, Eli, Fran, Gale, Hal, Iya, Jules, Kai and Lou Demo (learners 01–12 in that order). These are invented names, not project members. The leaderboard shows "First name L.", so they appear as "Alex D.", "Bea D." and so on: distinct, and still obviously demo data. Emails are `demo.learner01..12@bytequest.invalid` and student IDs `DEMO-RD-01..12`. Each account signs up through Supabase Auth as the app does. The instructor imports an Excel roster through the dashboard (`/api/roster/template`, `/preview`, `/import`). Learners 01–08 already have accounts and enroll immediately. Learners 09–12 are pending entries that enroll automatically when they sign up ("Joined via roster"). Credentials go only to the gitignored `.tmp/demo-accounts.json`. |
 | Lessons (LO1.1) | **DEMO · ESD precautions at the workbench** and **DEMO · Handling and seating components**. These are accurate, generic CSS NC II content, visible to every learner once published. The instructor drafts and submits each lesson; the admin evaluates it; the instructor finalizes it; the admin approves it. The first lesson is then published. The second stays **approved**, so an admin can publish it live during the defense. |
 | Practice | The typed work orders exported from the app (`tool/export_practice_test_evidence.dart`), the same action generators as `scripts/test-practice-api-all-missions.mjs`. They are written to `practice_mission_actions` with each learner's own token and verified through `/api/learner/practice`. Some runs include realistic mistakes: a CPU placed in the wrong orientation, memory seated in DIMM_A1 and then reseated, or the screwdriver used on the ESD ground point. Some learners press Verify too early, which records a failed verification. One learner completes all of COC1 and passes the COC1 practice quiz. Two learners barely start. |
-| Simulation assessment | **DEMO · COC1 M2 assembly assessment** (the published simulation package, 2 attempts, retry after 1 hour). Seven learners submit through `start_attempt` / `append_attempt_action` / `submit_attempt`: perfect runs, two CPU orientation errors (fails the safety-critical C3), three memory reseats (exceeds the C5 threshold) and an unfinished submission. The instructor records evaluations, finalizes and releases through `/api/evaluations`, so every Evaluation Center stage has items. |
+| Simulation assessment | **DEMO · COC1 M2 assembly assessment** (the published simulation package, 2 attempts, retry after 1 hour). It is assigned exactly as the dashboard's "Assign published content" form does it. First the instructor's own session reads the approved rubric that matches the package (row-level security). Then the instructor calls `assign_activity`, with no availability window or due date, like the form. Seven learners submit through `start_attempt` / `append_attempt_action` / `submit_attempt`: perfect runs, two CPU orientation errors (fails the safety-critical C3), three memory reseats (exceeds the C5 threshold) and an unfinished submission. The instructor records evaluations, finalizes and releases through `/api/evaluations`, so every Evaluation Center stage has items. |
 | Quiz | **DEMO · Assembly safety check**. COC1 / LO1.1, PCs 1.1 and 1.4, with focus text, a 15-minute limit and instructor release. It has three multiple-choice items, two true/false items and one scenario essay with a 10-point rubric. Every question is approved before publication. Nine learners submit. Essays are scored through `/api/quizzes/evaluation`, then finalized and released through `/api/evaluations`, at different stages. One learner starts, saves three answers and leaves; the server submits the attempt automatically when the time limit ends. |
 | Homework | **DEMO · Document a safe assembly checklist**. Linked to COC1 M2, with two criteria (10 + 10, max 20) and a deadline 4 minutes after creation. It has on-time, late (after the deadline) and missing submissions, graded, finalized and released at different stages. |
 | Gamification | Follows automatically from these events. Learners 01, 02, 03 and 05 opt into the class leaderboard from their own profile. |
 
 The activity mix is designed so that learner statuses differ:
 
-- Most learners are on track.
-- Three are struggling, for three different reasons: a quiz average below 75 %, a released "not yet competent" result, and three failed verifications on one mission.
-- Two are falling behind: their progress is below half the class median.
+- Most learners are on track: Alex, Bea, Cris, Dani, Eli, Iya and Jules.
+- Three are struggling, for three different reasons:
+  - Fran's released quiz average is below 75 %;
+  - Gale has three failed verifications on one mission;
+  - Hal has a released "not yet competent" result.
+- Two are falling behind: Kai and Lou. Their progress is below half the class median.
 
 The analytics RPCs compute the actual statuses from the records, and each run's summary prints them. `--summary-only` recomputes them, for example after an analytics change.
 
@@ -29,7 +32,7 @@ The analytics RPCs compute the actual statuses from the records, and each run's 
 
 Prerequisites:
 
-1. The local Supabase stack is running and fully migrated.
+1. The local Supabase stack is running and fully migrated. The assignment step needs `20261119180000_instructor_assignable_rubric_visibility.sql`: without it the instructor cannot read the approved rubric of a centrally published package, and the script stops with that message, as the dashboard form would.
 2. The QA fixtures exist: `node scripts/local-qa-fixtures.mjs`. The script uses `qa.instructor@bytequest.local` and `qa.admin@bytequest.local` from `.tmp/local-qa-accounts.json`.
 3. Root dependencies are installed (`corepack pnpm install --frozen-lockfile`).
 4. The dashboard is running against the local stack at `http://127.0.0.1:3000`: `corepack pnpm build` and `corepack pnpm start -p 3000` (or `pnpm dev`) in `ByteQuest-Web-Dashboard`, with a gitignored `.env.local` holding the local keys.
@@ -54,7 +57,7 @@ The target is printed before anything is written. The script refuses any Supabas
 **Idempotent:** a re-run looks everything up and skips what exists:
 
 - the class by code `DEMO-REDEF`;
-- learners by email;
+- learners by email. A seeded learner whose profile name differs from the list above is renamed. The learner updates their own `full_name`, as the app's Edit profile screen does, and the server refreshes the leaderboard entry. Accounts seeded as "Demo Learner NN" by an earlier version of the script are renamed this way;
 - lessons by title;
 - the quiz, homework and assessment by their `DEMO ·` titles;
 - attempts, submissions, completions and topic progress per learner.
@@ -102,16 +105,16 @@ No history is deleted. Attempts, results, evidence, points and audit events stay
 
 ## Effect on the rollback SQL suites
 
-The SQL suites in `supabase/tests` assume a database without other curriculum content or classes. With the demo data present, 30 of the 38 suites pass and 8 fail. Each failure was attributed on a scratch clone, and none is a product defect:
+None. The demo data can stay in the database while the suites in `supabase/tests` run: every suite passes with or without it. Eight suites used to depend on the database having no other curriculum content, classes or notifications. Each of them now isolates itself inside its own rolled-back transaction, and every assertion is unchanged:
 
-| Cause | Failing suites (assertions) |
+| Isolation (inside the suite's transaction) | Suites |
 |---|---|
-| The published demo lesson is an extra required item of LO1.1 for every learner, including the suites' fixture learners. Archiving the demo lessons on the clone makes all five pass. | `module_progression_projection_rollback.sql` (11, 12, 18–20, 24–27, 29), `module_progression_rollback.sql` (23–26, 28, 30, 31), `gamification_rollback.sql` (23, 24, `PRACTICAL_COMPLETION_REQUIRED`), `coc1_m1_identification_rollback.sql` (`PRACTICAL_COMPLETION_REQUIRED`), `simulation_coc1_m2_contract_rollback.sql` (26) |
-| Global count: the admin overview expects exactly the fixture's 5 enrolled learners. | `analytics_redefense_rollback.sql` (73) |
-| Global count: the expected admin Evaluate count leaves out pending quiz essays. | `evaluation_center_queue_rollback.sql` (26) |
-| Global count: the suite expects no `homework.released` notifications for other learners. | `homework_redefense_rollback.sql` (48) |
+| Topics that already exist are archived before the fixtures run. Published lessons are required items of every learner, so only the suite's own fixture topics count. | `module_progression_projection_rollback.sql`, `module_progression_rollback.sql`, `gamification_rollback.sql`, `coc1_m1_identification_rollback.sql`, `simulation_coc1_m2_contract_rollback.sql`, and already `analytics_redefense_rollback.sql` |
+| The admin overview population is recorded before the fixture classes exist. The fixtures must add exactly their own 5 learners to it. | `analytics_redefense_rollback.sql` |
+| The expected admin Evaluate count also counts the quiz attempts that already await essay scores, as the queue lists them. | `evaluation_center_queue_rollback.sql` |
+| Notifications that existed before the transaction are excluded from the release-notification check. | `homework_redefense_rollback.sql` |
 
-Run the suites on a database that has no demo data, for example a clone made before seeding (`node scripts/clone-local-db.mjs bq_<name>`), or a fresh reset with the QA fixtures. Then seed again; the script is idempotent and takes about 5 minutes.
+`node scripts/run-local-sql-tests.mjs` (all 39 suites) passes in three places: on the seeded main database, on a clone of it, and on a database built from the migrations alone with only the QA fixtures.
 
 ## Notes
 
@@ -121,4 +124,4 @@ Run the suites on a database that has no demo data, for example a clone made bef
   - account administration, as the dashboard also does it: email confirmation on hosted, and a password reset when `.tmp/demo-accounts.json` was lost;
   - running the simulation publisher;
   - read-only lookups and the summary counts.
-- The demo instructor's dashboard cannot read the approved rubric of a simulation package before it is assigned (RLS `rubric_versions_staff_select`). The script therefore resolves that rubric id with a read-only service lookup and assigns with the instructor's own `assign_activity`. See the run notes in the summary file.
+- The assessment is assigned through the instructor's own session only. Migration `20261119180000` lets active instructors read the approved rubrics of published activities. The dashboard form and the script both depend on it.
