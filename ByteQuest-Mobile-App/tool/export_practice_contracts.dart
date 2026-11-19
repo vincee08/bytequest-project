@@ -26,7 +26,7 @@ const assemblyMigrationFileName =
 /// definition changes this digest: publish a new contract migration (never
 /// edit an applied one) and update the digest together.
 const assemblyMigrationSha256 =
-    '1682b419afffb2fe1bfdf72c460a61c3ea57f55efd167a58f9cad44fceec1e78';
+    '8829b7ed191188f9f0fce2100831949c708eac5c28b0ae89f20e2f4d018df2c3';
 
 String _contractJson(MissionSimulationDefinition definition) =>
     jsonEncode(definition.toJson()).replaceAll("'", "''");
@@ -60,8 +60,10 @@ String assemblyContractMigrationSql() {
 -- (prepare, motherboard preparation, case installation, power and data,
 -- power-on test, review). Practice evidence, completions and runs are never
 -- rewritten. Verified completions of css-sag-20261009-v1 and
--- css-sag-20261011-v2 keep counting toward the COC1 practice quiz gate through
--- public.practice_completion_version_accepted (20261119110000).
+-- css-sag-20261011-v2 keep counting (module completion and the COC1 practice
+-- quiz gate) through public.practice_completion_accepted (20261119120000).
+-- Each POST check names the step target it charges ("counts"); see
+-- 20261119110400.
 begin;
 
 do \$guard\$
@@ -89,13 +91,15 @@ commit;
 String assemblyContractMigrationDigest() =>
     sha256.convert(utf8.encode(assemblyContractMigrationSql())).toString();
 
-const _replayValueKeys = {
+/// Action value keys the server replay reads (see private.simulation_replay).
+const replayValueKeys = {
   'item_id',
   'destination_id',
   'orientation',
   'source_id',
   'values',
   'order',
+  'confirmed',
   'tool_id',
   'selection_group',
   'selected_ids',
@@ -104,6 +108,39 @@ const _replayValueKeys = {
   'runtime_action_type',
   'test_status',
 };
+
+/// The action kinds the server replay evaluates; anything else (navigation,
+/// phase completion, review) is recorded but never replayed.
+const replayActionKinds = {
+  'object_inspected',
+  'placement_attempted',
+  'placement_removed',
+  'connection_created',
+  'configuration_applied',
+  'sequence_reordered',
+  'tool_attempted',
+  'selection_confirmed',
+  'scenario_decision',
+  'diagnostic_action',
+  'equipment_operation',
+  'test_started',
+  'test_completed',
+  'observation_recorded',
+  'result_interpreted',
+};
+
+/// The replay-relevant form of an evidence action, as the server sees it.
+Map<String, Object?> replayRow(MissionEvidenceAction action) => {
+      'phase_id': action.phaseId,
+      'kind': action.value['runtime_action_type'] ?? action.actionType,
+      'target': action.target,
+      'value': {
+        for (final entry in action.value.entries)
+          if (replayValueKeys.contains(entry.key) &&
+              entry.key != 'runtime_action_type')
+            entry.key: entry.value,
+      },
+    };
 
 String _sqlText(String? value) =>
     value == null ? 'null' : "'${value.replaceAll("'", "''")}'";
@@ -123,7 +160,7 @@ String replayFixtureSql() {
       ordinal++;
       final value = {
         for (final entry in action.value.entries)
-          if (_replayValueKeys.contains(entry.key)) entry.key: entry.value,
+          if (replayValueKeys.contains(entry.key)) entry.key: entry.value,
       };
       rows.add("('${definition.id}', $ordinal, '${action.phaseId}', "
           "'${action.actionType}', ${_sqlText(action.target)}, "

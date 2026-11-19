@@ -200,7 +200,7 @@ select is(pg_temp.observe('ram_two_corrections', 'ram')->>'observation', 'satisf
 select is(pg_temp.observe('ram_three_corrections', 'ram')->>'observation', 'not_satisfied',
   'three corrections exceed the threshold');
 select is(pg_temp.observe('ram_three_corrections', 'ram')->'observed_evidence'->'incorrect_by_target',
-  '{"item:ram_1": {"invalid": 0, "corrections": 3}}'::jsonb, 'observed evidence reports counts per counted target');
+  '{"item:ram_1": {"invalid": 0, "corrections": 3, "failed_checks": 0}}'::jsonb, 'observed evidence reports counts per counted target');
 select is(pg_temp.observe('no_power_phase', 'power')->>'observation', 'not_satisfied',
   'an unfinished phase is not satisfied');
 select is(pg_temp.observe('no_power_phase', 'power')->'observed_evidence'->'phases_done',

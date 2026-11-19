@@ -342,7 +342,7 @@ class EquipmentPracticeDriver {
         configure(p['fields']);
       case InteractionFamily.sequence:
         act(phase, 'sequence_reordered', phase.id,
-            {'order': practiceOrders[phase.id]!});
+            {'order': practiceOrders[phase.id]!, 'confirmed': true});
       case InteractionFamily.place:
         for (final part in MissionEquipmentSimulator.maps(p['items'])) {
           act(phase, 'placement_attempted', practicePlacements[part['id']], {
