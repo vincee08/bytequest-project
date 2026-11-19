@@ -2,12 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/app_button.dart';
+import '../../data/account_content_data.dart';
 import '../../data/mission_content_data.dart';
 import '../../services/auth_service.dart';
 import '../../services/profile_service.dart';
+import '../profile_setup/student_id_policy.dart';
 
 class EditProfileScreen extends StatefulWidget {
-  const EditProfileScreen({super.key});
+  const EditProfileScreen({super.key, this.loadStudentIdPolicy});
+
+  /// Overrides how the staff-managed student ID flag is read (tests).
+  final StudentIdPolicyLoader? loadStudentIdPolicy;
 
   @override
   State<EditProfileScreen> createState() => _EditProfileScreenState();
@@ -24,6 +29,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   bool _isSaving = false;
   String? _errorMessage;
   String? _saveError;
+  bool _studentIdManaged = false;
+  String _loadedLearnerId = '';
 
   @override
   void initState() {
@@ -52,10 +59,25 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         throw Exception('Profile not found');
       }
 
+      StudentIdPolicy? policy;
+      try {
+        policy = await (widget.loadStudentIdPolicy ??
+            loadSignedInStudentIdPolicy)();
+      } catch (_) {
+        // The database trigger still protects a managed ID; an unknown policy
+        // only means the field stays editable.
+        policy = null;
+      }
+      final managed = policy?.managed == true;
+      final learnerId =
+          (managed ? policy?.learnerId : null) ?? profile.learnerId ?? '';
+
       if (!mounted) return;
       setState(() {
+        _studentIdManaged = managed;
+        _loadedLearnerId = learnerId;
         _fullNameController.text = profile.fullName;
-        _learnerIdController.text = profile.learnerId ?? '';
+        _learnerIdController.text = learnerId;
         _schoolController.text = profile.school ?? '';
         _courseSectionController.text = profile.courseSection ?? '';
         _isLoading = false;
@@ -89,9 +111,11 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       final profileService = context.read<ProfileService>();
       await profileService.updateProfile(userId, {
         'full_name': _fullNameController.text.trim(),
-        'learner_id': _learnerIdController.text.trim().isEmpty
-            ? null
-            : _learnerIdController.text.trim(),
+        // A staff-managed student ID is never resent from the app.
+        if (!_studentIdManaged)
+          'learner_id': _learnerIdController.text.trim().isEmpty
+              ? null
+              : _learnerIdController.text.trim(),
         'school': _schoolController.text.trim().isEmpty
             ? null
             : _schoolController.text.trim(),
@@ -113,7 +137,16 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _saveError = MissionContentData.profileSaveFailed;
+        if (isStudentIdManagedError(e)) {
+          // Staff confirmed the ID meanwhile: lock it and keep other edits.
+          _studentIdManaged = true;
+          _learnerIdController.text = _loadedLearnerId;
+          _saveError = AccountContentData.studentIdManagedSaveError;
+        } else if (isStudentIdTakenError(e)) {
+          _saveError = AccountContentData.studentIdTakenSaveError;
+        } else {
+          _saveError = MissionContentData.profileSaveFailed;
+        }
         _isSaving = false;
       });
     }
@@ -218,18 +251,50 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             ),
                           ),
                           const SizedBox(height: 8),
-                          TextFormField(
-                            controller: _learnerIdController,
-                            decoration: InputDecoration(
-                              labelText:
-                                  MissionContentData.optionalLearnerIdLabel,
-                              hintText: 'Enter your learner ID (optional)',
-                              prefixIcon: Icon(
-                                Icons.badge_outlined,
-                                color: AppTheme.primaryBlue,
+                          if (_studentIdManaged)
+                            Semantics(
+                              label: AccountContentData
+                                  .studentIdManagedSemantics(
+                                      _learnerIdController.text),
+                              hint: AccountContentData.studentIdManagedHint,
+                              readOnly: true,
+                              container: true,
+                              child: ExcludeSemantics(
+                                child: TextFormField(
+                                  key: const Key('editProfileStudentIdField'),
+                                  controller: _learnerIdController,
+                                  readOnly: true,
+                                  enableInteractiveSelection: true,
+                                  decoration: const InputDecoration(
+                                    labelText:
+                                        AccountContentData.studentIdLabel,
+                                    helperText: AccountContentData
+                                        .studentIdManagedHelper,
+                                    helperMaxLines: 2,
+                                    filled: true,
+                                    fillColor: AppTheme.surfaceMuted,
+                                    prefixIcon: Icon(
+                                      Icons.lock_outline,
+                                      color: AppTheme.textMedium,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            )
+                          else
+                            TextFormField(
+                              key: const Key('editProfileStudentIdField'),
+                              controller: _learnerIdController,
+                              decoration: InputDecoration(
+                                labelText:
+                                    MissionContentData.optionalLearnerIdLabel,
+                                hintText: 'Enter your learner ID (optional)',
+                                prefixIcon: Icon(
+                                  Icons.badge_outlined,
+                                  color: AppTheme.primaryBlue,
+                                ),
                               ),
                             ),
-                          ),
                           const SizedBox(height: 20),
 
                           // School Field
