@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   criteriaTotal, curriculumFromHomework, curriculumPayload, emptyCurriculum, homeworkActionSchema, homeworkErrorMessage,
-  homeworkStatusLabel, learnerSubmissionView, selectCoc, selectMission, staffSubmissionView,
+  homeworkStatusLabel, learnerRecordView, learnerSubmissionView, selectCoc, selectMission, staffSubmissionView,
 } from '../src/lib/evaluations/homework';
 import type { CurriculumOptions, HomeworkSubmissionRecord } from '../src/lib/evaluations/types';
 
@@ -63,6 +63,18 @@ test('learner view hides every grade field until release', () => {
     // Installed app versions treat `graded` as "result visible".
     assert.equal(view.status, 'submitted');
   }
+});
+
+test('every learner action reply is redacted before release', () => {
+  const view = learnerRecordView(graded) as Record<string, unknown>;
+  assert.equal(view.score, null);
+  assert.equal(view.feedback, null);
+  assert.equal(view.criterion_scores, null);
+  assert.equal(view.graded_by, null);
+  assert.equal(view.evaluation_status, 'graded');
+  const file = { id: uuid(7), assignment_id: uuid(2), owner_id: uuid(3), kind: 'answer', filename: 'report.pdf', size_bytes: 10 };
+  assert.deepEqual(learnerRecordView(file), file, 'non-submission records pass through unchanged');
+  assert.equal(learnerRecordView(null), null);
 });
 
 test('learner view exposes the released grade and keeps old apps working', () => {
