@@ -47,7 +47,7 @@ export function AnalyticsFilters({
       aria-label="Analytics filters"
       aria-busy={pending}
     >
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(170px,1fr)_minmax(160px,0.8fr)_minmax(190px,1fr)_140px_auto] xl:items-end">
+      <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-[minmax(170px,1fr)_minmax(160px,0.8fr)_minmax(190px,1fr)_140px_auto] 2xl:items-end">
         <FilterField label="Class" name="class" defaultValue={filters.classId ?? ""}>
           <option value="">All owned classes</option>
           {options.classes.map((classroom) => (
@@ -72,7 +72,7 @@ export function AnalyticsFilters({
           <option value="90">Last 90 days</option>
           <option value="custom">Custom range</option>
         </FilterField>
-        <div className="flex items-center gap-2 md:col-span-2 xl:col-span-1">
+        <div className="flex items-center gap-2 md:col-span-2 2xl:col-span-1">
           <Button type="submit" disabled={pending} className="min-w-24 flex-1 xl:flex-none">
             <Filter className="mr-2 h-4 w-4" aria-hidden="true" />
             {pending ? "Applying…" : "Apply"}

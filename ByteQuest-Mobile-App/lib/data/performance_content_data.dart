@@ -52,6 +52,8 @@ class PerformanceContentData {
   static const quizzesEmpty = 'No submitted quiz yet.';
   static const quizFallback = 'Quiz';
   static String quizScore(int correct, int total) => '$correct of $total answers';
+  static String quizPoints(String score, String max, {required bool released}) =>
+      released ? '$score of $max points · released by your instructor' : '$score of $max points';
   static const homeworkTitle = 'Homework scores';
   static const homeworkEmpty = 'No homework submitted yet.';
   static const homeworkFallback = 'Homework';

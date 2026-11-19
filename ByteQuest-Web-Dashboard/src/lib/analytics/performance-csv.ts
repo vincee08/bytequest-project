@@ -51,6 +51,7 @@ export function overviewTable(data: AnalyticsOverview): AnalyticsTable {
       metric("Assessments", "Average released score", data.assessments.avg_percent, "%"),
       metric("Assessments", "Competent rate", data.assessments.competent_rate, "%"),
       metric("Quizzes", "Submitted", data.quizzes.submitted, "attempts"),
+      metric("Quizzes", "Pending evaluation or release", data.quizzes.pending, "attempts"),
       metric("Quizzes", "Average score", data.quizzes.avg_percent, "%"),
       metric("Quizzes", "Completion rate", data.quizzes.completion_rate, "%"),
       metric("Homework", "Submitted", data.homework.submitted, "submissions"),
@@ -64,6 +65,8 @@ export function overviewTable(data: AnalyticsOverview): AnalyticsTable {
       metric("Evaluation", "Finalize", data.evaluation.total.finalize, "items"),
       metric("Evaluation", "Release", data.evaluation.total.release, "items"),
       metric("Evaluation", "Released", data.evaluation.total.released, "items"),
+      metric("Evaluation", "Quizzes awaiting evaluation, finalization or release",
+        data.evaluation.quiz.evaluate + data.evaluation.quiz.finalize + data.evaluation.quiz.release, "attempts"),
       metric("Practice missions", "Verified completions in period", data.missions.verified, "completions"),
       metric("Practice missions", "Completion to date", data.missions.completion_rate, "%"),
       metric("Practice missions", "Recorded runs", data.missions.runs, "runs"),
@@ -111,6 +114,7 @@ export function learnersTable(data: LearnerPerformance): AnalyticsTable {
       ["pending", "Pending assessments"], ["verified", "Missions verified"], ["runs", "Practice runs"],
       ["submitted", "Homework submitted"], ["pending_evaluation", "Homework pending evaluation"],
       ["missing", "Homework missing"], ["late", "Homework late"], ["last_activity", "Last activity"],
+      ["points", "Engagement: points"], ["points_in_period", "Engagement: points in period"], ["level", "Engagement: level"],
     ),
     rows: data.learners.map((row) => ({
       learner: row.name, student_id: row.student_id, classes: row.classes.map((item) => item.title).join("; "),
@@ -120,6 +124,7 @@ export function learnersTable(data: LearnerPerformance): AnalyticsTable {
       verified: row.missions_verified, runs: row.practice_runs, submitted: row.assignments.submitted,
       pending_evaluation: row.assignments.pending_evaluation, missing: row.assignments.missing,
       late: row.assignments.late, last_activity: row.last_activity_at,
+      points: row.engagement.points, points_in_period: row.engagement.points_in_period, level: row.engagement.level_title,
     })),
   };
 }
@@ -130,23 +135,26 @@ export function quizzesTable(data: QuizAnalytics): AnalyticsTable {
       title: `Quiz results - ${data.quiz.title}`,
       columns: columns(
         ["learner", "Learner"], ["student_id", "Student ID"], ["class", "Class"], ["status", "Submission status"],
-        ["score", "Correct answers"], ["max", "Questions"], ["percent", "Score (%)"], ["submitted_at", "Submitted at"],
+        ["score", "Score (points)"], ["max", "Maximum (points)"], ["percent", "Score (%)"], ["stage", "Evaluation stage"],
+        ["submitted_at", "Submitted at"],
       ),
       rows: data.results.map((row) => ({
         learner: row.name, student_id: row.student_id, class: row.class_title, status: row.status.replace("_", " "),
-        score: row.score, max: row.max_score, percent: row.percent, submitted_at: row.submitted_at,
+        score: row.score, max: row.max_score, percent: row.percent, stage: row.stage, submitted_at: row.submitted_at,
       })),
     };
   }
   return {
     title: "Quiz analytics",
     columns: columns(
-      ["quiz", "Quiz"], ["coc", "COC"], ["status", "Status"], ["participants", "Participants"], ["eligible", "Eligible"],
+      ["quiz", "Quiz"], ["coc", "COC"], ["status", "Status"], ["release_mode", "Results"], ["participants", "Participants"], ["eligible", "Eligible"],
       ["completion", "Completion rate (%)"], ["average", "Average (%)"], ["highest", "Highest (%)"], ["lowest", "Lowest (%)"],
       ["pending", "Pending evaluation"],
     ),
     rows: data.quizzes.map((row) => ({
-      quiz: row.title, coc: row.coc_code?.toUpperCase() ?? null, status: row.status, participants: row.participants,
+      quiz: row.title, coc: row.coc_code?.toUpperCase() ?? null, status: row.status,
+      release_mode: row.release_mode === "instructor_release" ? "After instructor release" : row.release_mode === "immediate" ? "Immediate" : null,
+      participants: row.participants,
       eligible: row.eligible, completion: row.completion_rate, average: row.average, highest: row.highest,
       lowest: row.lowest, pending: row.pending,
     })),
@@ -165,6 +173,7 @@ export function missionsTable(data: MissionAnalytics): AnalyticsTable {
       ["per_learner", "Practice: runs per learner (period)"], ["duration", "Practice: average completion time in s (period)"],
       ["invalid", "Practice: invalid actions per run (period)"], ["verified_to_date", "Practice: learners verified (to date)"],
       ["completion", "Practice: completion rate (%) (to date)"],
+      ["most_missed", "Practice: most-missed steps (period)"],
       ["a_attempts", "Assessment: attempts"], ["a_released", "Assessment: released"], ["a_competent", "Assessment: competent"],
       ["a_nyc", "Assessment: not yet competent"], ["a_pending", "Assessment: pending"], ["a_avg", "Assessment: average (%)"],
     ),
@@ -176,6 +185,9 @@ export function missionsTable(data: MissionAnalytics): AnalyticsTable {
         module: practice?.module?.code ?? null, attempted: practice?.learners_attempted ?? null,
         verified: practice?.learners_verified ?? null, verified_to_date: practice?.learners_verified_to_date ?? null,
         completion: practice?.completion_rate_to_date ?? null,
+        most_missed: practice?.most_missed.length
+          ? practice.most_missed.map((step) => `${step.step ? `Step ${step.step} ` : ""}${step.title} (${step.missed}/${step.runs} runs, ${step.avg_incorrect ?? 0} incorrect per run)`).join("; ")
+          : null,
         runs: practice?.runs ?? null, successful: practice?.successful_runs ?? null, failed: practice?.failed_runs ?? null,
         per_learner: practice?.avg_runs_per_learner ?? null, duration: practice?.avg_duration_seconds ?? null,
         invalid: practice?.avg_invalid_actions ?? null, a_attempts: assessment?.attempts ?? null,
@@ -193,13 +205,16 @@ export function criteriaTable(data: CriteriaAnalytics): AnalyticsTable {
   return {
     title: "Criterion analysis",
     columns: columns(
-      ["code", "Criterion code"], ["title", "Criterion"], ["source", "Source"], ["activity", "Activity"], ["mission", "Mission"], ["max", "Maximum"],
+      ["code", "Criterion code"], ["title", "Criterion"], ["source", "Source"], ["activity", "Activity"], ["mission", "Mission"],
+      ["steps", "Simulation steps"], ["max", "Maximum"],
       ["avg", "Average score"], ["percent", "Percent (%)"], ["learners", "Learners evaluated"], ["satisfied", "Satisfied"],
       ["not_satisfied", "Not satisfied"], ["rank", "Rank"],
     ),
     rows: data.criteria.map((row) => ({
       code: row.code, title: row.title, source: row.source, activity: row.activity_title,
-      mission: row.mission_title ?? row.mission_code, max: row.max,
+      mission: row.mission_title ?? row.mission_code,
+      steps: row.steps.length ? row.steps.map((step) => (step.step ? `Step ${step.step} ${step.title}` : step.title)).join("; ") : null,
+      max: row.max,
       avg: row.avg, percent: row.percent, learners: row.evaluated_learners, satisfied: row.satisfied,
       not_satisfied: row.not_satisfied,
       rank: strongest.has(row.criterion_id) ? "Strongest" : weakest.has(row.criterion_id) ? "Weakest" : null,

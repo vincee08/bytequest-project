@@ -224,9 +224,15 @@ class PerformanceScoresCard extends StatelessWidget {
             for (final quiz in quizzes)
               _ValueRow(
                 title: quiz.title ?? PerformanceContentData.quizFallback,
-                detail: quiz.correctCount != null && quiz.questionCount != null
-                    ? PerformanceContentData.quizScore(quiz.correctCount!, quiz.questionCount!)
-                    : null,
+                detail: quiz.score != null && quiz.maxScore != null
+                    ? PerformanceContentData.quizPoints(
+                        PerformanceContentData.number(quiz.score),
+                        PerformanceContentData.number(quiz.maxScore),
+                        released: quiz.released,
+                      )
+                    : quiz.correctCount != null && quiz.questionCount != null
+                        ? PerformanceContentData.quizScore(quiz.correctCount!, quiz.questionCount!)
+                        : null,
                 value: PerformanceContentData.percent(quiz.percent),
               ),
           ],

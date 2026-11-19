@@ -36,7 +36,8 @@ Map<String, dynamic> populatedJson({double overall = 12.5, String updatedAt = '2
       ],
       'scores': {
         'quizzes': [
-          {'attempt_id': 'q1', 'title': 'Hardware Basics Quiz', 'percent': 100.0, 'correct_count': 2, 'question_count': 2, 'submitted_at': '2026-11-17T07:00:00Z'},
+          {'attempt_id': 'q1', 'percent': 100.0, 'correct_count': 2, 'question_count': 2, 'score': null, 'max_score': null, 'released': false, 'submitted_at': '2026-11-17T07:00:00Z'},
+          {'attempt_id': 'q4', 'percent': 88.9, 'correct_count': 1, 'question_count': 2, 'score': 8, 'max_score': 9, 'released': true, 'submitted_at': '2026-10-05T07:00:00Z'},
         ],
         'homework': [
           {'title': 'Workstation report', 'score': 40, 'max_score': 50, 'percent': 80.0, 'released': true, 'submitted_at': '2026-11-16T07:00:00Z', 'late': false},
@@ -55,7 +56,7 @@ Map<String, dynamic> populatedJson({double overall = 12.5, String updatedAt = '2
         ],
       },
       'summary': {
-        'quiz_avg': 100.0,
+        'quiz_avg': 94.5,
         'homework_avg': 80.0,
         'homework_released': 1,
         'assessments_released': 2,
@@ -99,7 +100,19 @@ class FakePerformanceService extends PerformanceService {
   final List<Object> responses;
   final changes = StreamController<void>.broadcast();
   int fetches = 0;
+  int titleFetches = 0;
   Completer<void>? gate;
+
+  /// Titles from the learner's quiz list; an Exception is thrown instead.
+  Object quizTitles = const {'q1': 'Hardware Basics Quiz', 'q4': 'Diagnosis Essay Quiz'};
+
+  @override
+  Future<Map<String, String>> fetchQuizTitles() async {
+    titleFetches++;
+    final titles = quizTitles;
+    if (titles is Exception) throw titles;
+    return titles as Map<String, String>;
+  }
 
   @override
   Future<PerformanceSnapshot> fetchMyPerformance() async {
@@ -153,7 +166,13 @@ void main() {
     expect(find.text(PerformanceContentData.achievedLabel), findsOneWidget);
     expect(find.text(PerformanceContentData.notYetAchievedLabel), findsOneWidget);
     expect(find.text(PerformanceContentData.competencySummary(1, 2)), findsOneWidget);
-    expect(find.text('Hardware Basics Quiz'), findsOneWidget);
+    expect(find.text('Hardware Basics Quiz'), findsOneWidget, reason: 'titles come from the learner quiz list in one call');
+    expect(find.text('Diagnosis Essay Quiz'), findsOneWidget);
+    expect(service.titleFetches, 1);
+    expect(find.text(PerformanceContentData.quizPoints('8', '9', released: true)), findsOneWidget,
+        reason: 'a released essay quiz shows its finalized points');
+    expect(find.text(PerformanceContentData.quizScore(2, 2)), findsOneWidget,
+        reason: 'a result recorded before points reports answers');
     expect(find.text(PerformanceContentData.homeworkScore('40', '50')), findsOneWidget,
         reason: 'homework is scored against its own maximum');
     expect(find.text(PerformanceContentData.homeworkDetail(80, late: false)!), findsOneWidget);
@@ -247,6 +266,16 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
+  testWidgets('quiz titles that cannot be read leave the fallback label, not an error', (tester) async {
+    final service = FakePerformanceService([populatedJson()])..quizTitles = Exception('offline');
+    await tester.pumpWidget(host(PerformanceSection(service: service)));
+    await tester.pumpAndSettle();
+    expect(find.text(PerformanceContentData.errorTitle), findsNothing);
+    expect(find.text(PerformanceContentData.quizFallback), findsNWidgets(2));
+    expect(find.text(PerformanceContentData.quizScore(2, 2)), findsOneWidget, reason: 'scores still show');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('an error offers a retry that reloads the section', (tester) async {
     final service = FakePerformanceService([Exception('offline'), populatedJson()]);
     await tester.pumpWidget(host(PerformanceSection(service: service)));
@@ -309,7 +338,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text(PerformanceContentData.sectionTitle), findsNothing, reason: 'the Progress screen supplies the header');
     expect(summaryTile(PerformanceContentData.summaryCriteriaLabel, PerformanceContentData.ofTotal(1, 2), PerformanceContentData.summaryCriteriaDetail), findsOneWidget);
-    expect(summaryTile(PerformanceContentData.summaryQuizLabel, '100%', PerformanceContentData.quizCount(1)), findsOneWidget);
+    expect(summaryTile(PerformanceContentData.summaryQuizLabel, '94.5%', PerformanceContentData.quizCount(2)), findsOneWidget);
+    expect(service.titleFetches, 0, reason: 'the compact section lists no quiz titles, so it never reads them');
     expect(summaryTile(PerformanceContentData.summaryHomeworkLabel, '80%', PerformanceContentData.releasedGrades(1)), findsOneWidget,
         reason: 'the released homework average is a share of each maximum score');
     expect(summaryTile(PerformanceContentData.summaryAssessmentsLabel, PerformanceContentData.ofTotal(1, 2), PerformanceContentData.summaryAssessmentsDetail), findsOneWidget);
@@ -345,6 +375,14 @@ void main() {
     expect(snapshot.progress.overallPercent, 12.5);
     expect(snapshot.progress.completedItems, 3);
     expect(snapshot.homework.first.percent, 80);
+    expect(snapshot.quizzes.last.score, 8);
+    expect(snapshot.quizzes.last.released, isTrue);
+    expect(snapshot.quizzes.first.score, isNull);
+    expect(snapshot.quizzes.first.title, isNull, reason: 'get_my_performance carries no quiz title');
+    final titled = snapshot.withQuizTitles(const {'q4': 'Diagnosis Essay Quiz'});
+    expect(titled.quizzes.last.title, 'Diagnosis Essay Quiz');
+    expect(titled.quizzes.first.title, isNull);
+    expect(identical(snapshot.withQuizTitles(const {}), snapshot), isTrue);
     expect(snapshot.homework.last.score, isNull);
     expect(snapshot.homework.last.percent, isNull);
     expect(snapshot.summary.homeworkAvg, 80);
@@ -379,7 +417,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final slotHeader = find.text(LearningContentData.performanceTitle);
-      final quizTile = summaryTile(PerformanceContentData.summaryQuizLabel, '100%', PerformanceContentData.quizCount(1));
+      final quizTile = summaryTile(PerformanceContentData.summaryQuizLabel, '94.5%', PerformanceContentData.quizCount(2));
       expect(slotHeader, findsOneWidget);
       expect(quizTile, findsOneWidget);
       expect(find.text('Wears the ESD wrist strap'), findsOneWidget);

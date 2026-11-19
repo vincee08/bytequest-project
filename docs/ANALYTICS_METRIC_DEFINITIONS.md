@@ -16,7 +16,7 @@ Every number on `/analytics`, `/progress/learners/[userId]`, `/admin/analytics` 
 | `get_criteria_analytics(p_filters)` | Criteria tab |
 | `get_my_performance()` | learner app, Performance section |
 
-Source: `supabase/migrations/20261119170000`–`20261119170400` (170400: integration with slices A2, A4 and A5). Tests with known expected values: `supabase/tests/analytics_redefense_rollback.sql`.
+Source: `supabase/migrations/20261119170000`–`20261119170500` (170400: integration with slices A2, A4 and A5; 170500: slices A1, A3 and A6). Tests with known expected values: `supabase/tests/analytics_redefense_rollback.sql`.
 
 ## 1. Scope, population and period
 
@@ -45,7 +45,7 @@ Source: `supabase/migrations/20261119170000`–`20261119170400` (170400: integra
 | Source | Can be filtered by |
 |---|---|
 | Technical assessments | COC, module (mission's module), mission |
-| Quizzes | COC (quiz COC), quiz |
+| Quizzes | COC (quiz COC), module (every module in `quiz_modules`; a quiz without rows covers the whole COC and matches no module filter), topic (`quizzes.topic_id`), quiz; never a mission |
 | Homework | COC (`coc_module_id`, or the module's / mission's COC), module (`module_id`, or the mission's module), mission (`mission_code`); unlinked homework is excluded under any curriculum filter |
 | Practice runs/completions | COC, module, mission |
 | Learning progress | COC, module, topic, mission |
@@ -62,13 +62,13 @@ Source: `supabase/migrations/20261119170000`–`20261119170400` (170400: integra
 | Assessments: average | mean of released `score_revisions.percentage` | same |
 | Assessments: competent rate | competent ÷ (competent + not yet competent) among released results | same |
 | Quizzes: submitted | counted quiz attempts in the period (see §5) | `quiz_attempts`, `quiz_versions`, `quiz_results` |
-| Quizzes: average | mean percent of scored counted attempts (`correct_count ÷ question_count × 100`) | `quiz_results` |
+| Quizzes: average | mean percent of scored counted attempts (see §5: released finalizations for instructor-release quizzes, `quiz_results` for immediate quizzes) | `quiz_results`, `quiz_result_finalizations` |
 | Quizzes: completion rate | completed (learner, quiz) pairs ÷ eligible (learner, quiz) pairs | `quiz_assignments`, `quiz_attempts` |
 | Homework: submitted / late | submissions in the period / of which `lateness_seconds > 0` | `homework_submissions` |
 | Homework: released / pending evaluation | submissions in the period whose status is `released` / `submitted`, `graded` or `finalized` (pending evaluation never enters an average) | `homework_submissions` |
 | Homework: missing | eligible pairs whose deadline passed in the period without a submission | `homework_assignments`, `homework_submissions` |
 | Homework: average | mean of `score ÷ max_score × 100` over **released** submissions in the period; graded or finalized grades, released work without a score and missing work are never turned into a number | `homework_submissions`, `homework_assignments` |
-| Evaluation status | technical assessment attempts and homework submitted in the period, by their current stage. Technical: `submitted`/`evaluated` → Evaluate, `under_review` → Finalize, `finalized` → Release, `released` → Released. Homework: `submitted` → Evaluate, `graded` → Finalize, `finalized` → Release, `released` → Released (the Evaluation Center mapping) | `attempts`, `homework_submissions` |
+| Evaluation status | technical assessment attempts, instructor-release quiz attempts and homework submitted in the period, by their current stage. Technical: `submitted`/`evaluated` → Evaluate, `under_review` → Finalize, `finalized` → Release, `released` → Released. Quizzes (`quiz_attempts.evaluation_status`): `pending` → Evaluate, `evaluated` → Finalize, `finalized` → Release, `released` → Released; immediate results (`not_required`) have no stage. Homework: `submitted` → Evaluate, `graded` → Finalize, `finalized` → Release, `released` → Released (the Evaluation Center mapping) | `attempts`, `quiz_attempts`, `homework_submissions` |
 | Missions: verified | server-verified practice completions (accepted contract version, `practice_completion_accepted`) in the period | `practice_mission_completions` |
 | Missions: completion to date | verified (learner, mission) pairs by the period end ÷ (population × missions in scope) | `practice_mission_completions`, `mission_curriculum_links` |
 | Missions: runs / successful / failed | recorded practice runs in the period / outcome `verified` / outcome `incomplete` | `practice_mission_runs` |
@@ -95,7 +95,7 @@ Assessment, quiz and homework results belong to the class of the attempt or subm
 
 ## 4. Learners and status rules
 
-Per learner: learning progress, performance score, quiz average, released/competent/pending assessments (`evaluated` and `under_review` are pending), verified missions, practice runs in the period, homework submitted/pending evaluation/missing/late, last activity.
+Per learner: learning progress, performance score, quiz average, released/competent/pending assessments (`evaluated` and `under_review` are pending), verified missions, practice runs in the period, homework submitted/pending evaluation/missing/late, last activity, and **Engagement** (slice A6): points to the period end (sum of `learner_point_events`), points in the period and the level from `public.gamification_level_for_points`. Engagement is reported in its own column and is never part of the performance score, the status rules or any competency figure. The learner profile adds the achievements earned and the five latest awards of the period.
 
 | Status | Rule (any reason triggers it) |
 |---|---|
@@ -108,13 +108,14 @@ Falling behind takes precedence over struggling; every matching reason is listed
 ## 5. Quizzes
 
 * Only quiz versions that were published count (`quiz_versions.published_at` set; status `published` or `retired`). Draft quizzes never appear.
-* Only submitted attempts count (`submitted`/`completed` with `submitted_at`). A submitted attempt without a `quiz_results` row is **pending** and excluded from averages.
+* Only submitted attempts count (`submitted`/`completed` with `submitted_at`).
+* **Scoring (slice A3).** *Immediate* quizzes (`evaluation_status = 'not_required'`) are scored from `quiz_results`: `objective_points ÷ max_points × 100` when points are recorded, otherwise `correct_count ÷ question_count × 100`. *Instructor-release* quizzes count only once released (`evaluation_status = 'released'` with a released `quiz_result_finalizations` row) and are scored from the finalization (`percent`, `total_points` of `max_points`). Attempts that are `pending`, `evaluated` or `finalized` are **pending evaluation**: counted as submitted and pending, never averaged, never in the distribution, highest or lowest. A submitted attempt without a result is pending as well.
 * One attempt per learner per quiz: the earliest submitted attempt (the server already enforces a single attempt; this also neutralises legacy duplicates).
 * **Participants**: counted attempts in the scoped classes and period. **Eligible**: distinct learners with an open assignment of the quiz. **Completion rate**: eligible learners who submitted ÷ eligible learners. A learner's single attempt completes the quiz in every class it is assigned to, but its score counts only for the class where it was taken.
 * **Average / highest / lowest**: over scored counted attempts.
 * **Distribution**: ten buckets `0-9`, `10-19`, …, `80-89`, `90-100` (100 % falls in `90-100`); bucket counts add up to the scored participants.
-* **Per question**: for each approved item of the counted versions, answered = answers in scored counted attempts, correct rate = correct ÷ answered.
-* **Results**: one row per learner — `scored`, `pending`, `not_submitted`, or `other_class` (taken in another class; score shown there).
+* **Per question**: for each approved item of the counted versions, answered = answers in scored counted attempts; objective items: correct rate = correct ÷ answered; scenario essays: no correct rate, the mean *current* essay score (latest `quiz_essay_scores` row per attempt and item, by `evaluated_at` then `sequence`, newest first) of the scored attempts and its share of the item points.
+* **Results**: one row per learner — `scored`, `pending` (with its Evaluation Center stage), `not_submitted`, or `other_class` (taken in another class; score shown there). Scores are points of the maximum: the finalization for released instructor-release results, objective points (or correct answers for results recorded before points) for immediate quizzes.
 
 ## 6. Missions and criteria
 
@@ -133,9 +134,11 @@ Falling behind takes precedence over struggling; every matching reason is listed
 
 An incomplete run never counts as a completion. Runs are recorded from the release of run tracking onward; completions verified earlier have no run rows.
 
+**Practice steps (slice A1)**, from `practice_mission_runs.step_results` of the runs in the period (one entry per contract phase except the review phase: `done`, `invalid`, `failed_checks`). Per mission and step: *runs* = runs that recorded the step; *missed* = runs in which the step was not completed **or** needed at least one incorrect attempt; *not completed* = runs that did not complete the step; *incorrect attempts per run* = mean of invalid actions + failed checks recorded for the step. *Most-missed steps* = up to three steps with any miss or incorrect attempt, by missed runs, then incorrect attempts per run, then step order. Step numbers and titles come from `practice_mission_contracts.step_titles`, a generated, titles-only projection of the contract phases (the contract definition, which holds the answer keys, stays unreadable for clients). The learner profile lists, for each recent run, the steps it missed.
+
 **Technical assessments by mission**: attempts (started or submitted in the period), submitted, released, competent, not yet competent, pending (submitted, `evaluated` or `under_review`, or `finalized`, and not yet released), average released percentage.
 
-**Criteria**: from released results only. *Assessment* criteria (`source: 'assessment'`): The released score revision's `criterion_values` are authoritative (they include instructor adjustments); `criterion_results` are the fallback for revisions without criterion values. Each learner counts once per criterion: their latest released result. *Average* = mean criterion score, *percent* = average ÷ criterion maximum × 100 (or the satisfied share when a criterion has no numeric maximum). *Strongest* = up to 3 highest percentages, *weakest* = up to 3 lowest (the two lists never overlap). *Homework* criteria (`source: 'homework'`, slice A4): each assignment criterion (`criteria[].id`, `max_points`) scored by `criterion_scores` of **released** submissions in the period; one value per learner (one submission per learner and homework); percent = average points ÷ `max_points`; satisfied counts do not apply (points-based). Simulation steps and essay rubric criteria are added after integration of slices A1 and A3.
+**Criteria**: from released results only. *Assessment* criteria (`source: 'assessment'`): The released score revision's `criterion_values` are authoritative (they include instructor adjustments); `criterion_results` are the fallback for revisions without criterion values. Each learner counts once per criterion: their latest released result. *Average* = mean criterion score, *percent* = average ÷ criterion maximum × 100 (or the satisfied share when a criterion has no numeric maximum). *Strongest* = up to 3 highest percentages, *weakest* = up to 3 lowest (the two lists never overlap). *Homework* criteria (`source: 'homework'`, slice A4): each assignment criterion (`criteria[].id`, `max_points`) scored by `criterion_scores` of **released** submissions in the period; one value per learner (one submission per learner and homework); percent = average points ÷ `max_points`; satisfied counts do not apply (points-based). *Simulation* criteria (`source: 'simulation'`, slice A1): rubric criteria whose evidence rule uses the `simulation_condition` operator; computed exactly like assessment criteria and reported with the steps they check (`evidence_rule.phase_ids` with their step numbers and titles). *Essay* criteria (`source: 'essay'`, slice A3): each rubric criterion of a scenario essay (`quiz_items.rubric`), scored by the *current* essay score — the latest `quiz_essay_scores` row per attempt and item, ordered by `evaluated_at` then `sequence`, newest first — of **released** quiz attempts submitted in the period; percent = average points ÷ the criterion's `max_points`; points-based (no satisfied counts).
 
 ## 7. Learning progress (shared WS3 methodology)
 
@@ -145,7 +148,7 @@ Instructor analytics: a module is complete when it has at least one required ite
 
 ## 8. Learner view (`get_my_performance`)
 
-The learner sees only their own rows: overall and per-COC learning progress (from `learner_module_states`: (completed topics + verified missions + passed COC quiz) ÷ (topics + missions + 1) per COC); competency per criterion of their **latest released result per mission** (outcome = released criterion observation); quiz scores of their completed attempts; homework submissions visible to them (A4: only `submitted` or `released`), with the score and its share of `max_score` only once released; every currently released assessment result; verified missions (accepted versions), recorded runs and best verified time per mission; and a `summary` (quiz average, released homework average, released/competent assessments, criteria achieved) shown in the Progress screen. Unreleased (pending) assessment results and unreleased homework grades never appear.
+The learner sees only their own rows: overall and per-COC learning progress (from `learner_module_states`: (completed topics + verified missions + passed COC quiz) ÷ (topics + missions + 1) per COC); competency per criterion of their **latest released result per mission** (outcome = released criterion observation); quiz scores of their visible results (immediate results, and instructor-release results only once released — scored like §5; points when the result records them). Quiz titles are not part of the payload: learners cannot read `quizzes` under RLS, so the app reads the titles in one call from its quiz list (`get_available_learner_quizzes`); homework submissions visible to them (A4: only `submitted` or `released`), with the score and its share of `max_score` only once released; every currently released assessment result; verified missions (accepted versions), recorded runs and best verified time per mission; and a `summary` (quiz average, released homework average, released/competent assessments, criteria achieved) shown in the Progress screen. Unreleased (pending) assessment results and unreleased homework grades never appear.
 
 ## 9. Real time
 

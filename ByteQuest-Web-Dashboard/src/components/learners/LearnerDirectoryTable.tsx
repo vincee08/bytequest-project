@@ -70,7 +70,7 @@ export function LearnerDirectoryTable({
   return (
     <section className="overflow-hidden rounded-xl border border-border bg-card" aria-label="Learner results">
       {result.rows.length ? (
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className="w-full min-w-[880px] text-left text-sm">
             <thead className="bg-muted/45 text-xs text-muted-foreground">
               <tr>
