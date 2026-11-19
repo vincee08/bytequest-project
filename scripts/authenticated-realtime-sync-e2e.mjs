@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import { appClientHeaders } from "./lib/app-client-version.mjs";
 import {
   allRemainingMissionPackages,
   buildRubricCriteria,
@@ -115,6 +116,7 @@ async function createIdentities() {
 
     const client = createClient(url, publishableKey, {
       auth: { autoRefreshToken: false, persistSession: false },
+      global: { headers: appClientHeaders() },
     });
     const signedIn = await client.auth.signInWithPassword({ email, password });
     if (signedIn.error || signedIn.data.user?.id !== created.data.user.id) {
