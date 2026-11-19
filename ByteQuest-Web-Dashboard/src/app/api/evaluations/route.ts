@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { activityActor, activityError, activityHeaders, activityWriteOriginAllowed } from '@/lib/activities/server';
+import { runQuizAction } from '@/lib/evaluations/quiz-actions';
 import {
-  evaluationActionSchema, evaluationErrorMessage, homeworkBulkResults, isMissingFunctionError, parseQueueQuery,
+  evaluationActionSchema, evaluationErrorMessage, homeworkBulkResults, parseQueueQuery,
   queueFilters, summarizeBulk, type BulkItemResult, type QueueResult,
 } from '@/lib/evaluations/requests';
 import { evaluationsClient } from '@/lib/evaluations/types';
@@ -114,21 +115,15 @@ export async function POST(request: Request) {
       return reply({ kind: body.kind, action, ...summarizeBulk(homeworkBulkResults(data)) });
     }
 
-    // Quiz essays: slice A3's service-only manage_quiz_evaluation.
-    const results: BulkItemResult[] = [];
-    for (const id of body.attempt_ids) {
-      const { data, error } = await service.rpc('manage_quiz_evaluation', {
-        p_actor: actor.id,
-        p_action: body.action,
-        p_payload: (body.action === 'finalize' ? { attempt_id: id } : { attempt_ids: [id] }) as Json,
-      });
-      if (error && isMissingFunctionError(error)) {
-        return reply({ error: 'Quiz essay evaluation is not available on this server yet. Technical assessments and homework still work.' }, 501);
-      }
-      const status = data && typeof data === 'object' && !Array.isArray(data) && typeof (data as { status?: unknown }).status === 'string'
-        ? (data as { status: string }).status : body.action === 'finalize' ? 'finalized' : 'released';
-      results.push(error ? { id, ok: false, error: itemError(error) } : { id, ok: true, status });
+    // Quiz essays: slice A3's service-only manage_quiz_evaluation (it rechecks
+    // that the actor teaches the class and owns the quiz). One attempt per call.
+    const quiz = await runQuizAction(async (action, payload) => {
+      const { data, error } = await service.rpc('manage_quiz_evaluation', { p_actor: actor.id, p_action: action, p_payload: payload as Json });
+      return { data, error };
+    }, body.action, body.attempt_ids);
+    if (quiz.unavailable) {
+      return reply({ error: 'Quiz essay evaluation is not available on this server yet. Technical assessments and homework still work.' }, 501);
     }
-    return reply({ kind: body.kind, action: body.action, ...summarizeBulk(results) });
+    return reply({ kind: body.kind, action: body.action, ...summarizeBulk(quiz.results) });
   } catch { return reply({ error: 'The evaluation could not be saved. Refresh to check its status before retrying.' }, 503); }
 }

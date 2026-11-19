@@ -130,11 +130,31 @@ const technicalMessages: Record<string, { error: string; status: number }> = {
   PROVISIONAL_REVISION_REQUIRED: { error: 'The automated evaluation for this attempt is missing.', status: 409 },
   CLASS_SCOPE_DENIED: { error: 'This attempt is not in one of your active classes.', status: 403 },
   INSTRUCTOR_REQUIRED: { error: 'Only the class instructor can evaluate this attempt.', status: 403 },
+  STAFF_REQUIRED: { error: 'The Evaluation Center is available to instructors and admins.', status: 403 },
+  INVALID_EVALUATION_STAGE: { error: 'Choose Evaluate, Finalize, Release or Released.', status: 422 },
+  // Slice A3: public.manage_quiz_evaluation (quiz essays, instructor release).
+  QUIZ_EVALUATION_SCOPE_DENIED: { error: 'This quiz attempt is not in your class, or the quiz belongs to another instructor.', status: 403 },
+  QUIZ_ESSAYS_NOT_SCORED: { error: 'Score every answered essay on the quiz results page before finalizing.', status: 409 },
+  QUIZ_RESULT_NOT_FINALIZED: { error: 'Finalize the quiz result before releasing it.', status: 409 },
+  QUIZ_EVALUATION_NOT_REQUIRED: { error: 'This quiz releases results immediately, so there is nothing to finalize.', status: 409 },
+  QUIZ_EVALUATION_STATE_INVALID: { error: 'This quiz result has moved to another stage. Refresh to see where it is.', status: 409 },
+  QUIZ_EVALUATION_SELECTION_INVALID: { error: 'Choose each quiz attempt once (up to 50 at a time).', status: 422 },
+  QUIZ_EVALUATION_ACTION_INVALID: { error: 'This quiz evaluation action is not supported.', status: 422 },
+  QUIZ_ESSAY_NOT_ANSWERED: { error: 'The learner left this essay unanswered; it counts as zero and cannot be given points.', status: 422 },
+  QUIZ_ESSAY_SCORE_INVALID: { error: 'Score each rubric criterion once, between 0 and its maximum points.', status: 422 },
+  // Named by the integration brief; slice A3 currently raises QUIZ_ESSAY_SCORE_INVALID for this case.
+  QUIZ_ESSAY_SCORE_OUT_OF_RANGE: { error: 'Score each rubric criterion once, between 0 and its maximum points.', status: 422 },
+  QUIZ_ESSAY_ITEM_NOT_FOUND: { error: 'That essay question is not part of this quiz attempt.', status: 404 },
+  QUIZ_ESSAY_FEEDBACK_TOO_LONG: { error: 'Essay feedback can be up to 5,000 characters.', status: 422 },
+  FINALIZED_QUIZ_RESULT_IS_IMMUTABLE: { error: 'A finalized quiz result cannot be changed.', status: 409 },
+  RELEASED_QUIZ_RESULT_IS_IMMUTABLE: { error: 'A released quiz result cannot be changed.', status: 409 },
 };
 
 /** Specific technical reason for an evaluation workflow error, or null. */
 export function evaluationErrorMessage(error: { code?: string; message?: string }) {
-  const code = Object.keys(technicalMessages).find((key) => error.message?.includes(key));
+  const message = error.message?.trim() ?? '';
+  // Exact codes first (RPC errors carry the bare code), then a contained code.
+  const code = technicalMessages[message] ? message : Object.keys(technicalMessages).find((key) => message.includes(key));
   return code ? technicalMessages[code] : homeworkErrorMessage(error);
 }
 
