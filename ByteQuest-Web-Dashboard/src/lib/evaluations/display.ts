@@ -24,6 +24,22 @@ export function queueActionLabel(stage: EvaluationStage, item: Pick<QueueItem, '
   return item.kind === 'quiz' ? 'Score essays' : 'Evaluate';
 }
 
+/**
+ * Release confirmation copy. Only homework releases send a learner
+ * notification (homework.released); technical and quiz results appear when
+ * the learner next opens or refreshes them.
+ */
+export function releaseConfirmationText(items: Pick<QueueItem, 'kind'>[]) {
+  const homework = items.some((item) => item.kind === 'homework');
+  const others = items.some((item) => item.kind !== 'homework');
+  const notice = homework && !others
+    ? 'Learners will see each released score and feedback immediately and receive a notification.'
+    : homework
+      ? 'Learners will see each released score and feedback immediately. Homework learners also receive a notification; quiz and technical results appear the next time learners open or refresh their results.'
+      : 'Learners will see each released score and feedback the next time they open or refresh their results.';
+  return `${notice} Release cannot be undone from this page.`;
+}
+
 /** Bulk Finalize/Release across mixed kinds: one request per kind with that kind's id field. */
 export function bulkRequestBodies(items: Pick<QueueItem, 'kind' | 'id'>[], action: 'finalize' | 'release') {
   const groups = new Map<EvaluationKind, string[]>();

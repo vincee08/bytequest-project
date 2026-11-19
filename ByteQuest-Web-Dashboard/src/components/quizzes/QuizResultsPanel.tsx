@@ -25,6 +25,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { itemTypeLabels, type RubricRow } from "@/lib/quizzes/authoring";
+import { formatDateTime } from "@/lib/analytics/format";
 import {
   evaluationStatusLabels,
   questionCorrectness,
@@ -391,7 +392,7 @@ export function QuizResultsPanel({
                   <p className="break-words text-sm font-medium">{attempt.learner}</p>
                   <p className="text-xs text-muted-foreground">
                     {attempt.classTitle} · v{attempt.versionNumber}
-                    {attempt.submittedAt ? ` · ${new Date(attempt.submittedAt).toLocaleString()}` : ""}
+                    {attempt.submittedAt ? ` · ${formatDateTime(attempt.submittedAt)}` : ""}
                   </p>
                   {attempt.status === "completed" && attempt.submissionKind !== "learner" ? (
                     <p className="text-xs font-medium text-amber-800 dark:text-amber-300">
@@ -573,7 +574,7 @@ function EssayScoreForm({
       <fieldset disabled={!editable || busy} className="space-y-3">
         <legend className="text-sm font-medium">
           Rubric · {total}/{essay.points} points
-          {essay.latest ? ` · last scored ${new Date(essay.latest.evaluatedAt).toLocaleString()} (${essay.scoreCount} in history)` : ""}
+          {essay.latest ? ` · last scored ${formatDateTime(essay.latest.evaluatedAt)} (${essay.scoreCount} in history)` : ""}
         </legend>
         {essay.rubric.map((row) => (
           <div key={row.id} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_7rem] sm:items-center">
