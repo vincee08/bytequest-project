@@ -2,7 +2,7 @@
 -- for quizzes in instructor-release mode, and the Evaluation Center queue item
 -- contract. Rollback-only with a controlled server clock.
 begin;
-select plan(62);
+select plan(68);
 
 create temp table activity_clock(at timestamptz);
 insert into activity_clock values ('2035-02-01 08:00:00+00');
@@ -12,26 +12,26 @@ language sql volatile security invoker set search_path = '' as $$ select at from
 
 create temp table qe as select
   gen_random_uuid() teacher, gen_random_uuid() other_teacher, gen_random_uuid() admin_user,
-  gen_random_uuid() l1, gen_random_uuid() l2, gen_random_uuid() l3, gen_random_uuid() class_a, gen_random_uuid() class_x,
+  gen_random_uuid() l1, gen_random_uuid() l2, gen_random_uuid() l3, gen_random_uuid() l4, gen_random_uuid() class_a, gen_random_uuid() class_x,
   (select id from public.coc_modules where coc_code = 'coc1') coc1,
   (select id from public.curriculum_modules where coc_code = 'coc1' and code = 'LO1.1') lo11,
   (select id from public.curriculum_modules where coc_code = 'coc1' and code = 'LO1.4') lo14,
   null::uuid quiz_e, null::uuid version_e, null::uuid e_mc, null::uuid e_tf, null::uuid e_essay, null::uuid asg_e,
   null::uuid quiz_r, null::uuid version_r, null::uuid r_tf, null::uuid asg_r,
   null::uuid quiz_t, null::uuid version_t, null::uuid t_mc, null::uuid t_essay, null::uuid asg_t,
-  null::uuid a1, null::uuid a2, null::uuid a3, null::jsonb result_pending, null::jsonb result_released;
+  null::uuid a1, null::uuid a2, null::uuid a3, null::uuid a4, null::jsonb result_pending, null::jsonb result_released;
 insert into auth.users(id,instance_id,aud,role,email,encrypted_password,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
 select id,'00000000-0000-0000-0000-000000000000'::uuid,'authenticated','authenticated',id||'@quiz-evaluation.invalid','',
   '{"provider":"email","providers":["email"]}'::jsonb, jsonb_build_object('full_name', name), now(), now()
 from qe cross join lateral (values (teacher,'Eval Teacher'),(other_teacher,'Other Teacher'),(admin_user,'Eval Admin'),
-  (l1,'Learner One'),(l2,'Learner Two'),(l3,'Learner Three')) ids(id, name);
+  (l1,'Learner One'),(l2,'Learner Two'),(l3,'Learner Three'),(l4,'Learner Four')) ids(id, name);
 update public.profiles set role = 'instructor' where user_id in (select teacher from qe union select other_teacher from qe);
 update public.profiles set role = 'admin' where user_id = (select admin_user from qe);
 insert into public.classes(id,title,class_code,instructor_id,created_by)
 select class_a,'Evaluation A','QEA-'||left(class_a::text,8),teacher,teacher from qe union all
 select class_x,'Other class','QEX-'||left(class_x::text,8),other_teacher,other_teacher from qe;
 insert into public.class_memberships(class_id,learner_id,enrolled_by)
-select class_a,id,teacher from qe cross join lateral (values (l1),(l2),(l3)) ids(id);
+select class_a,id,teacher from qe cross join lateral (values (l1),(l2),(l3),(l4)) ids(id);
 grant all on qe to authenticated, service_role;
 
 select set_config('request.jwt.claim.sub', (select teacher::text from qe), true);
@@ -250,6 +250,49 @@ select is((select count(*)::int from jsonb_array_elements(public.quiz_evaluation
 select is((select count(*)::int from jsonb_array_elements(public.quiz_evaluation_queue_items('released', '{}')) item where item->>'id' = qe.a1::text), 1,
   'released attempts appear in the released stage') from qe;
 reset role;
+-- Two scores recorded in one transaction share a timestamp; the second one is
+-- current on every read path. The second row gets the smallest possible id, so
+-- an id tie-break would pick the first row: only insertion order decides.
+select set_config('request.jwt.claim.sub', (select l4::text from qe), true);
+set local role authenticated;
+update qe set a4 = (public.start_learner_quiz(asg_e, gen_random_uuid())->>'attempt_id')::uuid;
+select public.save_learner_quiz_answer(a4, e_mc, 'Wrist strap') from qe;
+select public.save_learner_quiz_answer(a4, e_tf, 'True') from qe;
+select public.save_learner_quiz_answer(a4, e_essay, 'Strap on, lever up, align the triangle, seat it, lever down.') from qe;
+select public.submit_learner_quiz(a4, gen_random_uuid()) from qe;
+reset role;
+set local role service_role;
+select public.manage_quiz_evaluation(teacher, 'score_essay', jsonb_build_object('attempt_id', a4, 'item_id', e_essay,
+  'criterion_scores', jsonb_build_object('C1', 1, 'C2', 1), 'feedback', 'First pass.')) from qe;
+reset role;
+insert into public.quiz_essay_scores (id, attempt_id, item_id, criterion_scores, total, feedback, evaluated_by, evaluated_at)
+select '00000000-0000-4000-8000-000000000001', a4, e_essay, '{"C1":4,"C2":6}', 10, 'Second pass is current.', teacher,
+  (select s.evaluated_at from public.quiz_essay_scores s where s.attempt_id = qe.a4) from qe;
+select is((select count(distinct evaluated_at)::int || '/' || count(*) from public.quiz_essay_scores where attempt_id = qe.a4), '1/2',
+  'both scores of this transaction share one timestamp') from qe;
+select is((private.quiz_attempt_points(a4)->>'essay_points')::numeric, 10::numeric,
+  'two scores in one transaction resolve to the second one (finalize totals)') from qe;
+select set_config('request.jwt.claim.sub', (select teacher::text from qe), true);
+set local role authenticated;
+select is((select (item->>'score')::numeric from jsonb_array_elements(public.quiz_evaluation_queue_items('finalize', '{}')) item where item->>'id' = qe.a4::text),
+  13::numeric, 'two scores in one transaction resolve to the second one (queue score)') from qe;
+-- The dashboard instructor view reads score history with this ordering.
+select is((select s.feedback || '|' || s.total from public.quiz_essay_scores s where s.attempt_id = qe.a4
+  order by s.evaluated_at desc, s.sequence desc limit 1), 'Second pass is current.|10',
+  'two scores in one transaction resolve to the second one (instructor score history)') from qe;
+reset role;
+set local role service_role;
+select is((public.manage_quiz_evaluation(teacher, 'finalize', jsonb_build_object('attempt_id', a4))->>'total_points')::numeric, 13::numeric,
+  'two scores in one transaction resolve to the second one (final total)') from qe;
+select public.manage_quiz_evaluation(teacher, 'release', jsonb_build_object('attempt_ids', jsonb_build_array(a4))) from qe;
+reset role;
+select set_config('request.jwt.claim.sub', (select l4::text from qe), true);
+set local role authenticated;
+select is((select r->>'feedback' || '|' || (r->>'points_awarded') || '|' || (r->'rubric'->1->>'points')
+  from jsonb_array_elements(public.get_learner_quiz_result(qe.a4)->'item_results') r where r->>'type' = 'scenario_essay'),
+  'Second pass is current.|10|6', 'two scores in one transaction resolve to the second one (released learner result)') from qe;
+reset role;
+
 select ok((select relrowsecurity from pg_class where oid = 'public.quiz_essay_scores'::regclass)
   and (select relrowsecurity from pg_class where oid = 'public.quiz_result_finalizations'::regclass), 'evaluation tables keep RLS enabled');
 
