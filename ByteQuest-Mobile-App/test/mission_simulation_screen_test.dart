@@ -601,11 +601,14 @@ void main() {
     ) async {
       final definition = MissionSimulationDefinitions.byId('coc1_m1');
       final store = _MemoryStore();
+      // Any transport, such as a class-practice attempt, receives the marker.
+      final transport = _MemoryTransport();
 
       await tester.pumpWidget(
         _routeHost(
           definition,
-          controller: _controller(definition, store: store),
+          controller:
+              _controller(definition, store: store, transport: transport),
         ),
       );
       await tester.tap(find.text('Open mission'));
@@ -623,6 +626,11 @@ void main() {
 
       expect(find.byType(MissionSimulationScreen), findsNothing);
       expect(store.clearCount, 1);
+      expect(transport.appendedActions.last.actionType,
+          MissionRuntimeController.progressDiscardedActionType,
+          reason: 'the discard marker goes through the mission transport');
+      expect(transport.appendedActions.last.value['reason'],
+          'learner_confirmed_discard');
     });
 
     testWidgets('does not force landscape and restores orientations on exit', (

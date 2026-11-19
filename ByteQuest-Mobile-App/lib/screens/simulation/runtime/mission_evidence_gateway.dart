@@ -60,6 +60,30 @@ final class MissionEvidenceGateway {
     });
   }
 
+  /// Sends [actions] strictly in the given (dispatch) order. The server
+  /// replays evidence in insertion order, so the first failed write stops the
+  /// run: no later action may reach the server before an earlier one.
+  /// Actions the server already holds are skipped, so a write whose response
+  /// was lost is never duplicated. [onAcknowledged] is called for every
+  /// action known to be on the server, also when a later write then fails.
+  Future<void> recordInOrder(
+    List<MissionEvidenceAction> actions, {
+    required void Function(String clientActionId) onAcknowledged,
+  }) {
+    return _enqueue(() async {
+      final records = await _transport.readAcknowledgedActions();
+      final acknowledged =
+          records.map((record) => record.action.clientActionId).toSet();
+      for (final action in actions) {
+        if (!acknowledged.contains(action.clientActionId)) {
+          await _transport.append(action);
+          acknowledged.add(action.clientActionId);
+        }
+        onAcknowledged(action.clientActionId);
+      }
+    });
+  }
+
   Future<Set<String>> reconcile(Iterable<MissionEvidenceAction> actions) {
     return _enqueue(() async {
       final records = await _transport.readAcknowledgedActions();

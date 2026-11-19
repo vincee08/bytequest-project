@@ -1657,10 +1657,10 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
         return;
       }
       try {
-        await _practiceEvidenceService?.markProgressDiscarded(
-          phaseId: _state.currentPhaseId ?? widget.definition.phases.first.id,
-        );
-        await _controller.reset(_initialState);
+        // The marker goes through the controller's own evidence gateway, so a
+        // class-practice attempt records it too, not only the practice
+        // transport; the next open then starts a clean run.
+        await _controller.discardProgress(_initialState);
       } catch (_) {
         if (mounted) {
           setState(() {
