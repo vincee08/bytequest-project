@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { activityActor, activityError, activityHeaders, activityWriteOriginAllowed } from '@/lib/activities/server';
 import { homeworkActionSchema, homeworkErrorMessage, learnerRecordView, learnerSubmissionView, staffSubmissionView } from '@/lib/evaluations/homework';
+import { homeworkBulkResults } from '@/lib/evaluations/requests';
 import { evaluationsClient } from '@/lib/evaluations/types';
 import type { Json } from '@/types/database.generated';
 
@@ -80,6 +81,13 @@ export async function POST(request: Request) {
     if (error) { const result = homeworkErrorMessage(error) ?? activityError(error); return reply({ error: result.error }, result.status); }
     // Learner replies (submit and its idempotent retries) never carry an
     // unreleased grade, whatever the RPC returns.
-    return reply({ record: actor.role === 'learner' ? learnerRecordView(data) : data });
+    if (actor.role === 'learner') return reply({ record: learnerRecordView(data) });
+    // Bulk finalize/release items carry sqlerrm/sqlstate on failure: map them
+    // as /api/evaluations does, so raw database text never reaches the browser.
+    if (action === 'finalize' || action === 'release') {
+      const results = homeworkBulkResults(data).map(({ id, ...item }) => ({ submission_id: id, ...item }));
+      return reply({ record: { results } });
+    }
+    return reply({ record: data });
   } catch { return reply({ error: 'Homework could not be saved. Refresh to check before retrying.' }, 503); }
 }
