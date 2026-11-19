@@ -29,7 +29,8 @@ export async function uploadAction(
 ) {
   return (client as unknown as SupabaseClient<UploadDatabase>).rpc(
     "manage_file_upload",
-    { p_actor: actor, p_action: action, p_spec: spec },
+    // A NULL actor is handled inside manage_file_upload; generated RPC types cannot express nullable parameters.
+    { p_actor: actor as string, p_action: action, p_spec: spec },
   );
 }
 export function uploadIdentity(spec: object) {

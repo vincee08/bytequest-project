@@ -66,8 +66,9 @@ export async function POST(request: Request) {
         p_actor: actor.id,
         p_attempt_id: body.attempt_id,
         p_criterion_overrides: { criteria: body.criterion_overrides ?? [], ...(body.outcome ? { outcome: body.outcome } : {}) },
-        p_reason: body.reason || null,
-        p_note: body.note || null,
+        // NULL reason/note are valid SQL arguments; generated RPC types cannot express nullable parameters.
+        p_reason: (body.reason || null) as string,
+        p_note: (body.note || null) as string,
       });
       if (error) { const mapped = failure(error); return reply({ error: mapped.error }, mapped.status); }
       return reply({ kind: body.kind, action: body.action, record: data });
