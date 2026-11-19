@@ -26,7 +26,7 @@ const assemblyMigrationFileName =
 /// definition changes this digest: publish a new contract migration (never
 /// edit an applied one) and update the digest together.
 const assemblyMigrationSha256 =
-    'PENDING';
+    '1682b419afffb2fe1bfdf72c460a61c3ea57f55efd167a58f9cad44fceec1e78';
 
 String _contractJson(MissionSimulationDefinition definition) =>
     jsonEncode(definition.toJson()).replaceAll("'", "''");
@@ -142,7 +142,9 @@ void main(List<String> args) {
     return;
   }
   if (args.length == 2 && args.first == '--check-assembly-migration') {
-    final committed = File(args[1]).readAsStringSync();
+    // Git may check the file out with CRLF line endings on Windows.
+    final committed =
+        File(args[1]).readAsStringSync().replaceAll('\r\n', '\n');
     final expected = assemblyContractMigrationSql();
     final digest = assemblyContractMigrationDigest();
     if (committed != expected || digest != assemblyMigrationSha256) {
