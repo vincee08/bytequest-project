@@ -73,7 +73,7 @@ export function AnalyticsFilterBar({
           <RotateCcw className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />Clear filters
         </Button>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-8">
+      <div className="grid grid-cols-2 gap-x-2.5 gap-y-3 sm:gap-3 lg:grid-cols-4 2xl:grid-cols-8">
         {show("classId") ? (
           <Field label="Class">
             <select className={SELECT_CLASS} value={query.classId ?? ""} disabled={pending} onChange={(event) => change("classId", event.target.value)}>
