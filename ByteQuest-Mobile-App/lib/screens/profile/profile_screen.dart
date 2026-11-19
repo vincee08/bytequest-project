@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/learner_ui.dart';
+import '../../data/rewards_content_data.dart';
 import '../../models/profile_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/mission_service.dart';
@@ -140,7 +141,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     ),
                                     const SizedBox(height: 5),
                                     Text(
-                                      'Open Progress for Instructor-released results, or Achievements for genuinely earned records. Unapproved legacy XP, streak, and badge counters are not displayed.',
+                                      RewardsContentData.profileRecordNote,
                                       style: AppTheme.bodySmall.copyWith(
                                         color: AppTheme.textMedium,
                                         height: 1.45,
@@ -170,7 +171,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
-                                  'Gamification is motivational only and never changes an Instructor-released competency result.',
+                                  RewardsContentData.profileMotivationNote,
                                   style: AppTheme.bodySmall.copyWith(
                                     color: AppTheme.textDark,
                                   ),
