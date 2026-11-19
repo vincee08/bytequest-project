@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { PasswordInput } from "./PasswordInput";
 import { FormErrorMessage } from "./FormErrorMessage";
 import { createClient } from "@/lib/supabase/client";
+import { endRefusedSignIn } from "@/lib/auth/refused-sign-in";
 
 const loginSchema = z.object({
   email: z.string().trim().email("Enter a valid email address."),
@@ -59,17 +60,17 @@ export function LoginForm() {
         .single();
 
       if (profileError || !profile) {
-        await supabase.auth.signOut();
+        await endRefusedSignIn(supabase.auth);
         throw new Error("Your application profile is missing. Contact an administrator.");
       }
 
       if (profile.status !== "active") {
-        await supabase.auth.signOut();
+        await endRefusedSignIn(supabase.auth);
         throw new Error("This account is not active. Contact an administrator.");
       }
 
       if (profile.role !== "admin" && profile.role !== "instructor") {
-        await supabase.auth.signOut();
+        await endRefusedSignIn(supabase.auth);
         throw new Error("Learner accounts must use the ByteQuest mobile application.");
       }
 
