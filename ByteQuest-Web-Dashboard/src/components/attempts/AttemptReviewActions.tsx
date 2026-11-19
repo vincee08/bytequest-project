@@ -71,7 +71,7 @@ export function FinalizeAttemptForm({
     );
     const changed = outcome !== provisional.outcome || totalsChanged;
     if (changed && reason.trim().length < 5) {
-      toast.error("A clear reason is mandatory when changing the provisional result.");
+      toast.error("A clear reason is mandatory when changing the recorded evaluation.");
       return;
     }
 
@@ -92,7 +92,7 @@ export function FinalizeAttemptForm({
       return;
     }
 
-    toast.success(changed ? "Adjustment recorded and result finalized." : "Result finalized.");
+    toast.success(changed ? "Final adjustment recorded and result finalized. Release it next." : "Result finalized. Release it next.");
     router.refresh();
   };
 
@@ -100,7 +100,7 @@ export function FinalizeAttemptForm({
     <form onSubmit={handleSubmit} className="grid gap-4 sm:grid-cols-2">
       <div className="rounded-lg border border-border bg-muted/25 p-4 sm:col-span-2">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Automated provisional evidence summary
+          Recorded evaluation summary
         </p>
         <div className="mt-3 grid gap-3 sm:grid-cols-3">
           <div>
@@ -116,7 +116,7 @@ export function FinalizeAttemptForm({
             </p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Automated outcome</p>
+            <p className="text-xs text-muted-foreground">Recorded outcome</p>
             <p className="mt-1 text-sm font-semibold capitalize">
               {provisional.outcome.replaceAll("_", " ")}
             </p>
@@ -130,7 +130,7 @@ export function FinalizeAttemptForm({
         <div className="space-y-3 sm:col-span-2" aria-label="Criterion score correction">
           <div>
             <p className="text-sm font-semibold">Criterion-level correction</p>
-            <p className="mt-1 text-xs text-muted-foreground">Change only a criterion whose evidence was reviewed incorrectly. The technical score is recalculated from the approved rubric; the original evaluation stays in history.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Change only a criterion whose evidence was reviewed incorrectly. The technical score is recalculated from the approved rubric; earlier evaluations stay in history.</p>
           </div>
           {criteria.map((criterion) => {
             const original = originalById.get(criterion.id);
@@ -169,9 +169,9 @@ export function FinalizeAttemptForm({
           </SelectContent>
         </Select>
       </div>
-      <div className="space-y-2 sm:col-span-2"><Label htmlFor="adjustment-reason">Adjustment reason</Label><Textarea id="adjustment-reason" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Required only if any provisional value is changed" rows={3} /></div>
+      <div className="space-y-2 sm:col-span-2"><Label htmlFor="adjustment-reason">Adjustment reason</Label><Textarea id="adjustment-reason" value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Required only if you change the recorded evaluation" rows={3} /></div>
       <div className="space-y-2 sm:col-span-2"><Label htmlFor="review-remarks">Instructor remarks</Label><Textarea id="review-remarks" value={remarks} onChange={(event) => setRemarks(event.target.value)} rows={3} /></div>
-      <div className="sm:col-span-2"><Button type="submit" disabled={submitting}>{submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Finalize result</Button></div>
+      <div className="sm:col-span-2"><Button type="submit" className="min-h-11" disabled={submitting}>{submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Finalize result</Button></div>
     </form>
   );
 }
@@ -200,7 +200,7 @@ export function ReleaseAttemptForm({ attemptId }: { attemptId: string }) {
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
       <div className="space-y-2"><Label htmlFor="release-reason">Release note (optional)</Label><Textarea id="release-reason" value={reason} onChange={(event) => setReason(event.target.value)} rows={3} /></div>
-      <Button type="submit" disabled={submitting}>{submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Release final result</Button>
+      <Button type="submit" className="min-h-11" disabled={submitting}>{submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}Release final result</Button>
     </form>
   );
 }

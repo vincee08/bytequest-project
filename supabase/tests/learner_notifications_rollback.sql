@@ -2,7 +2,8 @@
 -- isolated-QA runner. Reuses only its temporary actors/records and server clock.
 select pg_temp.assert((select count(*)=6 from public.notifications where event_key like 'quiz.assigned:%' and metadata->>'class_id' in(class_a::text,class_b::text)), 'quiz assignments notify exactly eligible class learners') from activity_test;
 select pg_temp.assert((select count(*)=3 from public.notifications where event_key='homework.publish:'||homework::text), 'homework publication notifies enrolled learners') from activity_test;
-select pg_temp.assert((select count(*)=1 from public.notifications where event_key='homework.graded:'||submission_b::text and user_id=learner_b), 'grading notifies only the submitted learner') from activity_test;
+select pg_temp.assert((select count(*)=1 from public.notifications where event_key='homework.released:'||submission_b::text and user_id=learner_b), 'releasing a grade notifies only the submitted learner') from activity_test;
+select pg_temp.assert((select count(*)=0 from public.notifications where event_key='homework.graded:'||submission_b::text), 'saving a draft grade sends no notification') from activity_test;
 select pg_temp.assert((select count(*)=3 from public.notifications where event_key like 'quiz.reopened:'||assignment_a::text||':%' and metadata->>'class_id'=class_a::text), 'reopening notifies only the selected class') from activity_test;
 select pg_temp.assert((select count(*)=0 from public.notifications where user_id in(outsider,teacher,foreign_teacher)), 'no unrelated learner or instructor notifications') from activity_test;
 -- Duplicate delivery/repeated publication does not create another notification.
