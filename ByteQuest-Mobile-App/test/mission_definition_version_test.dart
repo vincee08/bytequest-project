@@ -44,6 +44,18 @@ class _ServerTransport implements MissionEvidenceTransport {
           ];
 }
 
+/// The class-practice attempt transport keeps its whole timeline, markers
+/// included, and returns all of it on restore (re-review N2).
+class _AttemptTransport extends _ServerTransport {
+  _AttemptTransport(super.acknowledged);
+
+  @override
+  Future<void> append(MissionEvidenceAction action) async {
+    await super.append(action);
+    acknowledged.add(action);
+  }
+}
+
 MissionEvidenceAction _action(String missionId, String phaseId, String type,
         Map<String, dynamic> value,
         {String? target, String id = 'v2-1'}) =>
@@ -60,11 +72,12 @@ MissionEvidenceAction _action(String missionId, String phaseId, String type,
 var _userCount = 0;
 
 class _Harness {
-  _Harness(this.definition, this.transport);
+  _Harness(this.definition, this.transport, {String? userId})
+      : userId = userId ?? 'version-qa-${_userCount++}';
 
   final MissionSimulationDefinition definition;
   final _ServerTransport transport;
-  final userId = 'version-qa-${_userCount++}';
+  final String userId;
   late final controller = MissionRuntimeController(
     userId: userId,
     initialState: MissionRuntimeState.initial(definition.id,
@@ -244,5 +257,62 @@ void main() {
     expect(find.text(MissionContentData.missionUpdateFailed), findsOneWidget);
     expect(find.byKey(const ValueKey('mission-updated-notice')), findsNothing);
     expect(harness.controller.state.placements, isEmpty);
+  });
+
+  testWidgets(
+      'unsent actions of the earlier version are sent before the restart marker',
+      (tester) async {
+    final harness = _Harness(coc1M2, _ServerTransport([]));
+    final unsent = _action('coc1_m2', 'coc1_m2_p2', 'component_drop_attempted', {
+      'runtime_action_type': 'placement_attempted',
+      'item_id': 'cpu',
+      'destination_id': 'cpu_socket',
+    }, target: 'cpu_socket', id: 'v2-unsent');
+    await harness.saveSnapshot(MissionRuntimeState.initial('coc1_m2')
+        .copyWith(currentPhaseId: 'coc1_m2_p2', pendingEvidence: [unsent]));
+
+    await _pump(tester, harness);
+
+    expect(harness.transport.appended.map((action) => action.clientActionId),
+        ['v2-unsent', harness.transport.appended.last.clientActionId]);
+    expect(harness.transport.appended.last.actionType,
+        'practice_progress_discarded');
+    expect(find.byKey(const ValueKey('mission-updated-notice')),
+        findsOneWidget);
+  });
+
+  testWidgets(
+      'a class practice attempt restarted on the new version restarts only once',
+      (tester) async {
+    // The attempt transport returns every action, the marker included.
+    final transport = _AttemptTransport([
+      _action('coc1_m2', 'coc1_m2_p2', 'component_drop_attempted', {
+        'runtime_action_type': 'placement_attempted',
+        'item_id': 'motherboard',
+        'destination_id': 'motherboard_area',
+        'compatible': true,
+      }, target: 'motherboard_area'),
+    ]);
+    final first = _Harness(coc1M2, transport);
+    await _pump(tester, first);
+    expect(find.byKey(const ValueKey('mission-updated-notice')),
+        findsOneWidget);
+    expect(transport.appended, hasLength(1));
+    await tester.tap(find.byKey(const ValueKey('mission-updated-dismiss')));
+    await tester.pumpAndSettle();
+    final stamped = await first.savedSnapshot();
+    expect(stamped?.definitionVersion,
+        MissionSimulationDefinitions.coc1M2AssemblyContractVersion,
+        reason: 'the new version stamp is saved right after the restart');
+
+    // The learner reopens the same attempt.
+    await tester.pumpWidget(const SizedBox());
+    final second = _Harness(coc1M2, transport, userId: first.userId);
+    await _pump(tester, second);
+    expect(find.byKey(const ValueKey('mission-updated-notice')), findsNothing);
+    expect(transport.appended, hasLength(1),
+        reason: 'no second restart marker');
+    expect(second.controller.state.placements, isEmpty);
+    expect(tester.takeException(), isNull);
   });
 }

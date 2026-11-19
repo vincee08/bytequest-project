@@ -23,6 +23,25 @@ abstract final class MissionPhaseCompletionPolicy {
     required String? target,
     required Map<String, dynamic> value,
   }) {
+    if (state.mode == MissionRuntimeMode.assessment &&
+        emittedActionType == 'sequence_reordered' &&
+        interactionFor(phase) == InteractionFamily.sequence) {
+      // Assessment: the confirmed order is the answer, right or wrong. The
+      // learner may continue only after confirming, and never because the
+      // current order happens to be valid.
+      final confirmed = value['confirmed'] == true &&
+          _containsAll(
+            state.sequenceOrder,
+            _requiredIds(
+              phase.presentation['items'],
+              fallback: phase.availableObjectIds,
+            ),
+          );
+      return state.copyWith(interactionCompletedPhaseIds: {
+        ...state.interactionCompletedPhaseIds.where((id) => id != phase.id),
+        if (confirmed) phase.id,
+      });
+    }
     if (value['simulation_valid'] == false) {
       return state.copyWith(interactionCompletedPhaseIds: {
         ...state.interactionCompletedPhaseIds.where((id) => id != phase.id),

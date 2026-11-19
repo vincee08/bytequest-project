@@ -214,7 +214,7 @@ class _ClassDetailsScreenState extends State<ClassDetailsScreen> {
         SnackBar(
             content: Text(error is AssessmentUpdateRequiredException
                 ? MissionContentData.assessmentUpdateRequired
-                : 'This activity could not be opened. Try again.')),
+                : MissionContentData.activityOpenFailed)),
       );
       debugPrint('Class activity launch failed: $error');
     } finally {

@@ -174,10 +174,11 @@ List<Map<String, dynamic>> _caseOperations() => [
           ]),
     ];
 
-/// One POST check. [counts] is the assessment target (an item, operation or
-/// cable key of the replay) that a failing check charges: every completed
-/// POST with this check failing adds one incorrect attempt to the step that
-/// owns the target, so a mistake fixed after a failed POST still counts.
+/// One POST check. [counts] names the assessment step a failing check charges
+/// (a key in that step's counted targets). Every completed POST charges each
+/// step with a failing check once, so a mistake fixed after a failed POST
+/// still counts; reseating the parts it examines is the repair, not another
+/// correction.
 Map<String, dynamic> _postCheck(
         String id,
         String label,
@@ -192,63 +193,63 @@ List<Map<String, dynamic>> _postChecks() => [
           'psu_mounting',
           'Power-supply mounting',
           [_eq('setting.psu_fastened', true)],
-          'operation:fasten_psu',
+          'step:psu',
           'Power supply fastened in its bay.',
           'Pre-power inspection: the power supply moves in its bay. Its screws are not fastened.'),
       _postCheck(
           'board_mounting',
           'Motherboard mounting',
           [_eq('setting.board_fastened', true)],
-          'operation:fasten_motherboard',
+          'step:board',
           'Motherboard fastened on its standoffs.',
           'Pre-power inspection: the motherboard moves on its standoffs. Its screws are not fastened.'),
       _postCheck(
           'drive_mounting',
           'Drive mounting',
           [_eq('setting.drive_fastened', true)],
-          'operation:fasten_drive',
+          'step:drive',
           'Drive fastened in its bay.',
           'Pre-power inspection: the drive moves in its bay. Its screws are not fastened.'),
       _postCheck(
           'power_switch',
           'Power button',
           [_eq('link.front_panel>board_front_panel', true)],
-          'connection:front_panel',
+          'step:data_cables',
           'The case power button starts the system; the power LED lights.',
           'No power-on: pressing the case power button does nothing. The front-panel switch is not connected to F_PANEL.'),
       _postCheck(
           'cpu_power',
           'CPU power',
           [_eq('link.eps_8pin>board_eps8', true)],
-          'connection:eps_8pin',
+          'step:power_cables',
           '8-pin EPS CPU power present.',
           'No POST — CPU power not detected. Fans spin but the CPU debug LED stays lit.'),
       _postCheck(
           'cpu_detection',
           'Processor detection',
           [_eq('setting.cpu_lever', 'closed')],
-          'operation:close_cpu_lever',
+          'step:cpu',
           'Processor detected.',
           'No POST — CPU debug LED lit. The processor is not held against the socket contacts.'),
       _postCheck(
           'cpu_fan',
           'CPU fan',
           [_eq('link.cooler_fan>cpu_fan_header', true)],
-          'connection:cooler_fan',
+          'step:cooling',
           'CPU_FAN reports 1450 RPM.',
           'CPU fan error — the CPU_FAN header reports 0 RPM.'),
       _postCheck(
           'cpu_temperature',
           'CPU temperature',
           [_eq('setting.thermal_compound', true)],
-          'operation:apply_thermal_compound',
+          'step:cooling',
           'CPU temperature stable at 38 °C.',
           'CPU over-temperature warning — 96 °C within 20 seconds of power-on.'),
       _postCheck(
           'memory_detection',
           'Memory detection',
           [_eq('setting.dimm_latches', 'closed')],
-          'operation:close_dimm_latches',
+          'step:memory',
           '16 GB DDR4 detected.',
           'Memory not detected — DRAM debug LED lit and the board repeats its memory beep code.'),
       _postCheck(
@@ -266,21 +267,21 @@ List<Map<String, dynamic>> _postChecks() => [
               'value': ['dimm_a2', 'dimm_b2'],
             },
           ],
-          'item:ram_1',
+          'step:memory',
           'Dual-channel mode: modules in DIMM_A2 and DIMM_B2 as the board manual specifies.',
           'Memory running in single-channel mode — the modules are not in the DIMM_A2 and DIMM_B2 slots the board manual specifies for two modules.'),
       _postCheck(
           'drive_power',
           'Drive power',
           [_eq('link.sata_power>drive_power', true)],
-          'connection:sata_power',
+          'step:power_cables',
           'The drive spins up.',
           'No boot device found — the drive does not spin up. SATA power is not connected.'),
       _postCheck(
           'boot_device',
           'Boot device',
           [_eq('link.sata_data>drive_data', true)],
-          'connection:sata_data',
+          'step:data_cables',
           'SATA drive detected on port 0; ready to boot installation media.',
           'No boot device found — the drive spins but is not detected. The SATA data cable is not connected.'),
     ];

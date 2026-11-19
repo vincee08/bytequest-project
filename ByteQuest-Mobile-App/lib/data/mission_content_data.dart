@@ -823,11 +823,19 @@ class MissionContentData {
   static const assessmentReadingNominal = 'Operating normally';
   static const assessmentReadingFault = 'Fault detected';
 
-  /// COC1 M2 power-on readouts in assessment: what the technician observes.
-  /// Two causes may share one symptom (both CPU checks show the debug LED),
-  /// so the learner diagnoses the assembly instead of reading the answer.
+  /// Assessment readouts that state what the technician observes, keyed
+  /// `<phase>.<check>`: the COC1 M2 power-on test, and diagnostic traces whose
+  /// result is the finding itself. Two causes may share one symptom (both CPU
+  /// checks show the debug LED), so the learner diagnoses instead of reading
+  /// the answer. Other checks read [assessmentReadingNominal] or
+  /// [assessmentReadingFault].
   static const Map<String, ({String label, String nominal, String fault})>
-      assemblyPostSymptoms = {
+      assessmentReadingSymptoms = {
+    'coc4_m3_p4.route': (
+      label: 'Route trace',
+      nominal: 'Gateway 192.168.1.1 replies; hop 2 times out.',
+      fault: 'No request has been traced yet.',
+    ),
     'coc1_m2_p5.psu_mounting': (
       label: 'Pre-power inspection',
       nominal: 'Power supply secure.',
@@ -892,14 +900,14 @@ class MissionContentData {
 
   static String assessmentReading(
       String phaseId, String? checkId, bool operating) {
-    final symptom = assemblyPostSymptoms['$phaseId.$checkId'];
+    final symptom = assessmentReadingSymptoms['$phaseId.$checkId'];
     if (symptom != null) return operating ? symptom.nominal : symptom.fault;
     return operating ? assessmentReadingNominal : assessmentReadingFault;
   }
 
   static String assessmentReadingLabel(
           String phaseId, String? checkId, String label) =>
-      assemblyPostSymptoms['$phaseId.$checkId']?.label ?? label;
+      assessmentReadingSymptoms['$phaseId.$checkId']?.label ?? label;
 
   // A practice session saved for an earlier version of a mission.
   static const missionUpdatedTitle = 'Mission updated';
@@ -964,6 +972,35 @@ class MissionContentData {
       'No complete test circuit is connected. Connect both endpoints before interpreting continuity.';
   static const connectedToolReading =
       'A test circuit is connected. Run the wire-map procedure to inspect each conductor.';
+
+  // Assessment mode: what the tool shows, without the next step.
+  static const Map<String, String> assessmentToolObservations = {
+    'anti_static_strap':
+        'The wrist strap clips to the bare chassis ground point.',
+    'screwdriver':
+        'The Phillips driver fits the case fastener without contacting nearby components.',
+    'firmware_inventory':
+        'The firmware console enumerates the selected storage controller.',
+    'wire_stripper':
+        'The stripping jaws engage the outer cable jacket; conductor insulation remains intact.',
+    'crimping_tool': 'The termination jaws engage the prepared connector.',
+    'interface_inspection_light':
+        'The interface keying and contact surfaces are visible; no bent contacts are observed.',
+    'lan_loopback_adapter':
+        'Loopback contacts engage the Ethernet interface.',
+    'esd_driver':
+        'The screwdriver engages the retaining-screw head without contacting the board.',
+    'device_manager':
+        'The device inventory contains an uninitialized peripheral.',
+    'port_tester': 'The known-good probe is detected on the alternate USB port.',
+    'cable_tester':
+        'The selected video lead loses continuity when flexed near the connector.',
+  };
+  static const assessmentToolContact =
+      'Tool contact established with the selected target.';
+  static const assessmentDisconnectedToolReading =
+      'No complete test circuit is connected.';
+  static const assessmentConnectedToolReading = 'A test circuit is connected.';
   static const exitMissionTitle = 'Save and Exit Mission?';
   static const exitMissionMessage =
       'Your current mission progress will remain available when you return.';

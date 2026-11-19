@@ -174,22 +174,24 @@ select is((select contract_version from public.practice_mission_completions
 select is((select jsonb_build_object('outcome', outcome, 'invalid', invalid_count, 'corrections', correction_count)
     from public.practice_mission_runs where learner_id = (select learner from m2_ctx) and mission_id = 'coc1_m2'
     order by run_number desc limit 1),
-  '{"outcome": "verified", "invalid": 0, "corrections": 2}'::jsonb,
-  'the verified run counts the two memory reseats as corrections');
+  '{"outcome": "verified", "invalid": 0, "corrections": 0}'::jsonb,
+  'reseating the memory the failed POST flagged is a repair, not a correction');
 
--- Fix round 1 (I2): the faults the first POST exposed still count after they
--- are fixed: one per failing check, charged to the step target it names.
-select is(pg_temp.m2_replay((select actions from m2_run where name = 'corrected'))->'failed_checks',
-  '{"item:ram_1": 1, "connection:eps_8pin": 1}'::jsonb,
-  'the failed POST charges the memory pair and the missing EPS cable to their steps');
+-- Fix rounds 1 and 2 (I2): the faults the first POST exposed still count
+-- after they are fixed: once per step and run, charged to the step its
+-- checks name; the reseats that fix the memory pair are the repair.
+select is((select jsonb_build_object('failed', r->'failed_checks', 'repairs', r->'repair_corrections')
+    from (select pg_temp.m2_replay((select actions from m2_run where name = 'corrected')) r) x),
+  '{"failed": {"step:memory": 1, "step:power_cables": 1}, "repairs": {"item:ram_1": 1, "item:ram_2": 1}}'::jsonb,
+  'the failed POST charges the memory and power-cable steps once and the reseats are repairs');
 select is((select step_results->'coc1_m2_p5'->'failed_checks'
     from public.practice_mission_runs where learner_id = (select learner from m2_ctx) and mission_id = 'coc1_m2'
     order by run_number desc limit 1),
   '2'::jsonb, 'the practice run reports the POST faults as learning feedback');
 select is((select jsonb_agg(c->>'counts' order by n) from m2_contract,
     jsonb_array_elements(definition #> '{phases,4,presentation,equipment,checks}') with ordinality t(c, n)),
-  '["operation:fasten_psu","operation:fasten_motherboard","operation:fasten_drive","connection:front_panel","connection:eps_8pin","operation:close_cpu_lever","connection:cooler_fan","operation:apply_thermal_compound","operation:close_dimm_latches","item:ram_1","connection:sata_power","connection:sata_data"]'::jsonb,
-  'every POST check charges one step target');
+  '["step:psu","step:board","step:drive","step:data_cables","step:power_cables","step:cpu","step:cooling","step:cooling","step:memory","step:memory","step:power_cables","step:data_cables"]'::jsonb,
+  'every POST check charges its assessment step');
 
 -- Fix round 1 (I3): practice saved for the v2 layout does not leak into v3.
 -- The app writes a practice_progress_discarded marker when it starts the new

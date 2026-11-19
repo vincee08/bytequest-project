@@ -154,7 +154,23 @@ final class MissionRuntimeController {
       _staleSnapshot = null;
       _definitionChanged = false;
       _failedEvidenceIds.clear();
+      // Persist the new version stamp, so the restart happens only once even
+      // when the next open cannot reach the server.
+      if (!await _saveState()) {
+        throw StateError('Mission runtime progress could not be saved.');
+      }
     });
+  }
+
+  /// Actions after the latest `practice_progress_discarded` marker. The
+  /// practice transport already drops earlier actions; an attempt transport
+  /// (class practice) returns its whole timeline, so the marker is honoured
+  /// here for every transport.
+  static List<AcknowledgedMissionEvidenceAction> _afterLatestDiscard(
+      List<AcknowledgedMissionEvidenceAction> records) {
+    final marker = records.lastIndexWhere(
+        (record) => record.action.actionType == progressDiscardedActionType);
+    return marker < 0 ? records : records.sublist(marker + 1);
   }
 
   Future<void> restore() {
@@ -185,9 +201,9 @@ final class MissionRuntimeController {
         // Assessment transports read the complete active-attempt timeline.
         // Reconcile only this mission; other mission actions must not reach
         // this mission's reducer.
-        acknowledged = serverActions
+        acknowledged = _afterLatestDiscard(serverActions
             .where((record) => record.action.missionId == _state.missionId)
-            .toList(growable: false);
+            .toList(growable: false));
       } catch (_) {
         if (local == null) rethrow;
         if (_isOtherDefinition(local, const [])) {
