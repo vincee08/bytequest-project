@@ -2,7 +2,7 @@
 -- leaderboard. The leaderboard shows only learners who share an active class
 -- with the caller and opted in; the caller is always included. Rollback-only.
 begin;
-select plan(47);
+select plan(48);
 
 create temporary table rw_people (
   key text primary key,
@@ -157,7 +157,10 @@ select throws_ok($$update public.gamification_leaderboard_entries set points = 9
 select throws_ok($$insert into public.gamification_leaderboard_entries (learner_id) values (auth.uid())$$,
   '42501', null, 'a learner cannot insert leaderboard entries');
 select throws_ok($$delete from public.gamification_leaderboard_entries$$, '42501', null, 'a learner cannot delete leaderboard entries');
-update public.gamification_leaderboard_entries set show_on_leaderboard = true where learner_id = auth.uid();
+with changed as (
+  update public.gamification_leaderboard_entries set show_on_leaderboard = true where learner_id = auth.uid() returning 1)
+select is((select count(*)::integer from changed), 0,
+  'a direct client update changes no leaderboard entry; only the profile trigger refreshes it');
 update public.gamification_leaderboard_entries set show_on_leaderboard = false where learner_id = pg_temp.rw('ben');
 update public.profiles set show_on_leaderboard = true where user_id = pg_temp.rw('carla');
 select is((select show_on_leaderboard from public.gamification_leaderboard_entries where learner_id = auth.uid()), false,
