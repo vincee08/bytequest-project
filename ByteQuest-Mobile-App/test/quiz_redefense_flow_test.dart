@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bytequest/core/theme/app_theme.dart';
 import 'package:bytequest/data/mission_content_data.dart';
 import 'package:bytequest/data/quiz_content_data.dart';
@@ -21,6 +23,9 @@ class FakeQuizService extends LearnerQuizService {
   int resultCalls = 0;
   bool refuseSaves = false;
 
+  /// When set, the next save waits until the test completes it.
+  Completer<void>? gate;
+
   @override
   Future<void> saveAnswer({
     required String attemptId,
@@ -30,6 +35,9 @@ class FakeQuizService extends LearnerQuizService {
     if (refuseSaves) {
       throw const LearnerQuizClosedException('QUIZ_NOT_AVAILABLE');
     }
+    final pending = gate;
+    gate = null;
+    if (pending != null) await pending.future;
     saves.add((itemId, answer));
   }
 
@@ -323,6 +331,38 @@ void main() {
     expect(find.text(QuizContentData.essaySaved), findsOneWidget);
     expect(drafts.drafts, isEmpty, reason: 'a saved draft is cleared');
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('writing that continues during a save is saved afterwards',
+      (tester) async {
+    usePhone(tester);
+    final gate = Completer<void>();
+    final service = FakeQuizService()..gate = gate;
+    await tester.pumpWidget(host(QuizTakingScreen(
+      attempt: essayAttempt(),
+      service: service,
+      draftStore: MemoryDraftStore(),
+      now: () => DateTime.utc(2035, 1, 1, 8),
+    )));
+    final field = find.byKey(const ValueKey('quiz-essay-field'));
+    await tester.enterText(field, 'First sentence about grounding.');
+    await tester.pump(const Duration(milliseconds: 1600));
+    expect(find.text(QuizContentData.essaySaving), findsOneWidget);
+    await tester.enterText(
+        field, 'First sentence about grounding. Then open the lever.');
+    // The new pause elapses while the first save is still in flight.
+    await tester.pump(const Duration(milliseconds: 1600));
+    expect(service.gate, isNull, reason: 'the first save is in flight');
+    expect(service.saves, isEmpty);
+    gate.complete();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 1600));
+    await tester.pump();
+    expect(service.saves.map((save) => save.$2), [
+      'First sentence about grounding.',
+      'First sentence about grounding. Then open the lever.',
+    ]);
+    expect(find.text(QuizContentData.essaySaved), findsOneWidget);
   });
 
   testWidgets('an unsaved essay draft is restored and saved on reopen',
