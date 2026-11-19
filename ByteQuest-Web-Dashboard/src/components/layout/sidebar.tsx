@@ -12,11 +12,13 @@ import {
   FileStack,
   FileText,
   GraduationCap,
+  Inbox,
   LayoutDashboard,
   ListChecks,
   LogOut,
   KeyRound,
   Menu,
+  Scale,
   ScrollText,
   Settings2,
   ShieldCheck,
@@ -70,7 +72,9 @@ const instructorNavigation: NavigationGroup[] = [
   {
     label: "Assessment",
     items: [
+      { label: "Evaluation Center", href: "/evaluations", icon: Scale },
       { label: "Reviews & results", href: "/attempts", icon: ClipboardCheck },
+      { label: "Homework submissions", href: "/submissions", icon: Inbox },
       { label: "Quizzes", href: "/quizzes", icon: ListChecks },
     ],
   },
