@@ -1,10 +1,15 @@
 import '../../../data/mission_content_data.dart';
 import 'mission_runtime_models.dart';
 
-/// Deterministic equipment behavior for practice, not a competency evaluator.
-/// No scores, passing percentages, rubric answers or release decisions exist
-/// here. Assessment actions bypass this model and retain the trusted gateway.
+/// Deterministic equipment behavior, not a competency evaluator. No scores,
+/// passing percentages, rubric answers or release decisions exist here; the
+/// server replay remains authoritative in practice and assessment. In
+/// assessment mode the same physical rules apply but feedback is neutral, so
+/// a refusal never names the correct target or procedure.
 abstract final class MissionEquipmentSimulator {
+  static bool isAssemblyBench(MissionSimulationDefinition definition) =>
+      definition.scene.initialStatus['workspace'] == 'assembly_bench';
+
   static Map<String, dynamic> describeAction({
     required MissionSimulationDefinition definition,
     required MissionPhaseDefinition phase,
@@ -12,22 +17,27 @@ abstract final class MissionEquipmentSimulator {
     required String actionType,
     required String? target,
     required Map<String, dynamic> value,
+    DateTime? now,
   }) {
-    if (state.mode != MissionRuntimeMode.practice ||
-        phase.presentation['equipment'] is! Map) {
+    if (phase.presentation['equipment'] is! Map) {
       return value;
     }
+    final assessment = state.mode == MissionRuntimeMode.assessment;
+    final bench = isAssemblyBench(definition);
     final spec = map(phase.presentation['equipment']);
     final next = Map<String, dynamic>.from(state.equipmentState);
     var valid = true;
-    var feedback = MissionContentData.equipmentRecordedFeedback;
+    var feedback = assessment
+        ? MissionContentData.assessmentNeutralRecorded
+        : MissionContentData.equipmentRecordedFeedback;
+    var correction = false;
     final recorded = Map<String, dynamic>.from(value);
     final phaseValues = map(next['phases']);
     final phaseState = map(phaseValues[phase.id]);
 
     void reject(String message) {
       valid = false;
-      feedback = message;
+      feedback = assessment ? _neutralRefusal(actionType) : message;
     }
 
     switch (actionType) {
@@ -45,6 +55,11 @@ abstract final class MissionEquipmentSimulator {
             (allowed.isNotEmpty &&
                 !allowed.contains(destination['interface']))) {
           reject(MissionContentData.incompatibleConnectionFeedback);
+        } else if (spec['single_connection'] == true &&
+            state.connectedNodePairs.any((pair) =>
+                pair.startsWith('${value['source_id']}>') &&
+                pair != '${value['source_id']}>${value['destination_id']}')) {
+          correction = true;
         }
         recorded['compatible'] = valid;
         recorded['replace_source_connection'] =
@@ -93,14 +108,36 @@ abstract final class MissionEquipmentSimulator {
           reject(MissionContentData.incompatiblePlacementFeedback);
         } else if (part['seating_orientation'] != null &&
             value['orientation'] != part['seating_orientation']) {
-          reject(MissionContentData.orientationFeedback);
+          reject(MissionContentData.benchOrientationFeedback[part['id']] ??
+              MissionContentData.orientationFeedback);
         } else if (!strings(part['requires_placements'])
             .every(state.placements.containsKey)) {
           reject(MissionContentData.placementPrerequisiteFeedback);
+        } else if (!conditionsMet(part['requires'], state)) {
+          reject(MissionContentData.benchRequirementFeedback[part['id']] ??
+              MissionContentData.placementPrerequisiteFeedback);
         } else if (state.placements.entries.any((entry) =>
             entry.key != value['item_id'] &&
             entry.value == value['destination_id'])) {
           reject(MissionContentData.occupiedDestinationFeedback);
+        } else if (state.placements[value['item_id']] != null &&
+            state.placements[value['item_id']] != value['destination_id']) {
+          correction = true;
+        }
+        recorded['compatible'] = valid;
+        break;
+      case 'placement_removed':
+        final panel = map(spec['placement']);
+        final part = item(
+            panel['items'] ?? phase.presentation['items'], value['item_id']);
+        if (part.isEmpty || !state.placements.containsKey(value['item_id'])) {
+          reject(MissionContentData.benchRemovalUnavailable);
+        } else {
+          next.addAll(map(part['removal_effects']));
+          correction = true;
+          feedback = assessment
+              ? MissionContentData.assessmentNeutralRecorded
+              : MissionContentData.benchRemovalFeedback;
         }
         recorded['compatible'] = valid;
         break;
@@ -234,11 +271,19 @@ abstract final class MissionEquipmentSimulator {
         feedback = MissionContentData.testResultRecordedFeedback;
         break;
     }
+    if (assessment &&
+        valid &&
+        !const {'tool_attempted', 'diagnostic_action', 'test_completed'}
+            .contains(actionType)) {
+      // Measured readings stay visible; everything else is neutral.
+      feedback = MissionContentData.assessmentNeutralRecorded;
+    }
     if ((valid || actionType == 'configuration_applied') &&
         const {
           'connection_created',
           'configuration_applied',
           'placement_attempted',
+          'placement_removed',
           'sequence_reordered',
           'scenario_decision',
           'selection_confirmed',
@@ -247,6 +292,19 @@ abstract final class MissionEquipmentSimulator {
         }.contains(actionType)) {
       next['input_revision'] =
           (next['input_revision'] as num? ?? 0).toInt() + 1;
+    }
+    if (bench) {
+      // Learner-facing bench metrics only; the server replay recomputes
+      // invalid actions and corrections for runs and assessments.
+      next['started_at'] ??= (now ?? DateTime.now()).toUtc().toIso8601String();
+      final counts = map(next['counts']);
+      final key = !valid
+          ? 'invalid'
+          : correction
+              ? 'corrections'
+              : 'valid';
+      counts[key] = (counts[key] as num? ?? 0).toInt() + 1;
+      next['counts'] = counts;
     }
     phaseState['last_action_valid'] = valid;
     phaseValues[phase.id] = phaseState;
@@ -259,6 +317,15 @@ abstract final class MissionEquipmentSimulator {
       'equipment_snapshot': next,
     };
   }
+
+  static String _neutralRefusal(String actionType) => switch (actionType) {
+        'placement_attempted' => MissionContentData.assessmentNeutralPlacement,
+        'placement_removed' => MissionContentData.assessmentNeutralRemoval,
+        'connection_created' => MissionContentData.assessmentNeutralConnection,
+        'equipment_operation' => MissionContentData.assessmentNeutralOperation,
+        'tool_attempted' => MissionContentData.assessmentNeutralTool,
+        _ => MissionContentData.assessmentNeutralRecorded,
+      };
 
   static bool phaseReady(
       MissionPhaseDefinition phase, MissionRuntimeState state) {
@@ -322,6 +389,11 @@ abstract final class MissionEquipmentSimulator {
         return state.placements[key];
       case 'link':
         return state.connectedNodePairs.contains(key);
+      // Presentation-only paths for bench steps; never used by server rules.
+      case 'connected':
+        return state.connectedNodePairs.any((pair) => pair.startsWith('$key>'));
+      case 'tested':
+        return state.testStatusFor(key) == MissionTestStatus.completed;
       case 'tool':
         return state.toolApplications[key];
       case 'inspected':

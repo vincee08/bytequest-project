@@ -1,0 +1,974 @@
+{
+ "id": "legacy_m2",
+ "cocId": "coc1",
+ "scene": {
+  "id": "legacy_m2_scene",
+  "objects": [
+   {
+    "x": 0.04,
+    "y": 0.08,
+    "id": "motherboard",
+    "label": "Motherboard",
+    "width": 0.2,
+    "height": 0.22,
+    "metadata": {
+     "imageAsset": "assets/COC1/Mission 2/motherboard.png",
+     "description": "Motherboard",
+     "schematicRole": "primary",
+     "replaceableAsset": "assets/simulation/schematics/motherboard.svg"
+    },
+    "hotspotType": "inspect_and_select",
+    "initialState": "neutral",
+    "connectionNodeIds": [
+     "motherboard_port"
+    ]
+   },
+   {
+    "x": 0.27999999999999997,
+    "y": 0.08,
+    "id": "cpu",
+    "label": "Processor",
+    "width": 0.2,
+    "height": 0.22,
+    "metadata": {
+     "imageAsset": "assets/COC1/Mission 2/cpu.png",
+     "description": "Processor",
+     "schematicRole": "supporting",
+     "replaceableAsset": "assets/simulation/schematics/cpu.svg"
+    },
+    "hotspotType": "inspect_and_select",
+    "initialState": "neutral",
+    "connectionNodeIds": [
+     "cpu_port"
+    ]
+   },
+   {
+    "x": 0.52,
+    "y": 0.08,
+    "id": "ram",
+    "label": "Memory module",
+    "width": 0.2,
+    "height": 0.22,
+    "metadata": {
+     "imageAsset": "assets/COC1/Mission 2/ram.png",
+     "description": "Memory module",
+     "schematicRole": "supporting",
+     "replaceableAsset": "assets/simulation/schematics/ram.svg"
+    },
+    "hotspotType": "inspect_and_select",
+    "initialState": "neutral",
+    "connectionNodeIds": [
+     "ram_port"
+    ]
+   },
+   {
+    "x": 0.76,
+    "y": 0.08,
+    "id": "storage",
+    "label": "Storage drive",
+    "width": 0.2,
+    "height": 0.22,
+    "metadata": {
+     "imageAsset": "assets/COC1/Mission 2/ssd.png",
+     "description": "Storage drive",
+     "schematicRole": "supporting",
+     "replaceableAsset": "assets/simulation/schematics/storage.svg"
+    },
+    "hotspotType": "inspect_and_select",
+    "initialState": "neutral",
+    "connectionNodeIds": [
+     "storage_port"
+    ]
+   },
+   {
+    "x": 0.04,
+    "y": 0.39,
+    "id": "cooling_fan",
+    "label": "Cooling assembly",
+    "width": 0.2,
+    "height": 0.22,
+    "metadata": {
+     "imageAsset": "assets/COC1/Mission 2/cooling_fan.png",
+     "description": "Cooling assembly",
+     "schematicRole": "supporting",
+     "replaceableAsset": "assets/simulation/schematics/cooling_fan.svg"
+    },
+    "hotspotType": "inspect_and_select",
+    "initialState": "neutral",
+    "connectionNodeIds": [
+     "cooling_fan_port"
+    ]
+   },
+   {
+    "x": 0.27999999999999997,
+    "y": 0.39,
+    "id": "psu",
+    "label": "Power supply",
+    "width": 0.2,
+    "height": 0.22,
+    "metadata": {
+     "imageAsset": "assets/COC1/Mission 2/psu.png",
+     "description": "Power supply",
+     "schematicRole": "supporting",
+     "replaceableAsset": "assets/simulation/schematics/psu.svg"
+    },
+    "hotspotType": "inspect_and_select",
+    "initialState": "neutral",
+    "connectionNodeIds": [
+     "psu_port"
+    ]
+   },
+   {
+    "x": 0.52,
+    "y": 0.39,
+    "id": "service_chassis",
+    "label": "Empty computer chassis",
+    "width": 0.2,
+    "height": 0.22,
+    "metadata": {
+     "imageAsset": null,
+     "description": "Empty computer chassis",
+     "schematicRole": "supporting",
+     "replaceableAsset": "assets/simulation/schematics/service_chassis.svg"
+    },
+    "hotspotType": "inspect_and_select",
+    "initialState": "neutral",
+    "connectionNodeIds": [
+     "service_chassis_port"
+    ]
+   },
+   {
+    "x": 0.76,
+    "y": 0.39,
+    "id": "esd_mat",
+    "label": "Anti-static mat",
+    "width": 0.2,
+    "height": 0.22,
+    "metadata": {
+     "imageAsset": null,
+     "description": "Anti-static mat",
+     "schematicRole": "supporting",
+     "replaceableAsset": "assets/simulation/schematics/esd_mat.svg"
+    },
+    "hotspotType": "inspect_and_select",
+    "initialState": "neutral",
+    "connectionNodeIds": [
+     "esd_mat_port"
+    ]
+   },
+   {
+    "x": 0.04,
+    "y": 0.7,
+    "id": "service_chassis_position",
+    "label": "Assembly bench",
+    "width": 0.2,
+    "height": 0.22,
+    "metadata": {
+     "imageAsset": null,
+     "description": "Assembly bench",
+     "schematicRole": "supporting",
+     "replaceableAsset": "assets/simulation/schematics/service_chassis_position.svg"
+    },
+    "hotspotType": "inspect_and_select",
+    "initialState": "neutral",
+    "connectionNodeIds": [
+     "service_chassis_position_port"
+    ]
+   },
+   {
+    "x": 0.27999999999999997,
+    "y": 0.7,
+    "id": "esd_mat_position",
+    "label": "Grounded work area",
+    "width": 0.2,
+    "height": 0.22,
+    "metadata": {
+     "imageAsset": null,
+     "description": "Grounded work area",
+     "schematicRole": "supporting",
+     "replaceableAsset": "assets/simulation/schematics/esd_mat_position.svg"
+    },
+    "hotspotType": "inspect_and_select",
+    "initialState": "neutral",
+    "connectionNodeIds": [
+     "esd_mat_position_port"
+    ]
+   },
+   {
+    "x": 0.52,
+    "y": 0.7,
+    "id": "motherboard_area",
+    "label": "Motherboard area",
+    "width": 0.2,
+    "height": 0.22,
+    "metadata": {
+     "imageAsset": null,
+     "description": "Motherboard area",
+     "schematicRole": "supporting",
+     "replaceableAsset": "assets/simulation/schematics/motherboard_area.svg"
+    },
+    "hotspotType": "inspect_and_select",
+    "initialState": "neutral",
+    "connectionNodeIds": [
+     "motherboard_area_port"
+    ]
+   },
+   {
+    "x": 0.76,
+    "y": 0.7,
+    "id": "cpu_socket",
+    "label": "CPU socket",
+    "width": 0.2,
+    "height": 0.22,
+    "metadata": {
+     "imageAsset": null,
+     "description": "CPU socket",
+     "schematicRole": "supporting",
+     "replaceableAsset": "assets/simulation/schematics/cpu_socket.svg"
+    },
+    "hotspotType": "inspect_and_select",
+    "initialState": "neutral",
+    "connectionNodeIds": [
+     "cpu_socket_port"
+    ]
+   },
+   {
+    "x": 0.04,
+    "y": 1.01,
+    "id": "ram_slot",
+    "label": "RAM slot",
+    "width": 0.2,
+    "height": 0.22,
+    "metadata": {
+     "imageAsset": null,
+     "description": "RAM slot",
+     "schematicRole": "supporting",
+     "replaceableAsset": "assets/simulation/schematics/ram_slot.svg"
+    },
+    "hotspotType": "inspect_and_select",
+    "initialState": "neutral",
+    "connectionNodeIds": [
+     "ram_slot_port"
+    ]
+   },
+   {
+    "x": 0.27999999999999997,
+    "y": 1.01,
+    "id": "drive_bay",
+    "label": "Drive bay",
+    "width": 0.2,
+    "height": 0.22,
+    "metadata": {
+     "imageAsset": null,
+     "description": "Drive bay",
+     "schematicRole": "supporting",
+     "replaceableAsset": "assets/simulation/schematics/drive_bay.svg"
+    },
+    "hotspotType": "inspect_and_select",
+    "initialState": "neutral",
+    "connectionNodeIds": [
+     "drive_bay_port"
+    ]
+   },
+   {
+    "x": 0.52,
+    "y": 1.01,
+    "id": "fan_area",
+    "label": "Cooling area",
+    "width": 0.2,
+    "height": 0.22,
+    "metadata": {
+     "imageAsset": null,
+     "description": "Cooling area",
+     "schematicRole": "supporting",
+     "replaceableAsset": "assets/simulation/schematics/fan_area.svg"
+    },
+    "hotspotType": "inspect_and_select",
+    "initialState": "neutral",
+    "connectionNodeIds": [
+     "fan_area_port"
+    ]
+   },
+   {
+    "x": 0.76,
+    "y": 1.01,
+    "id": "psu_bay",
+    "label": "Power-supply bay",
+    "width": 0.2,
+    "height": 0.22,
+    "metadata": {
+     "imageAsset": null,
+     "description": "Power-supply bay",
+     "schematicRole": "supporting",
+     "replaceableAsset": "assets/simulation/schematics/psu_bay.svg"
+    },
+    "hotspotType": "inspect_and_select",
+    "initialState": "neutral",
+    "connectionNodeIds": [
+     "psu_bay_port"
+    ]
+   },
+   {
+    "x": 0.04,
+    "y": 1.32,
+    "id": "atx",
+    "label": "24-pin ATX power",
+    "width": 0.2,
+    "height": 0.22,
+    "metadata": {
+     "imageAsset": null,
+     "description": "24-pin ATX power",
+     "schematicRole": "supporting",
+     "replaceableAsset": "assets/simulation/schematics/atx.svg"
+    },
+    "hotspotType": "inspect_and_select",
+    "initialState": "neutral",
+    "connectionNodeIds": [
+     "atx_port"
+    ]
+   },
+   {
+    "x": 0.27999999999999997,
+    "y": 1.32,
+    "id": "sata",
+    "label": "SATA data cable",
+    "width": 0.2,
+    "height": 0.22,
+    "metadata": {
+     "imageAsset": null,
+     "description": "SATA data cable",
+     "schematicRole": "supporting",
+     "replaceableAsset": "assets/simulation/schematics/sata.svg"
+    },
+    "hotspotType": "inspect_and_select",
+    "initialState": "neutral",
+    "connectionNodeIds": [
+     "sata_port"
+    ]
+   },
+   {
+    "x": 0.52,
+    "y": 1.32,
+    "id": "board_power",
+    "label": "Motherboard power header",
+    "width": 0.2,
+    "height": 0.22,
+    "metadata": {
+     "imageAsset": null,
+     "description": "Motherboard power header",
+     "schematicRole": "supporting",
+     "replaceableAsset": "assets/simulation/schematics/board_power.svg"
+    },
+    "hotspotType": "inspect_and_select",
+    "initialState": "neutral",
+    "connectionNodeIds": [
+     "board_power_port"
+    ]
+   },
+   {
+    "x": 0.76,
+    "y": 1.32,
+    "id": "storage_data",
+    "label": "Storage data port",
+    "width": 0.2,
+    "height": 0.22,
+    "metadata": {
+     "imageAsset": null,
+     "description": "Storage data port",
+     "schematicRole": "supporting",
+     "replaceableAsset": "assets/simulation/schematics/storage_data.svg"
+    },
+    "hotspotType": "inspect_and_select",
+    "initialState": "neutral",
+    "connectionNodeIds": [
+     "storage_data_port"
+    ]
+   }
+  ],
+  "initialStatus": {
+   "sceneKind": "openChassis",
+   "schematic": true,
+   "statusLabel": "Awaiting inspection",
+   "replaceableAssets": true
+  },
+  "backgroundAsset": "assets/images/COC1.png"
+ },
+ "title": "Install Internal Components",
+ "phases": [
+  {
+   "id": "legacy_m2_p1",
+   "title": "Inspect compatibility",
+   "feedbackIds": [
+    "legacy_m2_constraint"
+   ],
+   "instruction": "Place the equipment in the workspace, then complete the inspection and work-order checks. Inspect socket, slot, clearance, and power compatibility.",
+   "presentation": {
+    "objects": [
+     {
+      "id": "motherboard",
+      "label": "Motherboard",
+      "imageAsset": "assets/COC1/Mission 2/motherboard.png",
+      "inspection": "ATX board. CPU socket, keyed DIMM slots, and 24-pin power header are visible. No swollen capacitors are visible.",
+      "description": "Motherboard"
+     },
+     {
+      "id": "cpu",
+      "label": "Processor",
+      "imageAsset": "assets/COC1/Mission 2/cpu.png",
+      "inspection": "Processor contacts are intact. The alignment mark must match the socket mark; do not force the package.",
+      "description": "Processor"
+     },
+     {
+      "id": "ram",
+      "label": "Memory module",
+      "imageAsset": "assets/COC1/Mission 2/ram.png",
+      "inspection": "DDR memory module. The notch is offset; one retaining latch is open. Isolate power before reseating.",
+      "description": "Memory module"
+     },
+     {
+      "id": "storage",
+      "label": "Storage drive",
+      "imageAsset": "assets/COC1/Mission 2/ssd.png",
+      "inspection": "Storage drive has separate keyed SATA data and power connectors.",
+      "description": "Storage drive"
+     },
+     {
+      "id": "cooling_fan",
+      "label": "Cooling assembly",
+      "imageAsset": "assets/COC1/Mission 2/cooling_fan.png",
+      "inspection": "Cooling assembly must be seated on the processor and connected to its fan header.",
+      "description": "Cooling assembly"
+     },
+     {
+      "id": "psu",
+      "label": "Power supply",
+      "imageAsset": "assets/COC1/Mission 2/psu.png",
+      "inspection": "Power supply converts mains to regulated DC rails. Disconnect mains before touching internal connectors.",
+      "description": "Power supply"
+     }
+    ],
+    "component": "tap_inspect",
+    "equipment": {
+     "placement": {
+      "items": [
+       {
+        "id": "service_chassis",
+        "label": "Empty computer chassis",
+        "category": "service_chassis",
+        "imageAsset": null
+       },
+       {
+        "id": "esd_mat",
+        "label": "Anti-static mat",
+        "category": "esd_mat",
+        "imageAsset": null
+       }
+      ],
+      "destinations": [
+       {
+        "id": "service_chassis_position",
+        "label": "Assembly bench",
+        "socket_categories": [
+         "service_chassis"
+        ]
+       },
+       {
+        "id": "esd_mat_position",
+        "label": "Grounded work area",
+        "socket_categories": [
+         "esd_mat"
+        ]
+       }
+      ]
+     },
+     "completion": [
+      {
+       "path": "placed.service_chassis",
+       "operator": "present"
+      },
+      {
+       "path": "placed.esd_mat",
+       "operator": "present"
+      }
+     ],
+     "single_connection": true
+    },
+    "mechanics": [
+     "inspect_compatibility"
+    ]
+   },
+   "availableObjectIds": [
+    "motherboard",
+    "cpu",
+    "ram",
+    "storage",
+    "cooling_fan",
+    "psu"
+   ],
+   "primaryInteraction": "inspect",
+   "supportingInteractions": []
+  },
+  {
+   "id": "legacy_m2_p2",
+   "title": "Place components",
+   "feedbackIds": [
+    "legacy_m2_constraint"
+   ],
+   "instruction": "Select a component, destination, and orientation before placement.",
+   "presentation": {
+    "items": [
+     {
+      "id": "motherboard",
+      "label": "Motherboard",
+      "category": "board",
+      "imageAsset": "assets/COC1/Mission 2/motherboard.png",
+      "description": "Motherboard",
+      "orientations": [
+       "aligned",
+       "rotated"
+      ],
+      "requires_placements": [],
+      "seating_orientation": "aligned"
+     },
+     {
+      "id": "cpu",
+      "label": "Processor",
+      "category": "socketed",
+      "imageAsset": "assets/COC1/Mission 2/cpu.png",
+      "description": "Processor",
+      "orientations": [
+       "aligned",
+       "rotated"
+      ],
+      "requires_placements": [
+       "motherboard"
+      ],
+      "seating_orientation": "aligned"
+     },
+     {
+      "id": "ram",
+      "label": "Memory module",
+      "category": "slotted",
+      "imageAsset": "assets/COC1/Mission 2/ram.png",
+      "description": "Memory module",
+      "orientations": [
+       "aligned",
+       "rotated"
+      ],
+      "requires_placements": [
+       "motherboard"
+      ],
+      "seating_orientation": "aligned"
+     },
+     {
+      "id": "storage",
+      "label": "Storage drive",
+      "category": "drive",
+      "imageAsset": "assets/COC1/Mission 2/ssd.png",
+      "description": "Storage drive",
+      "orientations": [
+       "aligned",
+       "rotated"
+      ],
+      "requires_placements": [],
+      "seating_orientation": "aligned"
+     },
+     {
+      "id": "cooling_fan",
+      "label": "Cooling assembly",
+      "category": "cooling",
+      "imageAsset": "assets/COC1/Mission 2/cooling_fan.png",
+      "description": "Cooling assembly",
+      "orientations": [
+       "aligned",
+       "rotated"
+      ],
+      "requires_placements": [
+       "cpu"
+      ],
+      "seating_orientation": "aligned"
+     },
+     {
+      "id": "psu",
+      "label": "Power supply",
+      "category": "power",
+      "imageAsset": "assets/COC1/Mission 2/psu.png",
+      "description": "Power supply",
+      "orientations": [
+       "aligned",
+       "rotated"
+      ],
+      "requires_placements": [],
+      "seating_orientation": "aligned"
+     }
+    ],
+    "component": "controlled_placement",
+    "equipment": {
+     "single_connection": true
+    },
+    "mechanics": [
+     "place_with_orientation"
+    ],
+    "action_type": "component_drop_attempted",
+    "destinations": [
+     {
+      "id": "motherboard_area",
+      "label": "Motherboard area",
+      "imageAsset": null,
+      "description": "Motherboard area",
+      "socket_categories": [
+       "board"
+      ]
+     },
+     {
+      "id": "cpu_socket",
+      "label": "CPU socket",
+      "imageAsset": null,
+      "description": "CPU socket",
+      "socket_categories": [
+       "socketed"
+      ]
+     },
+     {
+      "id": "ram_slot",
+      "label": "RAM slot",
+      "imageAsset": null,
+      "description": "RAM slot",
+      "socket_categories": [
+       "slotted"
+      ]
+     },
+     {
+      "id": "drive_bay",
+      "label": "Drive bay",
+      "imageAsset": null,
+      "description": "Drive bay",
+      "socket_categories": [
+       "drive"
+      ]
+     },
+     {
+      "id": "fan_area",
+      "label": "Cooling area",
+      "imageAsset": null,
+      "description": "Cooling area",
+      "socket_categories": [
+       "cooling"
+      ]
+     },
+     {
+      "id": "psu_bay",
+      "label": "Power-supply bay",
+      "imageAsset": null,
+      "description": "Power-supply bay",
+      "socket_categories": [
+       "power"
+      ]
+     }
+    ],
+    "orientations": [
+     "aligned",
+     "rotated"
+    ],
+    "accessibleControl": "select_then_confirm"
+   },
+   "availableObjectIds": [
+    "motherboard",
+    "cpu",
+    "ram",
+    "storage",
+    "cooling_fan",
+    "psu"
+   ],
+   "primaryInteraction": "place",
+   "supportingInteractions": []
+  },
+  {
+   "id": "legacy_m2_p3",
+   "title": "Sequence assembly",
+   "feedbackIds": [
+    "legacy_m2_constraint"
+   ],
+   "instruction": "Record the installation chronology before final inspection.",
+   "presentation": {
+    "items": [
+     {
+      "id": "power",
+      "label": "Connect power and storage data",
+      "imageAsset": null,
+      "description": "Connect power and storage data"
+     },
+     {
+      "id": "cooling",
+      "label": "Secure cooling and memory",
+      "imageAsset": null,
+      "description": "Secure cooling and memory"
+     },
+     {
+      "id": "board",
+      "label": "Fit board and processor",
+      "imageAsset": null,
+      "description": "Fit board and processor"
+     },
+     {
+      "id": "isolate",
+      "label": "Isolate power and prepare ESD controls",
+      "imageAsset": null,
+      "description": "Isolate power and prepare ESD controls"
+     }
+    ],
+    "component": "sequencing",
+    "equipment": {
+     "completion": [
+      {
+       "path": "link.atx>board_power",
+       "value": true
+      },
+      {
+       "path": "link.sata>storage_data",
+       "value": true
+      }
+     ],
+     "connection": {
+      "sources": [
+       {
+        "id": "atx",
+        "label": "24-pin ATX power",
+        "interfaces": [
+         "atx"
+        ]
+       },
+       {
+        "id": "sata",
+        "label": "SATA data cable",
+        "interfaces": [
+         "sata"
+        ]
+       }
+      ],
+      "destinations": [
+       {
+        "id": "board_power",
+        "label": "Motherboard power header",
+        "interface": "atx"
+       },
+       {
+        "id": "storage_data",
+        "label": "Storage data port",
+        "interface": "sata"
+       }
+      ]
+     },
+     "precedence": [
+      {
+       "after": "board",
+       "before": "isolate"
+      },
+      {
+       "after": "cooling",
+       "before": "board"
+      },
+      {
+       "after": "power",
+       "before": "cooling"
+      }
+     ],
+     "single_connection": true
+    },
+    "mechanics": [
+     "sequence_assembly"
+    ]
+   },
+   "availableObjectIds": [
+    "motherboard",
+    "cpu",
+    "ram",
+    "storage",
+    "cooling_fan",
+    "psu"
+   ],
+   "primaryInteraction": "sequence",
+   "supportingInteractions": []
+  },
+  {
+   "id": "legacy_m2_p4",
+   "title": "Verify installation",
+   "feedbackIds": [
+    "legacy_m2_evidence"
+   ],
+   "instruction": "Run seating, fastening, and clearance checks.",
+   "presentation": {
+    "target": "legacy_m2_test_4",
+    "equipment": {
+     "checks": [
+      {
+       "id": "assembly",
+       "fault": "An installed component is missing from the inventory.",
+       "label": "POST component inventory",
+       "nominal": "CPU, memory, storage, cooling, and power assemblies seated.",
+       "requires": [
+        {
+         "path": "placed.motherboard",
+         "operator": "present"
+        },
+        {
+         "path": "placed.cpu",
+         "operator": "present"
+        },
+        {
+         "path": "placed.ram",
+         "operator": "present"
+        },
+        {
+         "path": "placed.storage",
+         "operator": "present"
+        },
+        {
+         "path": "placed.cooling_fan",
+         "operator": "present"
+        },
+        {
+         "path": "placed.psu",
+         "operator": "present"
+        }
+       ]
+      },
+      {
+       "id": "power_data",
+       "fault": "Power or storage connection is incomplete.",
+       "label": "Power and storage path",
+       "nominal": "Power rails and storage data path available.",
+       "requires": [
+        {
+         "path": "link.atx>board_power",
+         "value": true
+        },
+        {
+         "path": "link.sata>storage_data",
+         "value": true
+        }
+       ]
+      },
+      {
+       "id": "sequence",
+       "fault": "Assembly chronology violates a safety prerequisite.",
+       "label": "Assembly safety record",
+       "nominal": "Isolation, assembly, cooling, and wiring chronology recorded.",
+       "requires": [
+        {
+         "path": "sequence.legacy_m2_p3",
+         "value": true
+        }
+       ]
+      },
+      {
+       "id": "close_out",
+       "fault": "Complete safety close-out and the service report before final verification.",
+       "label": "Safety and documentation",
+       "nominal": "Work-area safety, contingency where required, and service handover recorded.",
+       "requires": [
+        {
+         "path": "setting.work_area_safe",
+         "value": true
+        },
+        {
+         "path": "setting.service_report_ready",
+         "value": true
+        }
+       ]
+      }
+     ],
+     "completion": [
+      {
+       "path": "result.legacy_m2_test_4",
+       "value": true
+      }
+     ],
+     "operations": [
+      {
+       "id": "close_work_area",
+       "label": "Record 5S and 3Rs work-area close-out",
+       "effects": {
+        "work_area_safe": true
+       },
+       "requires": []
+      },
+      {
+       "id": "prepare_service_report",
+       "label": "Prepare the technical work report for handover",
+       "effects": {
+        "service_report_ready": true
+       },
+       "requires": [
+        {
+         "path": "setting.work_area_safe",
+         "value": true
+        }
+       ]
+      }
+     ],
+     "single_connection": true
+    },
+    "mechanics": [
+     "verify_installation"
+    ],
+    "evidenceActionType": "installation_test_requested"
+   },
+   "availableObjectIds": [
+    "motherboard",
+    "cpu",
+    "ram",
+    "storage",
+    "cooling_fan",
+    "psu"
+   ],
+   "primaryInteraction": "testRun",
+   "supportingInteractions": []
+  },
+  {
+   "id": "legacy_m2_p5",
+   "title": "Review evidence",
+   "feedbackIds": [
+    "legacy_m2_review"
+   ],
+   "instruction": "Review compatibility, placement, sequence, and inspection records.",
+   "presentation": {
+    "equipment": {
+     "single_connection": true
+    },
+    "mechanics": [
+     "review_evidence"
+    ]
+   },
+   "availableObjectIds": [
+    "motherboard",
+    "cpu",
+    "ram",
+    "storage",
+    "cooling_fan",
+    "psu"
+   ],
+   "primaryInteraction": "review",
+   "supportingInteractions": []
+  }
+ ],
+ "scenario": "Assemble a compatible workstation from inspected parts.",
+ "reviewMetadata": {
+  "title": "Evidence review",
+  "returnLabel": "Return to mission",
+  "confirmLabel": "Confirm evidence"
+ },
+ "feedbackCatalog": {
+  "legacy_m2_review": "Review every placement and the final installation check before submission.",
+  "legacy_m2_evidence": "The installation check records seating and fastening observations.",
+  "legacy_m2_constraint": "Compatibility, orientation, and installation order must be recorded for each component."
+ },
+ "environmentLabel": "Component assembly bench",
+ "practiceGuidance": "Check compatibility and orientation before each controlled placement.",
+ "interactionFamilies": [
+  "inspect",
+  "place",
+  "sequence",
+  "testRun"
+ ]
+}

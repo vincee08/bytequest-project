@@ -33,10 +33,11 @@ void main() {
       InteractionFamily.observe,
       InteractionFamily.testRun,
     },
+    // Assembly bench (re-defense): inspect/ESD, place, cable, power-on test.
     'coc1_m2': {
       InteractionFamily.inspect,
       InteractionFamily.place,
-      InteractionFamily.sequence,
+      InteractionFamily.connect,
       InteractionFamily.testRun,
     },
     'coc1_m3': {
@@ -151,10 +152,11 @@ void main() {
       'review_evidence'
     ],
     'coc1_m2': [
-      'inspect_compatibility',
-      'place_with_orientation',
-      'sequence_assembly',
-      'verify_installation',
+      'prepare_esd_and_inspect',
+      'prepare_motherboard',
+      'install_into_case',
+      'connect_power_and_data',
+      'power_on_self_test',
       'review_evidence'
     ],
     'coc1_m3': [

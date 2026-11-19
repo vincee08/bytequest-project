@@ -51,10 +51,14 @@ void main() {
   });
 
   test('presentation catalog preserves protected evidence identifiers', () {
+    // COC1 M2 moved to the assembly-bench contract (css-assembly-20261119-v3):
+    // its actions are recorded with their runtime types and the power-on
+    // self-test keeps a dedicated evidence type.
+    final assembly = MissionSimulationDefinitions.byId('coc1_m2');
+    expect(_actionTypes(assembly), isNot(contains('component_drop_attempted')));
     expect(
-      _actionTypes(MissionSimulationDefinitions.byId('coc1_m2')),
-      contains('component_drop_attempted'),
-    );
+        assembly.phases[4].presentation['evidenceActionType'],
+        'power_on_self_test');
     // COC1 M3 practice now follows the PDF's installation workflow. Cable
     // assessment evidence remains in its immutable server-owned contract.
     expect(MissionSimulationDefinitions.byId('coc1_m3').title,
