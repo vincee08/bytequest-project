@@ -292,6 +292,45 @@ final class MissionRuntimeController {
     });
   }
 
+  /// Discards this practice run at the learner's request. A
+  /// `practice_progress_discarded` marker goes through the evidence gateway,
+  /// so the practice transport and a class-practice attempt both keep every
+  /// earlier action for audit but no longer restore or evaluate it; the
+  /// local snapshot is then cleared. Assessment progress is never discarded.
+  Future<void> discardProgress(MissionRuntimeState initialState) {
+    return _enqueue(() async {
+      if (_state.mode != MissionRuntimeMode.practice) {
+        throw StateError('Only practice progress can be discarded.');
+      }
+      _assertSameSession(initialState, source: 'reset state');
+      final version = _initialState.definitionVersion;
+      await _evidenceGateway.record(MissionEvidenceAction(
+        clientActionId: _clientActionIdFactory(),
+        missionId: _state.missionId,
+        phaseId: _state.currentPhaseId ??
+            _initialState.currentPhaseId ??
+            '${_state.missionId}_p1',
+        actionType: progressDiscardedActionType,
+        value: {
+          'reason': 'learner_confirmed_discard',
+          if (version != null) 'definition_version': version,
+        },
+        occurredAt: _clock(),
+      ));
+      final cleared = await _store.clearMissionRuntime(
+        userId: _userId,
+        missionId: _state.missionId,
+        mode: _state.mode,
+        assessmentAttemptId: _state.assessmentAttemptId,
+      );
+      if (!cleared) {
+        throw StateError('Mission runtime progress could not be cleared.');
+      }
+      _state = initialState;
+      _failedEvidenceIds.clear();
+    });
+  }
+
   /// Clears the active session's local snapshot and returns to a caller-owned
   /// clean state without changing mission, mode, or assessment attempt.
   Future<void> reset(MissionRuntimeState initialState) {
@@ -326,12 +365,20 @@ final class MissionRuntimeController {
       );
     }
 
+    final olderPending = transitioned.pendingEvidence.isNotEmpty;
     _state = transitioned.copyWith(
       pendingEvidence: [...transitioned.pendingEvidence, action],
     );
     if (!await _saveState()) {
       _failedEvidenceIds.add(action.clientActionId);
       throw StateError('Mission evidence could not be saved for retry.');
+    }
+
+    if (olderPending) {
+      // An earlier action is not acknowledged yet. The server replays in
+      // insertion order, so it is sent first and this one only after it.
+      await _sendPendingInOrder();
+      return action;
     }
 
     try {
@@ -360,16 +407,29 @@ final class MissionRuntimeController {
       }
     }
 
-    final pendingIds =
-        _state.pendingEvidence.map((action) => action.clientActionId).toSet();
+    await _sendPendingInOrder();
+  }
+
+  /// Sends every pending action in dispatch order and stops at the first
+  /// failure (see [MissionEvidenceGateway.recordInOrder]). Actions the
+  /// server acknowledged before a failure are accepted; the rest stay
+  /// pending, marked failed, for the next retry, which starts with the
+  /// oldest of them. The list order is the learner's action order; it does
+  /// not depend on the device clock.
+  Future<void> _sendPendingInOrder() async {
+    final pending = List<MissionEvidenceAction>.of(_state.pendingEvidence);
+    final acknowledged = <String>{};
     try {
-      final acknowledged =
-          await _evidenceGateway.reconcile(_state.pendingEvidence);
-      await _acceptEvidence(pendingIds.intersection(acknowledged));
+      await _evidenceGateway.recordInOrder(pending,
+          onAcknowledged: acknowledged.add);
     } catch (_) {
-      _failedEvidenceIds.addAll(pendingIds);
+      _failedEvidenceIds.addAll(pending
+          .map((action) => action.clientActionId)
+          .where((id) => !acknowledged.contains(id)));
+      await _acceptEvidence(acknowledged);
       rethrow;
     }
+    await _acceptEvidence(acknowledged);
   }
 
   Future<void> _acceptEvidence(Set<String> acceptedIds) async {
