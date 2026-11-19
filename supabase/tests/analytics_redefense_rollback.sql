@@ -82,6 +82,15 @@ update public.profiles set role = 'admin' where user_id = (select admin_id from 
 update public.profiles set role = 'instructor' where user_id in (select t1 from ax union all select t2 from ax union all select t3 from ax);
 update public.profiles p set learner_id = s.sid from ax cross join lateral (values (l1,'A7-001'),(l2,'A7-002'),(l3,'A7-003'),(l4,'A7-004'),(l5,'A7-005')) s(id,sid) where p.user_id = s.id;
 
+-- The admin overview covers every active class of the target database,
+-- including classes that existed before this test (for example a seeded demo
+-- class). Record that population before the fixture classes exist; the
+-- fixtures must add exactly their own learners to it.
+select set_config('request.jwt.claim.sub',(select admin_id::text from ax),true);
+set local role authenticated;
+insert into ar values ('admin_baseline', public.get_analytics_overview('{}'::jsonb));
+reset role;
+
 insert into public.classes(id,title,class_code,instructor_id,created_by)
 select c1,'Analytics A','A7-'||left(c1::text,8),t1,t1 from ax union all
 select c2,'Analytics B','A7-'||left(c2::text,8),t1,t1 from ax union all
@@ -576,7 +585,8 @@ reset role;
 select is((select (v->'population'->>'enrolled')::int from ar where name='overview'), 3, 'population counts L1 once across C1 and C2');
 select is((select (v->'population'->>'active_in_period')::int from ar where name='overview'), 3, 'three learners have activity in the period');
 select is((select (v->'population'->>'completed')::int from ar where name='overview'), 0, 'nobody completed every required item');
-select is((select (v->'population'->>'enrolled')::int from ar where name='overview_admin'), 5, 'admin overview covers every active class');
+select is((select (v->'population'->>'enrolled')::int from ar where name='overview_admin'),
+  (select (v->'population'->>'enrolled')::int from ar where name='admin_baseline') + 5, 'admin overview covers every active class');
 select is((select (v->>'participants')::int from ar where name='quiz_q1_admin'), 3, 'admins can analyse any quiz');
 select is((select (v->'population'->>'enrolled')::int from ar where name='overview_t2'), 2, 'another instructor sees only their own learners');
 select is((select v->'assessments'->>'avg_percent' from ar where name='overview_t2'), null, 'another instructor sees no foreign assessment results');

@@ -4,6 +4,11 @@
 begin;
 select plan(71);
 
+-- Isolate the module requirements from lessons published in the target
+-- database (rolled back with everything else): the fixtures below define the
+-- only curriculum topics.
+update public.curriculum_topics set archived_at = now() where archived_at is null;
+
 create temporary table gam_ctx (
   teacher uuid not null default gen_random_uuid(),
   other_teacher uuid not null default gen_random_uuid(),

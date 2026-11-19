@@ -173,7 +173,13 @@ select set_config('request.jwt.claim.sub',(select admin_user::text from q),true)
 select is(public.get_evaluation_queue('evaluate','{}')->'counts'->'evaluate',
   ((select count(*) from public.attempts a join public.classes c on c.id=a.class_id where a.status='evaluated' and c.status='active')
    + (select count(*) from public.homework_submissions s join public.homework_assignments h on h.id=s.assignment_id
-      join public.classes c on c.id=h.class_id where s.status='submitted' and c.status='active'))::text::jsonb,
+      join public.classes c on c.id=h.class_id where s.status='submitted' and c.status='active')
+   -- Quiz attempts awaiting essay scores, as slice A3's queue items list them
+   -- (every visible class). This test's own quiz attempt is created below, so
+   -- these are only attempts that already exist in the target database.
+   + (select count(*) from public.quiz_attempts qa join public.quiz_versions qv on qv.id=qa.quiz_version_id
+      join public.quizzes qu on qu.id=qv.quiz_id join public.classes c on c.id=qa.class_id
+      where qa.evaluation_status='pending'))::text::jsonb,
   'admins read every class');
 select set_config('request.jwt.claim.sub',(select l1::text from q),true);
 select throws_ok($$select public.get_evaluation_queue('evaluate','{}')$$,'42501','STAFF_REQUIRED','learners cannot read the evaluation queue');

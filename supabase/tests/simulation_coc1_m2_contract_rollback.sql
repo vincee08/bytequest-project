@@ -6,6 +6,11 @@
 begin;
 select plan(28);
 
+-- Isolate the COC1 quiz gate from lessons published in the target database
+-- (rolled back with everything else): this regression needs no curriculum
+-- topic, so none is required.
+update public.curriculum_topics set archived_at = now() where archived_at is null;
+
 create temp table m2_ctx (learner uuid not null default gen_random_uuid()) on commit drop;
 insert into m2_ctx default values;
 insert into auth.users(instance_id,id,aud,role,email,encrypted_password,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
