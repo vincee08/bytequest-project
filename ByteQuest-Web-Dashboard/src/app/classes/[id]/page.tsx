@@ -28,6 +28,7 @@ import { QuizDeadlineControls } from "@/components/quizzes/QuizDeadlineControls"
 import { PendingRosterEntries } from "@/components/roster/PendingRosterEntries";
 import { classQuizDeadlineRows, classTabHref, resolveClassTab } from "@/components/dashboard/class-workspace";
 import { rosterClient } from "@/lib/roster/server";
+import { deliveryKindLabel } from "@/lib/activities/assignment-options";
 
 export const dynamic = "force-dynamic";
 
@@ -70,7 +71,7 @@ export default async function ClassDetailPage({
     return claimedAt !== undefined && Math.abs(new Date(enrolledAt).getTime() - claimedAt) < 5 * 60 * 1000;
   };
 
-  const [membershipResult, assignmentResult, activityResult, rubricResult, moduleResult, bypassResult, resourceResult] =
+  const [membershipResult, assignmentResult, activityResult, rubricResult, moduleResult, bypassResult, resourceResult, linkResult] =
     await Promise.all([
       supabase
         .from("class_memberships")
@@ -89,7 +90,7 @@ export default async function ClassDetailPage({
         .order("title"),
       supabase
         .from("rubric_versions")
-        .select("id,title,activity_version_id")
+        .select("id,title,activity_version_id,version_number")
         .eq("status", "approved")
         .order("title"),
       supabase
@@ -107,6 +108,8 @@ export default async function ClassDetailPage({
         .select("id,title,description,mime_type,size_bytes,status,created_at,deletion_reason")
         .eq("class_id", id)
         .order("created_at", { ascending: false }),
+      // Simulation vs form-based assessment packages (spec WS2 labels).
+      supabase.from("activity_curriculum_links").select("activity_version_id,delivery_kind"),
     ]);
 
   const memberships = membershipResult.data ?? [];
@@ -126,6 +129,9 @@ export default async function ClassDetailPage({
     }));
   const activityById = new Map(
     (activityResult.data ?? []).map((activity) => [activity.id, activity.title]),
+  );
+  const deliveryKindByActivity = new Map(
+    (linkResult.data ?? []).map((link) => [link.activity_version_id, link.delivery_kind]),
   );
   const moduleById = new Map(
     (moduleResult.data ?? []).map((module) => [module.id, module.title]),
@@ -206,7 +212,7 @@ export default async function ClassDetailPage({
               <div className="border-b border-border px-5 py-4"><h2 className="font-semibold">Membership history</h2></div>
               {memberships.length ? <div className="divide-y divide-border">{memberships.map((membership) => {
                 const learner = profileById.get(membership.learner_id);
-                return <div key={membership.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm font-medium">{learner?.full_name ?? "Learner"}</p><p className="mt-0.5 text-xs text-muted-foreground">{learner?.email ?? "Email unavailable"} · enrolled {new Intl.DateTimeFormat("en-PH", { dateStyle: "medium" }).format(new Date(membership.enrolled_at))}</p>{membership.deactivation_reason ? <p className="mt-1 text-xs text-muted-foreground">Reason: {membership.deactivation_reason}</p> : null}</div><div className="flex flex-col items-end gap-2"><div className="flex flex-wrap justify-end gap-1.5">{joinedViaRoster(membership.learner_id, membership.enrolled_at) ? <Badge variant="default">Joined via roster</Badge> : null}<Badge variant={membership.status === "active" ? "secondary" : "outline"}>{membership.status}</Badge></div>{membership.status === "active" && classroom.status === "active" ? <div className="flex flex-col items-end gap-2"><DeactivateMembershipForm membershipId={membership.id} learnerName={learner?.full_name ?? "Learner"} /><DeactivateLearnerAccountForm learnerId={membership.learner_id} learnerName={learner?.full_name ?? "Learner"} /></div> : null}</div></div>;
+                return <div key={membership.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm font-medium">{learner?.full_name ?? "Learner"}</p><p className="mt-0.5 text-xs text-muted-foreground">{learner?.email ?? "Email unavailable"} · enrolled {new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeZone: "Asia/Manila" }).format(new Date(membership.enrolled_at))}</p>{membership.deactivation_reason ? <p className="mt-1 text-xs text-muted-foreground">Reason: {membership.deactivation_reason}</p> : null}</div><div className="flex flex-col items-end gap-2"><div className="flex flex-wrap justify-end gap-1.5">{joinedViaRoster(membership.learner_id, membership.enrolled_at) ? <Badge variant="default">Joined via roster</Badge> : null}<Badge variant={membership.status === "active" ? "secondary" : "outline"}>{membership.status}</Badge></div>{membership.status === "active" && classroom.status === "active" ? <div className="flex flex-col items-end gap-2"><DeactivateMembershipForm membershipId={membership.id} learnerName={learner?.full_name ?? "Learner"} /><DeactivateLearnerAccountForm learnerId={membership.learner_id} learnerName={learner?.full_name ?? "Learner"} /></div> : null}</div></div>;
               })}</div> : <p className="px-5 py-10 text-center text-sm text-muted-foreground">No learner has been enrolled.</p>}
             </section>
           </TabsContent>
@@ -214,7 +220,7 @@ export default async function ClassDetailPage({
           <TabsContent id="assignments" value="assignments" className="space-y-5">
             <HomeworkManager classId={id} classTitle={classroom.title} active={classroom.status === 'active'} homework={homeworkResult.data ?? []} />
             <section className="space-y-4 rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">Assigned quizzes</h2><p className="text-sm text-muted-foreground">Supplementary quizzes have their own attempts and deadlines.</p>{quizDeadlineRows.length ? <ul className="space-y-4">{quizDeadlineRows.map((row) => <li key={row.assignment.id} className="space-y-2"><h3 className="break-words text-sm font-semibold">{row.quizTitle}</h3><QuizDeadlineControls quizTitle={row.quizTitle} serverNow={new Date().toISOString()} assignments={[row.assignment]} /></li>)}</ul> : <p className="rounded-lg border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">No published quiz is assigned to this class yet.</p>}<Button asChild variant="outline" className="min-h-11"><Link href="/quizzes">Manage quizzes</Link></Button></section>
-            {classroom.status === "active" ? <section className="rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">Assign published content</h2><p className="mb-4 mt-1 text-sm text-muted-foreground">Assessment assignment remains gated by an approved source and matching approved rubric.</p><AssignActivityForm classId={id} activities={(activityResult.data ?? []).map((row) => ({ id: row.id, title: row.title, deliveryMode: row.delivery_mode }))} rubrics={(rubricResult.data ?? []).map((row) => ({ id: row.id, title: row.title, activityVersionId: row.activity_version_id }))} /></section> : null}
+            {classroom.status === "active" ? <section className="rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">Assign published content</h2><p className="mb-4 mt-1 text-sm text-muted-foreground">Assessment assignment remains gated by an approved source and matching approved rubric.</p><AssignActivityForm classId={id} activities={(activityResult.data ?? []).map((row) => ({ id: row.id, title: row.title, deliveryMode: row.delivery_mode, deliveryKind: deliveryKindByActivity.get(row.id) ?? null }))} rubrics={(rubricResult.data ?? []).map((row) => ({ id: row.id, title: row.title, activityVersionId: row.activity_version_id, versionNumber: row.version_number }))} /></section> : null}
             <section className="overflow-hidden rounded-xl border border-border bg-card">
               <div className="border-b border-border px-5 py-4">
                 <h2 className="font-semibold">Technical assignment history</h2>
@@ -231,6 +237,7 @@ export default async function ClassDetailPage({
                     const otherAssignments = (assignmentResult.data ?? [])
                       .filter((row) => row.id !== assignment.id && row.status === "active")
                       .map((row) => ({ id: row.id, title: row.title }));
+                    const kind = deliveryKindLabel(deliveryKindByActivity.get(assignment.activity_version_id));
                     return (
                       <div key={assignment.id} className="px-5 py-4">
                         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
@@ -239,6 +246,7 @@ export default async function ClassDetailPage({
                             <p className="mt-1 text-xs text-muted-foreground">
                               {activityById.get(assignment.activity_version_id) ?? "Versioned activity"} · {assignment.assignment_type}
                             </p>
+                            {kind ? <Badge variant="outline" className="mt-2">{kind}</Badge> : null}
                             <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
                               <span className="rounded-md border border-border px-2 py-1">
                                 {assignment.attempts_allowed === null

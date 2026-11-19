@@ -9,3 +9,11 @@ for(const isServer of [false,true]){
   const r=spawnSync(process.execPath,[...(isServer?['--conditions=react-server']:[]),'--import','tsx','--test',...files],{cwd,env:process.env,stdio:'inherit'});
   if(r.status!==0)process.exit(r.status??1);
 }
+// Repository scripts with database-free tests (simulation assessment
+// packages, release batches, SQL runner); they run from the repository root.
+const root=fileURLToPath(new URL('../',import.meta.url));
+const scripts=readdirSync(new URL('./',import.meta.url)).filter(f=>f.endsWith('.test.mjs')).map(f=>'scripts/'+f);
+if(scripts.length){
+  const r=spawnSync(process.execPath,['--test',...scripts],{cwd:root,env:process.env,stdio:'inherit'});
+  if(r.status!==0)process.exit(r.status??1);
+}

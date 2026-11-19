@@ -9,7 +9,7 @@ Spec: `docs/superpowers/specs/2026-11-19-redefense-revision-design.md`, section 
 | Item | Details |
 |---|---|
 | Class | **DEMO – Re-defense (synthetic learners)**, class code `DEMO-REDEF`, owned by the demo instructor. |
-| Learners | Twelve synthetic learners with the surname **Demo**: Alex, Bea, Cris, Dani, Eli, Fran, Gale, Hal, Iya, Jules, Kai and Lou Demo (learners 01–12 in that order). These are invented names, not project members. The leaderboard shows "First name L.", so they appear as "Alex D.", "Bea D." and so on: distinct, and still obviously demo data. Emails are `demo.learner01..12@bytequest.invalid` and student IDs `DEMO-RD-01..12`. Each account signs up through Supabase Auth as the app does. The instructor imports an Excel roster through the dashboard (`/api/roster/template`, `/preview`, `/import`). Learners 01–08 already have accounts and enroll immediately. Learners 09–12 are pending entries that enroll automatically when they sign up ("Joined via roster"). Credentials go only to the gitignored `.tmp/demo-accounts.json`. |
+| Learners | Twelve synthetic learners with the surname **Demo**: Alex, Bea, Cris, Dani, Eli, Fran, Gale, Hal, Iya, Jules, Kai and Lou Demo (learners 01–12 in that order). These are invented names, not project members. The leaderboard shows "First name L.", so they appear as "Alex D.", "Bea D." and so on: distinct, and still obviously demo data. Emails are `demo.learner01..12@bytequest.invalid` and student IDs `DEMO-RD-01..12`. Each account signs up through Supabase Auth as the app does. The instructor imports an Excel roster through the dashboard (`/api/roster/template`, `/preview`, `/import`). Learners 01–08 already have accounts and enroll immediately. Learners 09–12 are pending entries that enroll automatically when they sign up ("Joined via roster"). Credentials go only to a gitignored store per target: `.tmp/demo-accounts.local.json` for the local stack and `.tmp/demo-accounts.hosted-<host>.json` for a hosted project, so a hosted run never reuses local passwords or user ids. An earlier `.tmp/demo-accounts.json` is adopted only by the target it was written for. Like the 1.2.0 app, the synthetic learners send `x-bytequest-app-version` on every request. |
 | Lessons (LO1.1) | **DEMO · ESD precautions at the workbench** and **DEMO · Handling and seating components**. These are accurate, generic CSS NC II content, visible to every learner once published. The instructor drafts and submits each lesson; the admin evaluates it; the instructor finalizes it; the admin approves it. The first lesson is then published. The second stays **approved**, so an admin can publish it live during the defense. |
 | Practice | The typed work orders exported from the app (`tool/export_practice_test_evidence.dart`), the same action generators as `scripts/test-practice-api-all-missions.mjs`. They are written to `practice_mission_actions` with each learner's own token and verified through `/api/learner/practice`. Some runs include realistic mistakes: a CPU placed in the wrong orientation, memory seated in DIMM_A1 and then reseated, or the screwdriver used on the ESD ground point. Some learners press Verify too early, which records a failed verification. One learner completes all of COC1 and passes the COC1 practice quiz. Two learners barely start. |
 | Simulation assessment | **DEMO · COC1 M2 assembly assessment** (the published simulation package, 2 attempts, retry after 1 hour). It is assigned exactly as the dashboard's "Assign published content" form does it. First the instructor's own session reads the approved rubric that matches the package (row-level security). Then the instructor calls `assign_activity`, with no availability window or due date, like the form. Seven learners submit through `start_attempt` / `append_attempt_action` / `submit_attempt`: perfect runs, two CPU orientation errors (fails the safety-critical C3), three memory reseats (exceeds the C5 threshold) and an unfinished submission. The instructor records evaluations, finalizes and releases through `/api/evaluations`, so every Evaluation Center stage has items. |
@@ -36,7 +36,7 @@ Prerequisites:
 2. The QA fixtures exist: `node scripts/local-qa-fixtures.mjs`. The script uses `qa.instructor@bytequest.local` and `qa.admin@bytequest.local` from `.tmp/local-qa-accounts.json`.
 3. Root dependencies are installed (`corepack pnpm install --frozen-lockfile`).
 4. The dashboard is running against the local stack at `http://127.0.0.1:3000`: `corepack pnpm build` and `corepack pnpm start -p 3000` (or `pnpm dev`) in `ByteQuest-Web-Dashboard`, with a gitignored `.env.local` holding the local keys.
-5. The simulation assessments are published. When the COC1 M2 package is missing, the seed script runs `node scripts/publish-simulation-assessments.mjs` itself for the same target. The publisher is idempotent, and its temporary governance principal gets a one-time password.
+5. The simulation assessments are published. Locally, when the COC1 M2 package is missing, the seed script runs `node scripts/publish-simulation-assessments.mjs` itself. The publisher is idempotent, and its temporary governance principal gets a one-time password. It refuses a database that already holds a different package for the same contract version, because published versions are immutable; start from a fresh reset in that case.
 6. The practice work orders are exported to `.tmp/demo-practice-evidence.json`:
    - Natively: `cd ByteQuest-Mobile-App && flutter pub get && dart run tool/export_practice_test_evidence.dart ../.tmp/demo-practice-evidence.json`. When `ByteQuest-Mobile-App/.dart_tool` already exists, the seed script runs this export itself.
    - Or inside the Flutter container (`ghcr.io/cirruslabs/flutter:3.44.0`): mount the app read-only and copy it, then run `flutter pub get` and the same `dart run` command, writing to a mounted output folder.
@@ -74,16 +74,21 @@ BYTEQUEST_DEMO_WEB_URL=https://<dashboard> \
 BYTEQUEST_DEMO_INSTRUCTOR_PASSWORD=<password> \
 BYTEQUEST_DEMO_ADMIN_PASSWORD=<password> \
 node scripts/seed-demo-class.mjs --target hosted --confirm \
-  --instructor-email <demo instructor> --admin-email <admin> [--publish-topics]
+  --instructor-email <demo instructor> --admin-email <admin> [--publish-topics] [--publish-assessments]
 ```
 
 - Without `--target hosted --confirm --instructor-email <email>` the script refuses to run.
 - Both URLs must be `https`.
 - Prerequisites on hosted:
-  - the rollout's migrations are applied;
-  - the new app version is installed (the assessment requires its contract version);
-  - the work orders are exported from the same app build.
-- If the simulation assessments are not published yet, the seed script runs `node scripts/publish-simulation-assessments.mjs --target hosted --confirm` itself.
+  - the rollout's migrations are applied (`docs/REDEFENSE_HOSTED_ROLLOUT_PLAN.md`);
+  - the 20 simulation assessments are published (rollout step 8);
+  - the work orders are exported from the 1.2.0 app build.
+- **Publishing the simulation assessments is an explicit opt-in.** If they are not published, the script stops before writing anything, unless you pass `--publish-assessments`. With that flag it runs `node scripts/publish-simulation-assessments.mjs --target hosted --confirm` itself, which writes 20 production packages (not demo-labelled) and a temporary governance principal.
+- **Real learners must install 1.2.0. The installed 1.1.0 app is not prompted to update.**
+  - The server refuses simulation-assessment and essay-quiz starts from a client that does not send `x-bytequest-app-version` ≥ `app_release_config.min_supported_app_version` (`APP_UPDATE_REQUIRED`).
+  - 1.1.0 also cannot answer essays, shows pending results as "0 / N", shows no time limits, cannot complete published lessons and cannot verify COC1 M2 v3.
+  - Simulation-assessment evidence recorded with a foreign definition version is flagged `requires_review` for the instructor.
+- Learner credentials go to `.tmp/demo-accounts.hosted-<host>.json`.
 - **Lessons are visible to every learner.** On hosted, the first lesson is published only with `--publish-topics`. Without it, both lessons stop at **approved**.
 - Never put the service-role key or the passwords into a file in the repository.
 
@@ -94,6 +99,8 @@ node scripts/seed-demo-class.mjs --remove [--archive-topics]
 ```
 
 The same target flags apply (`--target hosted --confirm --instructor-email … --admin-email …`).
+
+**Release results before archiving.** Once the class is archived, its unreleased quiz, homework and technical results are hidden from the Evaluation Center's action stages, and the product has no unarchive path. Finalize and release every demo item first, or decide on purpose to leave it unreleased.
 
 What it does:
 
