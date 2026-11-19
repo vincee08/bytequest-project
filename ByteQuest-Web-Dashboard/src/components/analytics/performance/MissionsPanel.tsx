@@ -20,8 +20,10 @@ const ASSESSMENT_CONFIG = {
 
 type PracticeRow = MissionAnalytics["missions"][number];
 type AssessmentRow = MissionAnalytics["assessments"][number];
+type StepRow = MissionAnalytics["missions"][number]["steps"][number] & { mission_code: string; mission_title: string };
 
 const missionLabel = (code: string) => code.toUpperCase().replace("_", " ");
+const stepLabel = (step: { step: number | null; title: string }) => (step.step ? `Step ${step.step} · ${step.title}` : step.title);
 
 export function MissionsPanel({ data, query }: { data: MissionAnalytics; query: AnalyticsQuery }) {
   const period = describePeriod(data.period);
@@ -29,6 +31,8 @@ export function MissionsPanel({ data, query }: { data: MissionAnalytics; query: 
   if (notApplicable) {
     return <Panel title="Mission performance"><NotApplicable source="Missions" /></Panel>;
   }
+  const steps: StepRow[] = data.missions.flatMap((mission) =>
+    mission.steps.map((step) => ({ ...step, mission_code: mission.mission_code, mission_title: mission.title })));
   return (
     <div className="space-y-6">
       <Panel title="Practice missions" description={`Columns marked "period" count activity in ${period}; "to date" columns count server-verified completions up to the period end. Attempt counts come from recorded runs, never from completions.`}>
@@ -52,7 +56,7 @@ export function MissionsPanel({ data, query }: { data: MissionAnalytics; query: 
               caption="Practice mission performance"
               rows={data.missions}
               rowKey={(row) => row.mission_code}
-              minWidth={1280}
+              minWidth={1500}
               columns={[
                 { key: "mission", label: "Mission", render: (row) => <div className="min-w-[200px]"><p className="font-medium">{missionLabel(row.mission_code)} · {row.title}</p><p className="mt-0.5 text-xs text-muted-foreground">{row.module ? `${row.module.code} ${row.module.title}` : "No module"}</p></div> },
                 { key: "attempted", label: "Attempted (period)", align: "right", render: (row) => `${row.learners_attempted} / ${row.learners_in_scope}` },
@@ -63,10 +67,33 @@ export function MissionsPanel({ data, query }: { data: MissionAnalytics; query: 
                 { key: "invalid", label: "Invalid actions / run (period)", align: "right", render: (row) => formatNumber(row.avg_invalid_actions) },
                 { key: "verified_to_date", label: "Verified to date", align: "right", render: (row) => `${row.learners_verified_to_date} / ${row.learners_in_scope}` },
                 { key: "completion", label: "Completion to date", align: "right", render: (row) => formatPercent(row.completion_rate_to_date) },
+                { key: "most_missed", label: "Most-missed steps (period)", render: (row) => (row.most_missed.length ? (
+                  <ol className="min-w-[220px] list-decimal space-y-0.5 pl-4 text-xs">
+                    {row.most_missed.map((step) => <li key={step.phase_id}>{stepLabel(step)} <span className="text-muted-foreground">({step.missed} of {step.runs} runs)</span></li>)}
+                  </ol>
+                ) : <span className="text-xs text-muted-foreground">{row.steps.length ? "No missed step" : "No step results recorded"}</span>) },
               ]}
             />
           </>
         ) : <EmptyState title="No practice activity in this period" description="Missions appear once learners record practice runs in the period or have a verified completion to date." />}
+      </Panel>
+
+      <Panel title="Practice step results (period)" description="From the step results of each recorded run. A step is missed in a run when it was not completed or needed at least one incorrect attempt (invalid action or failed check).">
+        <DataTable<StepRow>
+          caption="Practice step results"
+          rows={steps}
+          rowKey={(row) => `${row.mission_code}-${row.phase_id}`}
+          minWidth={860}
+          emptyTitle="No step results recorded in this period."
+          columns={[
+            { key: "mission", label: "Mission", render: (row) => <span className="font-medium">{missionLabel(row.mission_code)} · {row.mission_title}</span> },
+            { key: "step", label: "Step", render: (row) => stepLabel(row) },
+            { key: "runs", label: "Runs", align: "right", render: (row) => row.runs },
+            { key: "missed", label: "Missed", align: "right", render: (row) => `${row.missed} (${formatPercent(row.missed_rate)})` },
+            { key: "not_completed", label: "Not completed", align: "right", render: (row) => row.not_completed },
+            { key: "incorrect", label: "Incorrect attempts / run", align: "right", render: (row) => formatNumber(row.avg_incorrect, 2) },
+          ]}
+        />
       </Panel>
 
       <Panel title="Technical assessments by mission" description="Assessment attempts in the period, labelled separately from practice. Pending results are counted but excluded from averages.">
