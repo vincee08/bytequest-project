@@ -132,7 +132,7 @@ export function LearnerProfileView({ profile, query }: { profile: LearnerProfile
         </dl>
       </Panel>
 
-      <Panel title="Engagement" description="A6 points and level. Points reward activity; they are not a competency judgement and are not part of the performance score.">
+      <Panel title="Engagement" description="Engagement points and level. Points reward activity; they are not a competency judgement and are not part of the performance score.">
         <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
           <div className="grid grid-cols-2 gap-3">
             <Stat label="Points" value={profile.engagement.points} helper={`+${profile.engagement.points_in_period} in the period`} />

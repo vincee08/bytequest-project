@@ -10,7 +10,7 @@ import {
   AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
-import { bulkRequestBodies, queueActionLabel, queueScoreText, queueStatusText } from "@/lib/evaluations/display";
+import { bulkRequestBodies, queueActionLabel, queueScoreText, queueStatusText, releaseConfirmationText } from "@/lib/evaluations/display";
 import {
   EVALUATION_STAGES, KIND_LABEL, STAGE_COPY, type BulkItemResult, type EvaluationStage, type QueueItem,
 } from "@/lib/evaluations/requests";
@@ -218,7 +218,7 @@ export function EvaluationCenter({
             <AlertDialogDescription>
               {bulkAction === "finalize"
                 ? "Finalizing locks each recorded evaluation and grade. Learners still cannot see them until you release."
-                : "Learners will see each released score and feedback immediately and receive a notification. Release cannot be undone from this page."}
+                : releaseConfirmationText(chosen)}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <ul className="max-h-48 list-disc space-y-1 overflow-y-auto pl-5 text-sm">

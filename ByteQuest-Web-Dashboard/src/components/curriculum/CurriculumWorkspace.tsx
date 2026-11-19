@@ -24,6 +24,7 @@ import { EvaluationDialog, type EvaluationResult } from "./EvaluationDialog";
 import { MarkdownPreview } from "./MarkdownPreview";
 import { ContentStatusBadge, PublicationTimeline } from "./PublicationTimeline";
 import { TopicEditorDialog, type TopicDraft } from "./TopicEditorDialog";
+import { formatDate, formatDateTime } from "@/lib/analytics/format";
 
 const actionLabels: Record<RevisionAction, string> = {
   edit: "Edit draft",
@@ -417,7 +418,7 @@ export function CurriculumWorkspaceView({
                     <p className="text-sm font-semibold text-emerald-900">
                       Learners see revision {selected.published.revision_number}
                       {selected.published.published_at
-                        ? ` · published ${new Date(selected.published.published_at).toLocaleDateString("en-PH")}`
+                        ? ` · published ${formatDate(selected.published.published_at)}`
                         : ""}
                     </p>
                     {actionButtons(selected, selected.published)}
@@ -454,7 +455,7 @@ export function CurriculumWorkspaceView({
                         <span className="font-medium">Revision {revision.revision_number}</span>
                         <ContentStatusBadge status={revision.status} />
                         <span className="text-xs text-muted-foreground">
-                          {person(revision.author_id)} · updated {new Date(revision.updated_at).toLocaleString("en-PH")}
+                          {person(revision.author_id)} · updated {formatDateTime(revision.updated_at)}
                         </span>
                       </li>
                     ))}
