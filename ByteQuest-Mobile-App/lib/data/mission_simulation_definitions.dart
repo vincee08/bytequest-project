@@ -51,6 +51,15 @@ abstract final class MissionSimulationDefinitions {
   }
 
   static const coc1M2AssemblyContractVersion = 'css-assembly-20261119-v3';
+
+  /// Contract version of practice progress saved before runtime snapshots and
+  /// actions carried a definition version. Only missions whose contract has
+  /// changed since then name one; their earlier progress restarts on the new
+  /// version (verified completions keep counting on the server).
+  static String? unstampedContractVersion(String id) => switch (id) {
+        'coc1_m2' => 'css-sag-20261011-v2',
+        _ => null,
+      };
 }
 
 final class _PhaseSpec {

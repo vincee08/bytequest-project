@@ -111,6 +111,7 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
   bool _showGuidance = false;
   bool _expandedControls = false;
   bool _showHow = false;
+  bool _missionUpdatedNotice = false;
   String? _workspaceMode;
   String? _workspaceModePhaseId;
   OverlayEntry? _guideOutline;
@@ -156,11 +157,16 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
             ? MissionRuntimeMode.assessment
             : MissionRuntimeMode.practice,
         assessmentAttemptId: isAssessment ? activeSession!.attemptId : null,
+        definitionVersion:
+            MissionSimulationDefinitions.contractVersion(widget.definition.id),
       ).copyWith(currentPhaseId: firstPhaseId),
       store: const SharedPreferencesMissionRuntimeStore(),
       evidenceGateway: MissionEvidenceGateway(transport: evidenceTransport),
       restoreReducer: MissionRuntimeActionReducer(widget.definition),
       submissionPhaseIds: {widget.definition.phases.last.id},
+      unstampedDefinitionVersion:
+          MissionSimulationDefinitions.unstampedContractVersion(
+              widget.definition.id),
     );
   }
 
@@ -238,6 +244,18 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
       }
       _accessVerified = true;
       await _controller.restore();
+      if (_controller.definitionChanged) {
+        // Progress saved for an earlier version of this mission: start the
+        // current version cleanly. The server keeps the earlier actions and
+        // any verified completion; only this run starts over.
+        try {
+          await _controller.startNewDefinitionVersion();
+        } catch (_) {
+          _restoreFailure = MissionContentData.missionUpdateFailed;
+          return;
+        }
+        _missionUpdatedNotice = true;
+      }
       if (_state.mode == MissionRuntimeMode.practice) {
         final userId = _tutorialUserId;
         if (userId != null) {
@@ -269,8 +287,31 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
               : MissionContentData.practiceProgressUnavailable;
     } finally {
       if (mounted) setState(() => _restoring = false);
+      if (mounted && _missionUpdatedNotice && _restoreFailure == null) {
+        _missionUpdatedNotice = false;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) unawaited(_showMissionUpdatedNotice());
+        });
+      }
     }
   }
+
+  Future<void> _showMissionUpdatedNotice() => showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          key: const ValueKey('mission-updated-notice'),
+          title: const Text(MissionContentData.missionUpdatedTitle),
+          content: const Text(MissionContentData.missionUpdatedNotice),
+          actions: [
+            FilledButton(
+              key: const ValueKey('mission-updated-dismiss'),
+              style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text(MissionContentData.missionUpdatedDismiss),
+            ),
+          ],
+        ),
+      );
 
   Future<void> _retryRestore() async {
     setState(() {
@@ -911,12 +952,12 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
                     ? Semantics(
                         key: ValueKey('mission-interaction-${phase.id}'),
                         liveRegion: true,
-                        child: Text(phase.instruction,
+                        child: Text(_displayPhase(phase).instruction,
                             style: AppTheme.bodyMedium),
                       )
                     : MissionPhaseInteraction(
                   key: ValueKey('mission-interaction-${phase.id}'),
-                  phase: phase,
+                  phase: _displayPhase(phase),
                   state: _state,
                   enabled: !_writing && !_submitting && !_submitted,
                   onAction: (actionType, target, value) =>
@@ -1099,6 +1140,29 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
           ? () => unawaited(_advance(phaseIndex))
           : null,
     );
+  }
+
+  final _displayPhases = <String, MissionPhaseDefinition>{};
+
+  /// The phase as the learner reads it. Assessment shows goal-level task text
+  /// that never names a slot, header, cable or step; practice keeps the
+  /// technical instruction. Actions are always recorded against [phase].
+  MissionPhaseDefinition _displayPhase(MissionPhaseDefinition phase) {
+    if (_state.mode != MissionRuntimeMode.assessment) return phase;
+    final instruction = MissionContentData.assessmentInstruction(phase.id);
+    if (instruction == null) return phase;
+    return _displayPhases.putIfAbsent(
+        phase.id,
+        () => MissionPhaseDefinition(
+              id: phase.id,
+              title: phase.title,
+              instruction: instruction,
+              primaryInteraction: phase.primaryInteraction,
+              supportingInteractions: phase.supportingInteractions,
+              availableObjectIds: phase.availableObjectIds,
+              feedbackIds: phase.feedbackIds,
+              presentation: phase.presentation,
+            ));
   }
 
   Map<String, HotspotVisualState> _equipmentHotspots() {

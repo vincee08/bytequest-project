@@ -31,6 +31,9 @@ abstract final class MissionEquipmentSimulator {
         ? MissionContentData.assessmentNeutralRecorded
         : MissionContentData.equipmentRecordedFeedback;
     var correction = false;
+    // POST checks failing on a completed test that charge a step target
+    // (mirrors failed_checks in private.simulation_replay).
+    var faults = 0;
     final recorded = Map<String, dynamic>.from(value);
     final phaseValues = map(next['phases']);
     final phaseState = map(phaseValues[phase.id]);
@@ -242,11 +245,22 @@ abstract final class MissionEquipmentSimulator {
         final readings = <Map<String, dynamic>>[];
         for (final check in checks) {
           final operating = conditionsMet(check['requires'], state);
+          if (!operating && check['counts'] is String) faults++;
           readings.add({
             'id': check['id'],
-            'label': check['label'],
+            'label': assessment
+                ? MissionContentData.assessmentReadingLabel(phase.id,
+                    check['id'] as String?, check['label'] as String? ?? '')
+                : check['label'],
             'operating': operating,
-            'reading': operating ? check['nominal'] : check['fault'],
+            // Assessment readouts state the symptom only: they never name
+            // the slot, header, cable or step that fixes it.
+            'reading': assessment
+                ? MissionContentData.assessmentReading(
+                    phase.id, check['id'] as String?, operating)
+                : operating
+                    ? check['nominal']
+                    : check['fault'],
           });
         }
         final result = {
@@ -304,6 +318,9 @@ abstract final class MissionEquipmentSimulator {
               ? 'corrections'
               : 'valid';
       counts[key] = (counts[key] as num? ?? 0).toInt() + 1;
+      if (faults > 0) {
+        counts['faults'] = (counts['faults'] as num? ?? 0).toInt() + faults;
+      }
       next['counts'] = counts;
     }
     phaseState['last_action_valid'] = valid;

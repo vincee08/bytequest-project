@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
+import '../../../../data/mission_content_data.dart';
 import 'assembly_bench_layout.dart';
 
 /// Physical details drawn over the part photographs: socket keys, levers,
@@ -153,11 +154,11 @@ class AssemblyBenchPainter extends CustomPainter {
           slot.topCenter - Offset(0, 9 * s), 4.4 * s);
     }
     for (final header in const [
-      ('cpu_fan_header', 'CPU_FAN'),
-      ('sys_fan_header', 'SYS_FAN'),
-      ('board_atx24', '24-PIN'),
-      ('board_eps8', '8-PIN'),
-      ('board_front_panel', 'F_PANEL'),
+      ('cpu_fan_header', MissionContentData.benchSilkscreenCpuFan),
+      ('sys_fan_header', MissionContentData.benchSilkscreenSysFan),
+      ('board_atx24', MissionContentData.benchSilkscreenAtx24),
+      ('board_eps8', MissionContentData.benchSilkscreenEps8),
+      ('board_front_panel', MissionContentData.benchSilkscreenFrontPanel),
     ]) {
       final rect = AssemblyBenchLayout.slot(header.$1, view)!;
       final s = socket.width / 60;

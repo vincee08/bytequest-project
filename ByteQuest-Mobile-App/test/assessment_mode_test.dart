@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:bytequest/core/theme/app_theme.dart';
 import 'package:bytequest/data/mission_content_data.dart';
 import 'package:bytequest/data/mission_simulation_definitions.dart';
@@ -7,6 +9,7 @@ import 'package:bytequest/screens/simulation/components/equipment_workspace.dart
 import 'package:bytequest/screens/simulation/components/mission_guidance_panel.dart';
 import 'package:bytequest/screens/simulation/components/simulation_scene.dart';
 import 'package:bytequest/screens/simulation/mission_simulation_screen.dart';
+import 'package:bytequest/screens/simulation/runtime/mission_equipment_simulator.dart';
 import 'package:bytequest/screens/simulation/runtime/mission_evidence_gateway.dart';
 import 'package:bytequest/screens/simulation/runtime/mission_runtime_controller.dart';
 import 'package:bytequest/screens/simulation/runtime/mission_runtime_models.dart';
@@ -16,12 +19,85 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../tool/export_practice_contracts.dart'
+    show replayActionKinds, replayRow;
 import 'support/equipment_practice_driver.dart';
+import 'support/equipment_widget_driver.dart';
 
 // Practice vs Assessment for every production mission (re-defense slice A1):
 // assessment hides guidance, tutorials and compatible-slot highlights, keeps
 // the equipment interactive, submits only after confirmation, and refuses a
 // package published from a different definition version.
+//
+// Fix round 1:
+// * C1: every mission's correct run is driven through the assessment-mode
+//   controls. The evidence it records is exactly the exported happy path that
+//   supabase/tests/simulation_assessment_all_missions_rollback.sql submits
+//   through the attempt lifecycle, where every step criterion is satisfied.
+// * I1: assessment text never names the expected slot, header, cable or step.
+
+/// The evidence the server replay counts: replayed kinds only, a sequencing
+/// order only once the learner confirms it, and only the configuration fields
+/// of the phase's panel (the replay ignores other keys of `values`).
+List<Map<String, Object?>> _countedEvidence(
+    MissionSimulationDefinition definition,
+    Iterable<MissionEvidenceAction> actions) {
+  final rows = <Map<String, Object?>>[];
+  for (final action in actions) {
+    final kind = action.value['runtime_action_type'] ?? action.actionType;
+    if (!replayActionKinds.contains(kind) ||
+        kind == 'sequence_reordered' && action.value['confirmed'] != true) {
+      continue;
+    }
+    final row = replayRow(action);
+    if (kind == 'configuration_applied') {
+      final phase =
+          definition.phases.firstWhere((item) => item.id == action.phaseId);
+      final equipment =
+          MissionEquipmentSimulator.map(phase.presentation['equipment']);
+      final panel = equipment.containsKey('configuration')
+          ? MissionEquipmentSimulator.map(equipment['configuration'])
+          : phase.presentation;
+      final fields = MissionEquipmentSimulator.maps(panel['fields'])
+          .map((field) => field['id'])
+          .toSet();
+      final value = Map<String, Object?>.from(row['value'] as Map);
+      value['values'] = {
+        for (final entry
+            in MissionEquipmentSimulator.map(value['values']).entries)
+          if (fields.contains(entry.key)) entry.key: entry.value,
+      };
+      row['value'] = value;
+    }
+    rows.add(row);
+  }
+  return rows;
+}
+
+/// Names of the COC1 M2 slots, headers and cables a step expects.
+const _coc1M2Targets = [
+  'DIMM_A2',
+  'DIMM_B2',
+  'A2',
+  'B2',
+  'CPU_FAN',
+  'F_PANEL',
+  'EPS',
+  '8-pin',
+  '24-pin',
+  'SATA power',
+  'SATA data',
+  'front-panel',
+  'front panel',
+];
+
+void _expectNoCoc1M2Target(String text, String reason) {
+  for (final name in _coc1M2Targets) {
+    final word = RegExp('(^|[^A-Za-z0-9_])${RegExp.escape(name)}(\$|[^A-Za-z0-9_])',
+        caseSensitive: false);
+    expect(word.hasMatch(text), isFalse, reason: '$reason names $name: $text');
+  }
+}
 
 class _RecordingTransport implements MissionEvidenceTransport {
   final actions = <MissionEvidenceAction>[];
@@ -44,16 +120,17 @@ MissionRuntimeState _assessment(MissionRuntimeState state) =>
 var _harnessCount = 0;
 
 class _Harness {
-  _Harness(this.definition, {this.learnerPayload = const {}});
+  _Harness(this.definition, {this.learnerPayload = const {}, this.phaseId});
 
   final MissionSimulationDefinition definition;
   final Map<String, dynamic> learnerPayload;
+  final String? phaseId;
   final transport = _RecordingTransport();
   final String userId = 'assessment-qa-${_harnessCount++}';
   late final controller = MissionRuntimeController(
     userId: userId,
     initialState: _assessment(MissionRuntimeState.initial(definition.id)
-        .copyWith(currentPhaseId: definition.phases.first.id)),
+        .copyWith(currentPhaseId: phaseId ?? definition.phases.first.id)),
     store: const SharedPreferencesMissionRuntimeStore(),
     evidenceGateway: MissionEvidenceGateway(transport: transport),
     submissionPhaseIds: {definition.phases.last.id},
@@ -237,4 +314,157 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  // C1: a correct run is possible with the controls assessment mode renders,
+  // and it records the evidence the server evaluation suite passes.
+  for (final definition in MissionSimulationDefinitions.all) {
+    testWidgets(
+        '${definition.id}: a correct run through the assessment controls '
+        'records the evaluated happy path', (tester) async {
+      final harness = await _pump(tester, _Harness(definition));
+      final plan = EquipmentPracticeDriver(definition);
+      for (final phase in definition.phases) {
+        plan.complete(phase);
+      }
+      for (var index = 0; index < definition.phases.length - 1; index++) {
+        final phase = definition.phases[index];
+        for (final action
+            in plan.actions.where((action) => action.phaseId == phase.id)) {
+          await performEquipmentAction(
+              tester, phase, action, harness.controller);
+          expect(tester.takeException(), isNull,
+              reason: '${phase.id}/${action.actionType}');
+        }
+        await tapEquipmentControl(
+            tester, find.byKey(const ValueKey('mission-next')));
+        await tester.pumpAndSettle();
+        expect(harness.controller.state.currentPhaseId,
+            definition.phases[index + 1].id,
+            reason: '${phase.id} can be completed in assessment mode');
+      }
+      final recorded = _countedEvidence(definition, harness.transport.actions);
+      final expected = _countedEvidence(definition, plan.actions);
+      for (var i = 0; i < recorded.length || i < expected.length; i++) {
+        final actual = i < recorded.length ? recorded[i] : null;
+        final wanted = i < expected.length ? expected[i] : null;
+        expect(actual, wanted,
+            reason: 'evidence #$i recorded ${jsonEncode(actual)} '
+                'exported ${jsonEncode(wanted)}');
+      }
+      expect(harness.controller.state.pendingEvidence, isEmpty);
+    });
+  }
+
+  // I1: assessment text states goals and symptoms, never the expected target.
+  group('assessment text never names the expected target', () {
+    final coc1M2 = MissionSimulationDefinitions.byId('coc1_m2');
+
+    test('COC1 M2 task text and part descriptions are goal-level', () {
+      for (final phase in coc1M2.phases.take(5)) {
+        final instruction = MissionContentData.assessmentInstruction(phase.id);
+        expect(instruction, isNotNull, reason: phase.id);
+        _expectNoCoc1M2Target(instruction!, phase.id);
+      }
+      // The parts inspected on the mat in phase 1.
+      final parts = MissionEquipmentSimulator.maps(
+          coc1M2.phases.first.presentation['objects']);
+      expect(parts, hasLength(7));
+      for (final part in parts) {
+        final description =
+            MissionContentData.benchAssessmentInspection[part['id']];
+        expect(description, isNotNull, reason: '${part['id']}');
+        _expectNoCoc1M2Target(description!, '${part['id']}');
+      }
+    });
+
+    test('COC1 M2 power-on readouts state symptoms only', () {
+      final phase = coc1M2.phases[4];
+      // Wrong DIMM pair, lever and latches open, no cables, nothing fastened:
+      // every check fails.
+      final state = MissionRuntimeState.fromJson({
+        ...MissionRuntimeState.initial('coc1_m2')
+            .copyWith(
+              currentPhaseId: phase.id,
+              placements: {'ram_1': 'dimm_a1', 'ram_2': 'dimm_b1'},
+            )
+            .toJson(),
+        'mode': 'assessment',
+        'assessmentAttemptId': 'attempt-qa',
+      });
+      final value = MissionEquipmentSimulator.describeAction(
+        definition: coc1M2,
+        phase: phase,
+        state: state,
+        actionType: 'test_completed',
+        target: phase.presentation['target'] as String,
+        value: const {},
+      );
+      final readings = MissionEquipmentSimulator.maps(
+          MissionEquipmentSimulator.map(value['measured_result'])['readings']);
+      expect(readings, hasLength(12));
+      for (final reading in readings) {
+        expect(reading['operating'], isFalse, reason: '${reading['id']}');
+        _expectNoCoc1M2Target(
+            '${reading['label']}: ${reading['reading']}', '${reading['id']}');
+      }
+      expect(readings.map((reading) => reading['reading']),
+          contains('Memory is running in single-channel mode.'));
+      expect(readings.map((reading) => reading['reading']),
+          contains('No boot device detected.'));
+    });
+
+    for (final index in [0, 1, 2, 3, 4]) {
+      testWidgets('COC1 M2 phase ${index + 1} shows its goal-level task',
+          (tester) async {
+        final phase = coc1M2.phases[index];
+        await _pump(tester, _Harness(coc1M2, phaseId: phase.id));
+        expect(find.textContaining(phase.instruction), findsNothing);
+        expect(
+            find.textContaining(
+                MissionContentData.assessmentInstruction(phase.id)!),
+            findsOneWidget);
+      });
+    }
+
+    test('test readouts of every mission are neutral in assessment', () {
+      var checked = 0;
+      for (final mission in MissionSimulationDefinitions.all) {
+        for (final phase in mission.phases) {
+          final checks = MissionEquipmentSimulator.maps(
+              MissionEquipmentSimulator.map(
+                  phase.presentation['equipment'])['checks']);
+          if (checks.isEmpty) continue;
+          final state = _assessment(MissionRuntimeState.initial(mission.id)
+              .copyWith(currentPhaseId: phase.id));
+          final value = MissionEquipmentSimulator.describeAction(
+            definition: mission,
+            phase: phase,
+            state: state,
+            actionType: 'test_completed',
+            target: phase.presentation['target'] as String? ?? phase.id,
+            value: const {},
+          );
+          final readings = MissionEquipmentSimulator.maps(
+              MissionEquipmentSimulator.map(
+                  value['measured_result'])['readings']);
+          for (final reading in readings) {
+            final check = checks.firstWhere((c) => c['id'] == reading['id']);
+            final text = reading['reading'] as String;
+            expect(text, isNot(check['fault']),
+                reason: '${phase.id}/${check['id']}');
+            expect(text, isNot(check['nominal']),
+                reason: '${phase.id}/${check['id']}');
+            if (mission.id != 'coc1_m2') {
+              expect(text, reading['operating'] == true
+                  ? MissionContentData.assessmentReadingNominal
+                  : MissionContentData.assessmentReadingFault,
+                  reason: '${phase.id}/${check['id']}');
+            }
+            checked++;
+          }
+        }
+      }
+      expect(checked, greaterThan(50));
+    });
+  });
 }

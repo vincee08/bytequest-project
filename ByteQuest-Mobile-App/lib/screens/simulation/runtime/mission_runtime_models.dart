@@ -556,6 +556,7 @@ final class MissionRuntimeState {
     this.cameraScale = 1,
     this.cameraOffsetX = 0,
     this.cameraOffsetY = 0,
+    this.definitionVersion,
     DateTime? updatedAt,
   })  : completedPhaseIds = Set.unmodifiable(completedPhaseIds),
         interactionCompletedPhaseIds =
@@ -608,11 +609,13 @@ final class MissionRuntimeState {
     String missionId, {
     MissionRuntimeMode mode = MissionRuntimeMode.practice,
     String? assessmentAttemptId,
+    String? definitionVersion,
   }) {
     return MissionRuntimeState(
       missionId: missionId,
       mode: mode,
       assessmentAttemptId: assessmentAttemptId,
+      definitionVersion: definitionVersion,
     );
   }
 
@@ -655,6 +658,7 @@ final class MissionRuntimeState {
       cameraScale: (json['cameraScale'] as num? ?? 1).toDouble(),
       cameraOffsetX: (json['cameraOffsetX'] as num? ?? 0).toDouble(),
       cameraOffsetY: (json['cameraOffsetY'] as num? ?? 0).toDouble(),
+      definitionVersion: json['definitionVersion'] as String?,
       updatedAt: DateTime.parse(json['updatedAt'] as String),
     );
   }
@@ -688,6 +692,10 @@ final class MissionRuntimeState {
   final double cameraScale;
   final double cameraOffsetX;
   final double cameraOffsetY;
+
+  /// Practice contract version the progress was recorded against. Absent in
+  /// snapshots saved before versions were stamped.
+  final String? definitionVersion;
   final DateTime updatedAt;
 
   MissionRuntimeState copyWith({
@@ -719,6 +727,7 @@ final class MissionRuntimeState {
     double? cameraScale,
     double? cameraOffsetX,
     double? cameraOffsetY,
+    String? definitionVersion,
     DateTime? updatedAt,
   }) {
     return MissionRuntimeState(
@@ -754,6 +763,7 @@ final class MissionRuntimeState {
       cameraScale: cameraScale ?? this.cameraScale,
       cameraOffsetX: cameraOffsetX ?? this.cameraOffsetX,
       cameraOffsetY: cameraOffsetY ?? this.cameraOffsetY,
+      definitionVersion: definitionVersion ?? this.definitionVersion,
       updatedAt: updatedAt ?? DateTime.now(),
     );
   }
@@ -810,6 +820,7 @@ final class MissionRuntimeState {
         'cameraScale': cameraScale,
         'cameraOffsetX': cameraOffsetX,
         'cameraOffsetY': cameraOffsetY,
+        if (definitionVersion != null) 'definitionVersion': definitionVersion,
         'updatedAt': updatedAt.toIso8601String(),
       };
 
@@ -846,6 +857,7 @@ final class MissionRuntimeState {
       other.cameraScale == cameraScale &&
       other.cameraOffsetX == cameraOffsetX &&
       other.cameraOffsetY == cameraOffsetY &&
+      other.definitionVersion == definitionVersion &&
       other.updatedAt == updatedAt;
 
   @override
@@ -877,6 +889,7 @@ final class MissionRuntimeState {
         cameraScale,
         cameraOffsetX,
         cameraOffsetY,
+        definitionVersion,
         updatedAt,
       ]);
 }
