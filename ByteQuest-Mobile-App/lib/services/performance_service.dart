@@ -34,12 +34,26 @@ class PerformanceService {
     'score_revisions',
     'criterion_results',
     'quiz_results',
+    'quiz_result_finalizations',
   ];
 
   Future<PerformanceSnapshot> fetchMyPerformance() async {
     final response = await _client.rpc('get_my_performance');
     if (response is! Map) throw StateError('PERFORMANCE_UNAVAILABLE');
     return PerformanceSnapshot.fromJson(Map<String, dynamic>.from(response));
+  }
+
+  /// Quiz titles by attempt id, in one call to the learner's quiz list
+  /// (`get_available_learner_quizzes`). Learners cannot read quiz titles
+  /// directly under RLS, so `get_my_performance()` carries none.
+  Future<Map<String, String>> fetchQuizTitles() async {
+    final response = await _client.rpc('get_available_learner_quizzes');
+    if (response is! List) throw StateError('QUIZ_TITLES_UNAVAILABLE');
+    return {
+      for (final entry in response.whereType<Map>())
+        if (entry['attempt_id'] is String && entry['title'] is String)
+          entry['attempt_id'] as String: entry['title'] as String,
+    };
   }
 
   /// Emits whenever one of the learner's performance records changes.
