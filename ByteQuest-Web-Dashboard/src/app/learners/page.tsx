@@ -1,31 +1,63 @@
-import Link from "next/link";
 import { Activity, GraduationCap, Users } from "lucide-react";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { MetricStrip } from "@/components/dashboard/MetricStrip";
 import { PageHeader } from "@/components/dashboard/PageHeader";
-import { AdminGovernanceTable, AdminTableCell } from "@/components/admin/AdminGovernanceTable";
-import { Badge } from "@/components/ui/badge";
+import { DirectorySearchControls } from "@/components/learners/DirectorySearchControls";
+import { DirectoryError, LearnerDirectoryTable } from "@/components/learners/LearnerDirectoryTable";
 import { requireStaffProfile } from "@/lib/auth/server";
-import { formatAdminDate, getAdminGovernanceData } from "@/lib/admin/governance";
+import { getAdminGovernanceData } from "@/lib/admin/governance";
+import { learnerSearchHref, learnerSortDefaults, learnerStatusFilters, learnerStatusLabels, parseLearnerSearchParams } from "@/lib/learners/search";
+import { runLearnerSearch } from "@/lib/learners/search-server";
+import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminLearnersPage() {
+export default async function AdminLearnersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   await requireStaffProfile(["admin"]);
-  const { profiles, classes, memberships } = await getAdminGovernanceData();
+  const filters = parseLearnerSearchParams(await searchParams);
+  const [{ profiles, classes, memberships }, search] = await Promise.all([
+    getAdminGovernanceData(),
+    createServerSupabaseClient().then((client) => runLearnerSearch(client, filters)),
+  ]);
   const learners = profiles.filter((profile) => profile.role === "learner");
   const activeMemberships = memberships.filter((row) => row.status === "active");
-  const classesByLearner = new Map<string, number>();
-  activeMemberships.forEach((row) => classesByLearner.set(row.learner_id, (classesByLearner.get(row.learner_id) ?? 0) + 1));
+  const activeClasses = classes.filter((row) => row.status === "active").sort((a, b) => a.title.localeCompare(b.title));
+  const inactiveLearners = learners.filter((row) => row.status !== "active").length;
+  const hidden: Record<string, string> = {};
+  if (filters.sort !== "name") hidden.sort = filters.sort;
+  if (filters.direction !== learnerSortDefaults[filters.sort]) hidden.dir = filters.direction;
 
   return <DashboardLayout><div className="mx-auto max-w-7xl space-y-7">
-    <PageHeader title="Learners" description="Review learner account state and historical enrollment without entering Instructor assessment workflows." />
+    <PageHeader title="Learners" description="Search learner accounts by name, email, student ID or class. Review account state and enrollment without entering Instructor assessment workflows." />
     <MetricStrip ariaLabel="Learner governance metrics" metrics={[
-      { label: "Active learners", value: learners.filter((row) => row.status === "active").length, helper: "Learner accounts currently active", icon: Users, featured: true },
+      { label: "Active learners", value: learners.filter((row) => row.status === "active").length, helper: "Learner accounts currently active", icon: Users, featured: true, href: "/learners?status=active", linkLabel: "Show active learners" },
       { label: "Enrolled learners", value: new Set(activeMemberships.map((row) => row.learner_id)).size, helper: "Learners with at least one active class membership", icon: GraduationCap, tone: "positive" },
-      { label: "Active classes", value: classes.filter((row) => row.status === "active").length, helper: "Available class contexts", icon: GraduationCap },
-      { label: "Needs account review", value: learners.filter((row) => row.status !== "active").length, helper: "Deactivated or otherwise inactive accounts", icon: Activity, tone: "attention", href: "/users", linkLabel: "Review learner accounts" },
+      { label: "Active classes", value: activeClasses.length, helper: "Available class contexts", icon: GraduationCap },
+      { label: "Needs account review", value: inactiveLearners, helper: "Deactivated or otherwise inactive learner accounts", icon: Activity, tone: inactiveLearners ? "attention" : "neutral", href: "/learners?status=inactive", linkLabel: "Review inactive learner accounts" },
     ]} />
-    <AdminGovernanceTable headers={["Learner", "Account", "Active classes", "Last activity", "Account record"]} empty="No learner profiles are available.">{learners.length ? learners.map((row) => <tr key={row.user_id} className="transition-colors hover:bg-muted/25"><AdminTableCell><Link href={`/users/${row.user_id}/edit`} className="font-semibold text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{row.full_name}</Link><p className="mt-0.5 text-xs text-muted-foreground">{row.email}</p></AdminTableCell><AdminTableCell><Badge variant={row.status === "active" ? "secondary" : "outline"}>{row.status}</Badge></AdminTableCell><AdminTableCell><span className="font-semibold tabular-nums">{classesByLearner.get(row.user_id) ?? 0}</span></AdminTableCell><AdminTableCell muted>{formatAdminDate(row.last_activity_at)}</AdminTableCell><AdminTableCell><Badge variant="outline">History preserved</Badge></AdminTableCell></tr>) : null}</AdminGovernanceTable>
+    <DirectorySearchControls
+      action="/learners"
+      label="Search learners"
+      placeholder="Name, email, student ID or class"
+      query={filters.q}
+      hidden={hidden}
+      clearHref="/learners"
+      filtered={Boolean(filters.q || filters.classId || filters.status !== "all")}
+      selects={[
+        { name: "class", label: "Class", value: filters.classId ?? "all", options: [{ value: "all", label: "All classes" }, ...activeClasses.map((row) => ({ value: row.id, label: row.title }))] },
+        { name: "status", label: "Account status", value: filters.status, options: learnerStatusFilters.map((value) => ({ value, label: learnerStatusLabels[value] })) },
+      ]}
+    />
+    {search.data ? (
+      <LearnerDirectoryTable
+        basePath="/learners"
+        filters={filters}
+        result={search.data}
+        rowHref={(row) => `/users/${row.user_id}/edit`}
+        showCreated
+        emptyTitle="No learner accounts yet."
+        emptyText="Learners appear here after they sign up in the ByteQuest app."
+      />
+    ) : <DirectoryError message={search.error} retryHref={learnerSearchHref("/learners", filters, {})} />}
   </div></DashboardLayout>;
 }
