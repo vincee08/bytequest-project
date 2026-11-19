@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/theme/app_theme.dart';
+import '../data/learning_content_data.dart';
 
-/// Compact learner navigation inspired by modern learning and wellbeing apps.
-/// Rewards deliberately remains separate from competency progress.
+/// Compact learner navigation: Home · Learn · Practice · Progress · Rewards.
+/// Rewards deliberately remains separate from competency progress. Labels
+/// scale down to fit narrow phones at large text sizes instead of overflowing.
 class ByteQuestBottomNav extends StatelessWidget {
   final int currentIndex;
   final Function(int) onTap;
@@ -14,38 +16,30 @@ class ByteQuestBottomNav extends StatelessWidget {
     required this.onTap,
   });
 
+  static const destinations = <(IconData, String)>[
+    (Icons.home_rounded, LearningContentData.navHome),
+    (Icons.menu_book_rounded, LearningContentData.navLearn),
+    (Icons.science_rounded, LearningContentData.navPractice),
+    (Icons.insights_rounded, LearningContentData.navProgress),
+    (Icons.workspace_premium_rounded, LearningContentData.navRewards),
+  ];
+
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      minimum: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+      minimum: const EdgeInsets.fromLTRB(10, 0, 10, 12),
       child: Material(
         color: AppTheme.cardWhite,
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(22),
             side: const BorderSide(color: AppTheme.borderLight)),
         child: Padding(
-            padding: const EdgeInsets.all(5),
+            padding: const EdgeInsets.all(4),
             child: Row(
               children: [
-                _buildNavItem(context, 0, Icons.home_rounded, 'Home'),
-                _buildNavItem(
-                  context,
-                  1,
-                  Icons.explore_rounded,
-                  'Learn',
-                ),
-                _buildNavItem(
-                  context,
-                  2,
-                  Icons.insights_rounded,
-                  'Progress',
-                ),
-                _buildNavItem(
-                  context,
-                  3,
-                  Icons.workspace_premium_rounded,
-                  'Rewards',
-                ),
+                for (var index = 0; index < destinations.length; index++)
+                  _buildNavItem(context, index, destinations[index].$1,
+                      destinations[index].$2),
               ],
             )),
       ),
@@ -64,7 +58,9 @@ class ByteQuestBottomNav extends StatelessWidget {
       child: Semantics(
         button: true,
         selected: isSelected,
-        label: '$label tab',
+        label: LearningContentData.navTabSemantics(label),
+        excludeSemantics: true,
+        onTap: () => onTap(index),
         child: InkWell(
           onTap: () {
             if (!isSelected) HapticFeedback.selectionClick();
@@ -80,7 +76,7 @@ class ByteQuestBottomNav extends StatelessWidget {
                 constraints: const BoxConstraints(minHeight: 55),
                 child: Padding(
                     padding:
-                        const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
+                        const EdgeInsets.symmetric(vertical: 7, horizontal: 2),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -90,14 +86,20 @@ class ByteQuestBottomNav extends StatelessWidget {
                           size: 21,
                         ),
                         const SizedBox(height: 3),
-                        Text(
-                          label,
-                          style: AppTheme.labelSmall.copyWith(
-                            fontSize: 10.5,
-                            fontWeight:
-                                isSelected ? FontWeight.w700 : FontWeight.w600,
-                            color:
-                                isSelected ? Colors.white : AppTheme.textMedium,
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            label,
+                            maxLines: 1,
+                            style: AppTheme.labelSmall.copyWith(
+                              fontSize: 10.5,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w600,
+                              color: isSelected
+                                  ? Colors.white
+                                  : AppTheme.textMedium,
+                            ),
                           ),
                         ),
                       ],

@@ -61,13 +61,15 @@ void main() {
 
     expect(find.text('Home'), findsOneWidget);
     expect(find.text('Learn'), findsOneWidget);
+    expect(find.text('Practice'), findsOneWidget);
     expect(find.text('Progress'), findsOneWidget);
     expect(find.text('Rewards'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     await tester.tap(find.text('Progress'));
     await tester.pump(const Duration(milliseconds: 200));
-    expect(selected, 2);
+    // Home · Learn · Practice · Progress · Rewards (re-defense navigation).
+    expect(selected, 3);
     expect(tester.takeException(), isNull);
   });
 

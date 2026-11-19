@@ -5,8 +5,7 @@ import '../../core/widgets/soft_card.dart';
 import '../../services/mission_service.dart';
 import '../../models/mission_model.dart';
 import '../../models/learner_learning_path_model.dart';
-import '../simulation/mission_launcher.dart';
-import '../../widgets/practice_progress_panel.dart';
+import '../practice/practice_launch.dart';
 import '../../widgets/practice_coc_session_panel.dart';
 import '../../data/mission_content_data.dart';
 
@@ -107,9 +106,9 @@ class COCDetailsScreen extends StatelessWidget {
                     ),
                   ),
 
-                  Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: PracticeProgressPanel(coc: cocId)),
+                  // Module progress and the COC quiz now live in Learn and
+                  // Practice (one projection); this view shows the assessment
+                  // lifecycle per mission.
                   Padding(
                     padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
                     child: PracticeCocSessionPanel(cocId: cocId),
@@ -162,12 +161,15 @@ class COCDetailsScreen extends StatelessWidget {
 
     return SoftCard(
       margin: const EdgeInsets.only(bottom: 16),
+      // The server decides module access before the mission opens.
       onTap: mission.isUnlocked != true
           ? null
           : () async {
-              await MissionLauncher.launch(context, mission);
-              if (context.mounted)
+              final launched =
+                  await PracticeMissionLauncher.open(context, mission.id);
+              if (launched && context.mounted) {
                 await context.read<MissionService>().refreshPracticeProgress();
+              }
             },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
