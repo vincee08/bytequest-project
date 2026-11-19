@@ -60,6 +60,15 @@ class PerformanceContentData {
   static const homeworkLate = 'Submitted late';
   static String homeworkScore(String score, String max) => '$score / $max';
 
+  /// Row detail: the released score's share of the maximum, then lateness.
+  static String? homeworkDetail(double? releasedPercent, {required bool late}) {
+    final parts = [
+      if (releasedPercent != null) '${percent(releasedPercent)} of the maximum score',
+      if (late) homeworkLate,
+    ];
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
+
   // Assessments
   static const assessmentsTitle = 'Released assessment results';
   static const assessmentsEmpty =
@@ -77,6 +86,28 @@ class PerformanceContentData {
   static const bestTimesTitle = 'Best verified times';
   static const bestTimesEmpty = 'Verify a practice mission to record a best time.';
   static const missionFallback = 'Practice mission';
+
+  // Compact summary shown in the Progress screen's Performance slot. That
+  // screen already shows learning progress, practice counts and every
+  // released result, quiz score and homework item; the slot adds averages and
+  // criterion-level competency.
+  static const compactSubtitle =
+      'Averages and competency from your submitted quizzes and released results.';
+  static const summaryCriteriaLabel = 'Criteria achieved';
+  static const summaryCriteriaDetail = 'Latest released result per mission';
+  static const summaryQuizLabel = 'Quiz average';
+  static const summaryHomeworkLabel = 'Homework average';
+  static const summaryAssessmentsLabel = 'Competent results';
+  static const summaryAssessmentsDetail = 'Of your released assessments';
+  static const compactEmpty =
+      'Averages and criteria appear after your first submitted quiz or released homework or assessment result.';
+  static String ofTotal(int value, int total) => '$value of $total';
+  static String quizCount(int count) =>
+      count == 1 ? '1 submitted quiz' : '$count submitted quizzes';
+  static String releasedGrades(int count) =>
+      count == 1 ? '1 released grade' : '$count released grades';
+  static String summarySemantics(String label, String value, String detail) =>
+      '$label: $value. $detail';
 
   static const noValue = '—';
 

@@ -9,6 +9,7 @@ class PerformanceSnapshot {
     required this.homework,
     required this.assessments,
     required this.practice,
+    required this.summary,
     required this.updatedAt,
   });
 
@@ -18,9 +19,19 @@ class PerformanceSnapshot {
   final List<HomeworkScore> homework;
   final List<ReleasedAssessmentScore> assessments;
   final PracticeSummary practice;
+
+  /// Server-computed averages and counts for the compact Progress section.
+  final PerformanceSummary summary;
   final DateTime updatedAt;
 
   /// True when the learner has no recorded activity of any kind yet.
+  /// Anything the compact Progress-screen summary can average or count.
+  bool get hasScoredWork =>
+      quizzes.isNotEmpty ||
+      summary.homeworkReleased > 0 ||
+      assessments.isNotEmpty ||
+      competency.isNotEmpty;
+
   bool get hasActivity =>
       progress.completedItems > 0 ||
       competency.isNotEmpty ||
@@ -39,6 +50,7 @@ class PerformanceSnapshot {
       homework: _list(scores['homework'], HomeworkScore.fromJson),
       assessments: _list(json['assessments'], ReleasedAssessmentScore.fromJson),
       practice: PracticeSummary.fromJson(_map(json['practice'])),
+      summary: PerformanceSummary.fromJson(_map(json['summary'])),
       updatedAt: _date(json['updated_at']) ?? DateTime.now().toUtc(),
     );
   }
@@ -163,6 +175,7 @@ class HomeworkScore {
     required this.title,
     required this.score,
     required this.maxScore,
+    required this.percent,
     required this.released,
     required this.submittedAt,
     required this.late,
@@ -173,6 +186,9 @@ class HomeworkScore {
   /// Present only once the score is released to the learner.
   final double? score;
   final double maxScore;
+
+  /// Released score as a share of the assignment's maximum score.
+  final double? percent;
   final bool released;
   final DateTime? submittedAt;
   final bool late;
@@ -181,6 +197,7 @@ class HomeworkScore {
         title: json['title'] as String?,
         score: _double(json['score']),
         maxScore: _double(json['max_score']) ?? 100,
+        percent: _double(json['percent']),
         released: json['released'] == true,
         submittedAt: _date(json['submitted_at']),
         late: json['late'] == true,
@@ -234,6 +251,39 @@ class PracticeSummary {
         missionsVerified: _int(json['missions_verified']),
         runs: _int(json['runs']),
         bestTimes: _list(json['best_times'], BestPracticeTime.fromJson),
+      );
+}
+
+class PerformanceSummary {
+  const PerformanceSummary({
+    required this.quizAvg,
+    required this.homeworkAvg,
+    required this.homeworkReleased,
+    required this.assessmentsReleased,
+    required this.assessmentsCompetent,
+    required this.criteriaTotal,
+    required this.criteriaAchieved,
+  });
+
+  final double? quizAvg;
+
+  /// Mean of released homework grades as a share of each maximum score.
+  final double? homeworkAvg;
+  final int homeworkReleased;
+  final int assessmentsReleased;
+  final int assessmentsCompetent;
+  final int criteriaTotal;
+  final int criteriaAchieved;
+
+  factory PerformanceSummary.fromJson(Map<String, dynamic> json) =>
+      PerformanceSummary(
+        quizAvg: _double(json['quiz_avg']),
+        homeworkAvg: _double(json['homework_avg']),
+        homeworkReleased: _int(json['homework_released']),
+        assessmentsReleased: _int(json['assessments_released']),
+        assessmentsCompetent: _int(json['assessments_competent']),
+        criteriaTotal: _int(json['criteria_total']),
+        criteriaAchieved: _int(json['criteria_achieved']),
       );
 }
 
