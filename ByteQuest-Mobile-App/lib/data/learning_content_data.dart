@@ -173,7 +173,7 @@ abstract final class LearningContentData {
   static const homeworkLate = 'Late';
   static const performanceTitle = 'Performance';
   static const motivationNote =
-      'Points, badges and levels are motivational only. They never change a competency result.';
+      'Your points, level and achievements are in Rewards. They are motivational and separate from competency results.';
 
   // Methodology sheet
   static const methodologyTitle = 'How progress is calculated';
