@@ -25,7 +25,7 @@ export async function runLearnerSearch(
   filters: LearnerSearchFilters,
 ): Promise<{ data: LearnerSearchResult; error: null } | { data: null; error: string }> {
   try {
-    const { data, error } = await (client as unknown as SupabaseClient<SearchDatabase>).rpc("search_learners", learnerSearchRpcArgs(filters));
+    const { data, error } = await (client as unknown as SupabaseClient<SearchDatabase>).rpc("search_learners", learnerSearchRpcArgs(filters) as never); // NULL filters mean "no filter"; generated RPC types cannot express nullable parameters.
     if (error || !data) return { data: null, error: "Learner search is unavailable right now. Try again in a moment." };
     return { data: data as unknown as LearnerSearchResult, error: null };
   } catch {

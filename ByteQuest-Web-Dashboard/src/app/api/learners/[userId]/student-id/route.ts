@@ -35,7 +35,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ use
   if (!input.success) return reply({ error: input.error.issues[0]?.message ?? "Enter a student ID of at most 64 characters." }, 422);
   try {
     const service = createAdminSupabaseClient(15_000) as unknown as SupabaseClient<StudentIdDatabase>;
-    const { data, error } = await service.rpc("set_learner_student_id", { p_actor: actor.userId, p_learner_id: userId, p_student_id: input.data.student_id });
+    const { data, error } = await service.rpc("set_learner_student_id", { p_actor: actor.userId, p_learner_id: userId, p_student_id: input.data.student_id as string }); // NULL clears the ID; generated RPC types cannot express nullable parameters.
     if (error) { const failure = studentIdFailure(error); return reply({ error: failure.message }, failure.status); }
     return reply({ profile: data });
   } catch {
