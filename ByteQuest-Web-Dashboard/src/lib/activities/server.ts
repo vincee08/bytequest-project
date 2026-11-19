@@ -56,13 +56,24 @@ export function activityHeaders(request: Request) {
   }
   return headers;
 }
+const loopbackHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
 export function activityWriteOriginAllowed(request: Request) {
   const origin = request.headers.get('origin');
   if (!origin) return true;
   if (request.headers.has('authorization') && localOrigins.has(origin)) return true;
   const target = new URL(request.url);
-  // localhost and 127.0.0.1 are equivalent only for the local dashboard port.
-  return origin === target.origin || (target.port === '3008' && ['http://localhost:3008','http://127.0.0.1:3008'].includes(origin));
+  if (origin === target.origin) return true;
+  // Locally `next start` reports the request URL as localhost even when the
+  // browser opened 127.0.0.1 (or the reverse), so loopback names count as the
+  // same origin, but only for the same scheme and port. Production hosts are
+  // never loopback names, so they keep the exact comparison above.
+  try {
+    const source = new URL(origin);
+    return loopbackHosts.has(source.hostname) && loopbackHosts.has(target.hostname)
+      && source.protocol === target.protocol && source.port === target.port;
+  } catch {
+    return false;
+  }
 }
 export function activityError(error: { code?: string; message?: string }) {
   if (error.code === '42501') return { error: 'This action is not allowed for your account or class.', status: 403 };
