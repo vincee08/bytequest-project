@@ -1,4 +1,9 @@
 // Restores ONLY into the new memory-backed, network-disabled recovery container.
+// --release=<label> (default 20261113) names the container, its label and the
+// evidence; only 20261113 runs that release's built-in migration rehearsal.
+// For a later release, --restore-only verifies the restore and --keep-running
+// leaves the guarded container up for scripts/rehearse-release-batches.mjs
+// (stop it afterwards: its tmpfs holds the plaintext restored copy).
 import { spawn, execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -13,16 +18,21 @@ const admin = 'supabase_admin';
 const socket = '/bq-recovery';
 const attempt = process.argv.find(a=>a.startsWith('--attempt='))?.split('=')[1] ?? '1';
 if (!/^[1-9][0-9]?$/.test(attempt)) throw new Error('Invalid restore attempt number');
-const container = `bytequest-recovery-rslm-20261113-release-${attempt}`;
+const release = process.argv.find(a=>a.startsWith('--release='))?.split('=')[1] ?? '20261113';
+if (!/^[a-z0-9-]{4,32}$/.test(release)) throw new Error('Invalid --release label');
+const restoreOnly = process.argv.includes('--restore-only') || release !== '20261113';
+const keepRunning = process.argv.includes('--keep-running');
+const container = `bytequest-recovery-rslm-${release}-release-${attempt}`;
 const image = 'sha256:6942962433a569e87f228b4d4ab7e11db5deca64e43babb3a038443ad6c4f1bb';
 const key = dpapi('unwrap', readFileSync(join(dir, 'archive-key.dpapi')));
 const manifest = JSON.parse(readFileSync(join(dir, 'backup-manifest.json'), 'utf8'));
 const logs = [];
-const evidence = { ref, container, database: db, image, started_at: new Date().toISOString(), recovery_verified: false };
+const evidence = { ref, release, container, database: db, image, started_at: new Date().toISOString(), recovery_verified: false };
+const evidenceFile = release === '20261113' ? `restore-verification-attempt${attempt}.json` : `restore-verification-${release}-attempt${attempt}.json`;
 function inspect() { return JSON.parse(execFileSync(docker, ['inspect', container], { encoding: 'utf8' }))[0]; }
 function guard() {
   const state = inspect();
-  if (state.Name !== `/${container}` || state.Config.Labels?.['bytequest.purpose'] !== 'hosted-recovery-20261113'
+  if (state.Name !== `/${container}` || state.Config.Labels?.['bytequest.purpose'] !== `hosted-recovery-${release}`
       || state.Config.Labels?.['bytequest.source-ref'] !== ref || state.HostConfig.NetworkMode !== 'none'
       || !state.HostConfig.ReadonlyRootfs || Object.keys(state.HostConfig.PortBindings ?? {}).length !== 0
       || !state.HostConfig.Tmpfs?.[socket] || state.Config.User !== '100:101' || state.Image !== image) {
@@ -57,7 +67,7 @@ try {
   if (existing) throw new Error('Recovery target exists; choose a new attempt number.');
   const init = "initdb -D /bq-recovery --username=supabase_admin --auth-local=trust --auth-host=scram-sha-256 > /tmp/init.log 2>&1 && exec postgres -D /bq-recovery -c listen_addresses= -c unix_socket_directories=/bq-recovery -c shared_preload_libraries=pg_stat_statements -c session_preload_libraries=supautils -c supautils.privileged_role=supabase_privileged_role -c supautils.superuser=supabase_admin -c supautils.privileged_extensions=pg_stat_statements,pg_trgm,pgcrypto,supabase_vault,uuid-ossp -c supautils.reserved_roles=supabase_admin,supabase_auth_admin,supabase_storage_admin,supabase_read_only_user,supabase_realtime_admin,supabase_replication_admin,supabase_etl_admin,dashboard_user,pgbouncer,service_role*,authenticator*,authenticated*,anon*,supabase_privileged_role -c wal_level=logical -c max_connections=30 -c logging_collector=off -c log_statement=none -c supautils.drop_trigger_grants='{\"postgres\":[\"auth.audit_log_entries\",\"auth.flow_state\",\"auth.identities\",\"auth.instances\",\"auth.mfa_amr_claims\",\"auth.mfa_challenges\",\"auth.mfa_factors\",\"auth.oauth_clients\",\"auth.one_time_tokens\",\"auth.refresh_tokens\",\"auth.saml_providers\",\"auth.saml_relay_states\",\"auth.sessions\",\"auth.sso_domains\",\"auth.sso_providers\",\"auth.users\",\"realtime.messages\",\"realtime.subscription\",\"storage.buckets\",\"storage.buckets_analytics\",\"storage.objects\",\"storage.prefixes\",\"storage.s3_multipart_uploads\",\"storage.s3_multipart_uploads_parts\"]}' -c supautils.policy_grants='{\"postgres\":[\"auth.audit_log_entries\",\"auth.flow_state\",\"auth.identities\",\"auth.instances\",\"auth.mfa_amr_claims\",\"auth.mfa_challenges\",\"auth.mfa_factors\",\"auth.oauth_clients\",\"auth.one_time_tokens\",\"auth.refresh_tokens\",\"auth.saml_providers\",\"auth.saml_relay_states\",\"auth.sessions\",\"auth.sso_domains\",\"auth.sso_providers\",\"auth.users\",\"realtime.messages\",\"realtime.subscription\",\"storage.buckets\",\"storage.buckets_analytics\",\"storage.objects\",\"storage.prefixes\",\"storage.s3_multipart_uploads\",\"storage.s3_multipart_uploads_parts\"]}'";
   if (existing) execFileSync(docker,['start',container],{stdio:'pipe'});
-  else execFileSync(docker, ['run','-d','--name', container, '--label','bytequest.purpose=hosted-recovery-20261113',
+  else execFileSync(docker, ['run','-d','--name', container, '--label',`bytequest.purpose=hosted-recovery-${release}`,
     '--label',`bytequest.source-ref=${ref}`, '--network','none','--read-only','--user','100:101',
     '--cap-drop','ALL','--security-opt','no-new-privileges','--memory','1g','--memory-swap','1g','--pids-limit','100',
     '--tmpfs','/bq-recovery:rw,nosuid,nodev,uid=100,gid=101,mode=0700,size=768m',
@@ -118,6 +128,9 @@ try {
     console.log(JSON.stringify({stage:'exact_approval_sql_passed_on_restored_copy',production_applied:false,sha256:evidence.exact_approval_sql_sha256}));
   }
 
+  if (restoreOnly) {
+    console.log(JSON.stringify({stage:'restore_only',container,keep_running:keepRunning,next:'node scripts/rehearse-release-batches.mjs --artifacts <dir> --container '+container}));
+  } else {
   const migrationFiles=[
   "20261112111620_quiz_publishing_and_single_attempt.sql",
   "20261112151434_resource_quiz_sources_and_request_safety.sql",
@@ -158,6 +171,7 @@ end $guard$;
   evidence.release_migrations=migrationFiles.map((file,i)=>({file,sha256:createHash('sha256').update(readFileSync('supabase/migrations/'+file)).digest('hex')}));
   evidence.release_regression_files=tests.length;
   console.log(JSON.stringify({stage:'release_migrations_rehearsal_passed',migrations:migrationFiles.length,rollback_test_files:tests.length,historical_public_data_preserved:true}));
+  }
 
 } catch(error) {
   evidence.failure = error.message;
@@ -166,9 +180,12 @@ end $guard$;
 } finally {
   evidence.diagnostics_archive = await encrypt(Readable.from([JSON.stringify(logs)]),`restore-diagnostics-attempt${attempt}.json.bqenc`,key);
   evidence.finished_at = new Date().toISOString();
-  writeFileSync(join(dir,`restore-verification-attempt${attempt}.json`),JSON.stringify(evidence,null,2),{flag:'wx'});
+  writeFileSync(join(dir,evidenceFile),JSON.stringify(evidence,null,2),{flag:'wx'});
   // Stop only this verified, newly created target. Its tmpfs contains the plaintext restored copy.
-  try { guard(); execFileSync(docker,['stop','-t','10',container],{stdio:'pipe'}); evidence.target_stopped=true;
-    writeFileSync(join(dir,`restore-verification-attempt${attempt}.json`),JSON.stringify(evidence,null,2)); } catch {}
+  // --keep-running (restore verified) leaves it up for the batch rehearsal; stop it afterwards.
+  if (!(keepRunning && evidence.recovery_verified)) {
+    try { guard(); execFileSync(docker,['stop','-t','10',container],{stdio:'pipe'}); evidence.target_stopped=true;
+      writeFileSync(join(dir,evidenceFile),JSON.stringify(evidence,null,2)); } catch {}
+  }
   key.fill(0);
 }
