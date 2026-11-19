@@ -17,6 +17,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createClient } from "@/lib/supabase/client";
+import {
+  approvedRubricFor,
+  assignmentTypesFor,
+  defaultAssignmentType,
+  deliveryKindLabel,
+  type AssignmentType,
+  type DeliveryMode,
+} from "@/lib/activities/assignment-options";
 
 export { EnrollLearnerForm } from "./EnrollLearnerForm";
 
@@ -178,13 +186,16 @@ export function DeactivateLearnerAccountForm({
 interface ActivityOption {
   id: string;
   title: string;
-  deliveryMode: "practice" | "assessment" | "both";
+  deliveryMode: DeliveryMode;
+  /** activity_curriculum_links.delivery_kind (simulation / form_based / protected_reference). */
+  deliveryKind: string | null;
 }
 
 interface RubricOption {
   id: string;
   activityVersionId: string;
   title: string;
+  versionNumber: number;
 }
 
 export function AssignActivityForm({
@@ -198,16 +209,31 @@ export function AssignActivityForm({
 }) {
   const router = useRouter();
   const [activityId, setActivityId] = useState("");
-  const [assignmentType, setAssignmentType] = useState<"practice" | "assessment">("practice");
+  const [assignmentType, setAssignmentType] = useState<AssignmentType>("practice");
   const [title, setTitle] = useState("");
   const [instructions, setInstructions] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const matchingRubric = rubrics.find((rubric) => rubric.activityVersionId === activityId);
+  const selected = activities.find((activity) => activity.id === activityId);
+  const allowedTypes = assignmentTypesFor(selected?.deliveryMode ?? "both");
+  // The approved rubric of exactly the selected published activity version.
+  const matchingRubric = approvedRubricFor(rubrics, activityId);
+
+  const selectActivity = (id: string) => {
+    setActivityId(id);
+    // An assessment-only activity (the simulation assessments) must be
+    // assigned as Assessment so its attempts reach Evaluate -> Finalize -> Release.
+    const mode = activities.find((activity) => activity.id === id)?.deliveryMode ?? "both";
+    setAssignmentType(defaultAssignmentType(mode));
+  };
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!activityId || title.trim().length < 2) {
       toast.error("Select an activity and enter an assignment title.");
+      return;
+    }
+    if (!allowedTypes.includes(assignmentType)) {
+      toast.error("This activity is published for assessment only. Assign it as an Assessment.");
       return;
     }
     if (assignmentType === "assessment" && !matchingRubric) {
@@ -257,12 +283,18 @@ export function AssignActivityForm({
     <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
       <div className="space-y-2">
         <Label>Published activity</Label>
-        <Select value={activityId} onValueChange={setActivityId}>
-          <SelectTrigger><SelectValue placeholder="Select activity" /></SelectTrigger>
+        <Select value={activityId} onValueChange={selectActivity}>
+          <SelectTrigger aria-label="Published activity"><SelectValue placeholder="Select activity" /></SelectTrigger>
           <SelectContent>
-            {activities.map((activity) => (
-              <SelectItem key={activity.id} value={activity.id}>{activity.title}</SelectItem>
-            ))}
+            {activities.map((activity) => {
+              const kind = deliveryKindLabel(activity.deliveryKind);
+              return (
+                <SelectItem key={activity.id} value={activity.id}>
+                  {activity.title}
+                  {kind ? <span className="ml-2 rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">{kind}</span> : null}
+                </SelectItem>
+              );
+            })}
           </SelectContent>
         </Select>
       </div>
@@ -270,14 +302,19 @@ export function AssignActivityForm({
         <Label>Assignment type</Label>
         <Select
           value={assignmentType}
-          onValueChange={(value) => setAssignmentType(value as "practice" | "assessment")}
+          onValueChange={(value) => setAssignmentType(value as AssignmentType)}
         >
-          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectTrigger aria-label="Assignment type"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="practice">Practice</SelectItem>
+            <SelectItem value="practice" disabled={!allowedTypes.includes("practice")}>Practice</SelectItem>
             <SelectItem value="assessment">Assessment</SelectItem>
           </SelectContent>
         </Select>
+        {selected?.deliveryMode === "assessment" ? (
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Published for assessment only: learners&apos; attempts go to Evaluate, Finalize and Release.
+          </p>
+        ) : null}
       </div>
       <div className="space-y-2 md:col-span-2">
         <Label htmlFor="assignment-title">Assignment title</Label>
