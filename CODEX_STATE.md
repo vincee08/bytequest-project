@@ -2,6 +2,75 @@
 
 > Read this file with `AGENTS.md`, `README.md`, and `bytequest.md` before changing the repository.
 
+## Current continuation - 2026-11-19/20 re-defense revision (defense 2026-11-23)
+
+**Docs to read first:**
+- Report: `docs/REDEFENSE_IMPLEMENTATION_REPORT_2026-11-23.md`. It covers panel item → change → verification, the demo script and the remaining items.
+- Approved design and plan:
+  - `docs/superpowers/specs/2026-11-19-redefense-revision-design.md`
+  - `docs/superpowers/plans/2026-11-19-redefense-revision.md`
+- Audit: `docs/REDEFENSE_REVISION_AUDIT_2026-11-19.md`.
+- Hosted rollout plan, **not yet approved or run**: `docs/REDEFENSE_HOSTED_ROLLOUT_PLAN.md`.
+- Demo data: `docs/DEMO_DATA.md`.
+
+**Where the work stands:**
+- Everything is local on `vince-branch` and has not been pushed.
+- There are 43 additive migrations, `20261119100000` … `20261120100300`. None has been applied to hosted Supabase.
+- The hosted apply runs in two batches:
+  - Batch A: `20261119130000` (enum add value), committed first.
+  - Batch B: the other 42 migrations in one transaction, in a maintenance window.
+  - Never use `db push`, `--include-all` or `migration repair`. Hosted history diverges from the repo.
+
+**What was built:**
+- Realistic COC1 M2 assembly bench:
+  - real part images;
+  - rotation with orientation markers;
+  - physical slots, operations, cables, POST and interpretation.
+- One simulation engine with Practice and Assessment modes:
+  - assessment shows no guidance;
+  - per-step threshold of ≤2 incorrect attempts, 0 on safety-critical steps, with instructor override and a reason;
+  - simulation assessment packages for all 20 missions.
+- Curriculum: 16 official TR modules and 76 PCs, copied verbatim.
+- Sequential module unlocking, enforced on the server.
+- Quizzes:
+  - COC → Module → Topic → LO;
+  - focus, difficulty, time limit;
+  - scenario essays with rubrics;
+  - auto-submit and one attempt.
+- Homework with criteria.
+- Evaluation Center: Evaluate → Finalize → Release.
+- Analytics RPCs.
+- Roster import (`.xlsx`, `.xls`, `.csv`) and learner search.
+- Gamification: points, levels, achievements and an opt-in leaderboard.
+- The client-version server guard: `APP_UPDATE_REQUIRED` for clients older than 1.2.0 on simulation assessments and essay quizzes.
+
+**How it was reviewed:**
+- Seven slices, each with its own spec and quality review plus fix rounds.
+- A final review of the whole branch, split into six layer reviews.
+- One fix wave in three parallel layers, each with a scoped re-review.
+- The ledger and all review reports are in `.superpowers/sdd/2026-11-19-redefense-revision/` (gitignored).
+
+**Local tooling (Windows):**
+- `flutter_tester.exe` is blocked by Application Control. Run Flutter tests in Docker with `ghcr.io/cirruslabs/flutter:3.44.0`.
+- `supabase db reset` fails on this machine (analytics container). Use `supabase stop --no-backup` and then `supabase start`.
+- After a fresh start:
+  1. `node scripts/local-qa-fixtures.mjs`
+  2. `node scripts/run-local-sql-tests.mjs`
+  3. `node scripts/seed-demo-class.mjs --web-url http://127.0.0.1:3001`, with the dashboard running.
+
+**Still pending (owner):**
+- Approval of the hosted rollout, plus Vercel access.
+- Push approval.
+- A physical-device and TalkBack pass on the 1.2.0 APK.
+- Choosing between local and hosted for the defense.
+
+**Final gate results** (2026-11-19, head `afe4db9`; detail in the report, Section 6.1):
+- fresh stack applied 102 migrations;
+- SQL suites: 41/41 on the fresh database, 41/41 with the demo data;
+- demo seed: passes on a fresh database, and a rerun is idempotent (81 tables unchanged);
+- dashboard: tsc 0, lint 0, test 217/217, build passes;
+- Flutter: analyze shows 0 errors and 0 warnings; tests 711/711; debug APK builds.
+
 ## Current continuation - 2026-11-13 hosted rollout and requested debug APK
 
 - The owner explicitly deferred custom SMTP and authorized production Web plus a production-connected **DEBUG** APK. This supersedes the SMTP-only hold below. Executed report: `docs/PRODUCTION_DEBUG_ROLLOUT_2026-11-13.md`. Owner learner/device acceptance is still pending; the owner chose to register the learner personally. Do not create/verify an arbitrary learner or claim the manual workflow passed.
