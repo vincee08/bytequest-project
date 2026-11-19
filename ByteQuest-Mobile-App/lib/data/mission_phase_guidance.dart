@@ -18,6 +18,7 @@ final class MissionPhaseGuidance {
     required this.hint,
     required this.progress,
     required this.remaining,
+    this.benchStep,
   });
 
   final String interactionLabel;
@@ -26,6 +27,11 @@ final class MissionPhaseGuidance {
   final String hint;
   final List<String> progress;
   final String remaining;
+
+  /// Practice on the assembly bench: the first unfinished bench step, the
+  /// same step the bench header shows ("Step 6 of 9"). Null when every step
+  /// is done, off the bench and in assessment (which shows no guidance).
+  final String? benchStep;
 
   static MissionPhaseGuidance forPhase(
     MissionPhaseDefinition phase,
@@ -269,7 +275,17 @@ final class MissionPhaseGuidance {
     // On the bench, the power-on phase's fix parts are a repair, not an
     // inspect-and-place task: it reads as the test it is.
     final placementTask = hasPlacement && !_isBench(phase);
+    String? benchStep;
+    if (state.mode == MissionRuntimeMode.practice && _isBench(phase)) {
+      for (final step in MissionEquipmentSimulator.maps(presentation['bench_steps'])) {
+        if (!MissionEquipmentSimulator.conditionsMet(step['done'], state)) {
+          benchStep = step['label'] as String?;
+          break;
+        }
+      }
+    }
     return MissionPhaseGuidance._(
+      benchStep: benchStep,
       interactionLabel:
           _label(family, placementTask, isIdentification, canDragPlacement),
       summary: '${phase.title}: '

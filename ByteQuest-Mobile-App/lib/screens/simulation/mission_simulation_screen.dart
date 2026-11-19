@@ -35,6 +35,15 @@ import 'runtime/mission_equipment_simulator.dart';
 
 typedef MissionSubmitCallback = Future<void> Function();
 
+/// Practice verification failed: either ByteQuest could not be reached (the
+/// work was not judged; the evidence is saved) or the server refused the
+/// verification. A correct learner is never told the work is wrong because
+/// the network failed.
+String practiceVerifyFailureMessage(Object error) =>
+    error is PracticeServiceUnreachableException
+        ? MissionContentData.practiceVerifyUnreachable
+        : MissionContentData.practiceSubmitFailed;
+
 enum _MissionExitChoice { continueMission, saveAndExit, discardProgress }
 
 abstract interface class MissionOrientationCoordinator {
@@ -1459,10 +1468,10 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
       _technicalFeedback = _state.mode == MissionRuntimeMode.practice
           ? MissionContentData.practiceSavedMessage
           : 'Evidence submitted for authoritative evaluation and review.';
-    } catch (_) {
+    } catch (error) {
       _showActionError(
           _state.mode == MissionRuntimeMode.practice
-              ? MissionContentData.practiceSubmitFailed
+              ? practiceVerifyFailureMessage(error)
               : MissionContentData.assessmentSubmitFailed,
           onRetry: () => unawaited(_confirmSubmission()));
     } finally {

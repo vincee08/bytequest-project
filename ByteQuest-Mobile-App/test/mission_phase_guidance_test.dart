@@ -8,6 +8,8 @@ import 'package:bytequest/screens/simulation/runtime/mission_phase_completion_po
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/equipment_practice_driver.dart';
+
 void main() {
   test('every production phase has contextual instructions and progress', () {
     final missions = MissionSimulationDefinitions.all;
@@ -474,5 +476,75 @@ void main() {
     expect(highlights, 1);
     expect(toggles, 0);
     expect(tester.takeException(), isNull);
+  });
+
+  // QA Q3: on the bench the guidance bar names the bench step the header
+  // shows, never "All required actions completed" while a step is pending.
+  group('bench guidance bar follows the bench steps', () {
+    final mission = MissionSimulationDefinitions.byId('coc1_m2');
+    final p2 = mission.phases[1];
+
+    MissionRuntimeState beforeLatches() {
+      final driver = EquipmentPracticeDriver(mission)..complete(mission.phases[0]);
+      final script = practiceScripts[p2.id]!;
+      for (final step in script.take(script.length - 1)) {
+        driver.act(p2, step.$1, step.$2, step.$3);
+      }
+      return driver.state.copyWith(currentPhaseId: p2.id);
+    }
+
+    test('practice names the pending bench step; assessment none', () {
+      final initial =
+          MissionRuntimeState.initial(mission.id).copyWith(currentPhaseId: p2.id);
+      expect(MissionPhaseGuidance.forPhase(p2, initial).benchStep,
+          'Open the CPU socket load lever');
+      final state = beforeLatches();
+      expect(MissionPhaseGuidance.forPhase(p2, state).benchStep,
+          'Press each module down until the latches lock');
+      final assessment = MissionRuntimeState.fromJson({
+        ...state.toJson(),
+        'mode': 'assessment',
+        'assessmentAttemptId': 'attempt-q3',
+      });
+      expect(MissionPhaseGuidance.forPhase(p2, assessment).benchStep, isNull);
+      final other = MissionSimulationDefinitions.byId('coc1_m1');
+      expect(
+          MissionPhaseGuidance.forPhase(
+                  other.phases.first,
+                  MissionRuntimeState.initial(other.id)
+                      .copyWith(currentPhaseId: other.phases.first.id))
+              .benchStep,
+          isNull,
+          reason: 'only the assembly bench has bench steps');
+    });
+
+    testWidgets('the bar shows the latch step, not Continue', (tester) async {
+      final state = beforeLatches();
+      expect(MissionPhaseCompletionPolicy.canAdvance(p2, state), isTrue,
+          reason: 'the required parts are placed');
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: MissionGuidanceBar(
+            guidance: MissionPhaseGuidance.forPhase(p2, state),
+            actionGuide: MissionActionGuide.forPhase(p2, state),
+            expanded: false,
+            onToggle: () {},
+            showHow: false,
+            onShowHow: () {},
+          ),
+        ),
+      ));
+      expect(find.text('Press each module down until the latches lock'),
+          findsOneWidget);
+      expect(find.text(MissionContentData.guideReadyToContinue), findsNothing);
+    });
+  });
+
+  // QA Q4: the Run test hint fits both layouts (below the workspace in
+  // portrait, in the side panel in landscape).
+  test('the run-test guidance is layout neutral', () {
+    expect(MissionContentData.guideTest, contains('Run test'));
+    expect(MissionContentData.guideTest.toLowerCase(), isNot(contains('below')));
+    expect(MissionContentData.guideTest.toLowerCase(), isNot(contains('scroll')));
   });
 }
