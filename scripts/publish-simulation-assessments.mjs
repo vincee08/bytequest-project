@@ -1,0 +1,523 @@
+// Publishes one simulation-based assessment activity per practice mission
+// (owner decision 4: Practice and Assessment share the 2D simulation; the
+// assessment is evaluated on the server by replaying the attempt evidence).
+//
+// For each of the 20 missions it ensures, idempotently:
+//   * a published activity version: delivery_mode 'assessment',
+//     learner_payload {mission_id, definition_version, mode:'assessment'}
+//     (no simulation_template, so the app opens MissionSimulationScreen in
+//     assessment mode) and evaluator_config {simulation_definition} holding a
+//     snapshot of the published practice contract;
+//   * an approved binary_sum / all_required rubric whose criteria are the
+//     mission's steps, each a `simulation_condition` evidence rule with the
+//     owner-approved threshold (2 incorrect attempts; 0 for safety-critical
+//     steps), traced to the curriculum module and performance criteria;
+//   * an activity_curriculum_links row (delivery_kind 'simulation').
+// It also links every existing form-based package to its module
+// ('form_based'; the protected COC2 cable package 'protected_reference').
+//
+// Usage (service role; local stack by default):
+//   node scripts/publish-simulation-assessments.mjs [--dry-run] [--contracts <file.json>]
+//   node scripts/publish-simulation-assessments.mjs --target hosted --confirm
+// Environment: NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY (or
+// NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY), SUPABASE_SERVICE_ROLE_KEY and
+// BYTEQUEST_E2E_PASSWORD (temporary governance principal, retired at the end).
+// --dry-run builds and validates every package without writing; with
+// --contracts it reads {mission_id: {version, definition}} from a file instead
+// of the database (offline validation).
+import fs from "node:fs";
+import { randomUUID } from "node:crypto";
+import { pathToFileURL } from "node:url";
+
+const SOURCE_NOTE =
+  "TR Computer Systems Servicing NC II (Amended December 2013); ByteQuest supplementary simulation assessment, not an official TESDA certification.";
+const BINARY_RULE = {
+  status: "APPROVED",
+  method: "binary",
+  satisfied_value: 1,
+  not_satisfied_value: 0,
+  classification: "TECHNICAL_BINARY_ENCODING",
+  note: "1/0 encodes SATISFIED/NOT SATISFIED only; it is not a TESDA percentage or criterion weight.",
+};
+export const DEFAULT_MAX_INCORRECT = 2;
+
+const eq = (path, value) => ({ path, value });
+const present = (path) => ({ path, operator: "present" });
+
+/**
+ * COC1 M2 assembly bench: eleven step criteria (re-defense brief, owner
+ * decision 7). Safety-critical steps (ESD, CPU orientation) allow no
+ * incorrect attempt. BIOS configuration is not performed, so C11 traces PC
+ * 1.4 only.
+ */
+export const COC1_M2_CRITERIA = [
+  {
+    code: "COC1_M2_C1", title: "ESD protection and work area prepared", phases: ["coc1_m2_p1"],
+    conditions: [eq("operation.wear_wrist_strap", true), eq("operation.ground_wrist_strap", true)],
+    counted: ["operation:wear_wrist_strap", "operation:ground_wrist_strap"], max: 0, pcs: ["1.1"], safety: true,
+  },
+  {
+    code: "COC1_M2_C2", title: "Parts inspected before assembly", phases: ["coc1_m2_p1"],
+    conditions: ["system_case", "motherboard", "cpu", "cooler", "ram", "psu", "storage"].map((part) => eq(`inspected.${part}`, true)),
+    counted: ["phase:coc1_m2_p1"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.2", "1.3"],
+  },
+  {
+    code: "COC1_M2_C3", title: "CPU seated in the correct orientation with the lever closed", phases: ["coc1_m2_p2"],
+    conditions: [eq("placed.cpu", "cpu_socket"), eq("setting.cpu_lever", "closed")],
+    counted: ["item:cpu", "operation:open_cpu_lever", "operation:close_cpu_lever"], max: 0, pcs: ["1.4"], safety: true,
+  },
+  {
+    code: "COC1_M2_C4", title: "Thermal compound, cooler and CPU_FAN connected", phases: ["coc1_m2_p2"],
+    conditions: [eq("setting.thermal_compound", true), eq("placed.cooler", "cooler_mount"), eq("link.cooler_fan>cpu_fan_header", true)],
+    counted: ["operation:apply_thermal_compound", "item:cooler", "connection:cooler_fan"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.4"],
+  },
+  {
+    code: "COC1_M2_C5", title: "Memory in DIMM_A2 and DIMM_B2 with latches locked", phases: ["coc1_m2_p2"],
+    conditions: [
+      { path: "placed.ram_1", operator: "one_of", value: ["dimm_a2", "dimm_b2"] },
+      { path: "placed.ram_2", operator: "one_of", value: ["dimm_a2", "dimm_b2"] },
+      eq("setting.dimm_latches", "closed"),
+    ],
+    counted: ["item:ram_1", "item:ram_2", "operation:open_dimm_latches", "operation:close_dimm_latches"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.4"],
+  },
+  {
+    code: "COC1_M2_C6", title: "Power supply installed and fastened", phases: ["coc1_m2_p3"],
+    conditions: [eq("placed.psu", "psu_bay"), eq("setting.psu_fastened", true)],
+    counted: ["item:psu", "operation:fasten_psu"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.4"],
+  },
+  {
+    code: "COC1_M2_C7", title: "Motherboard on standoffs, fastened, with the I/O shield fitted", phases: ["coc1_m2_p3"],
+    conditions: [eq("placed.motherboard", "board_standoffs"), eq("setting.board_fastened", true), eq("placed.io_shield", "io_cutout")],
+    counted: ["item:motherboard", "item:io_shield", "operation:fasten_motherboard"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.4"],
+  },
+  {
+    code: "COC1_M2_C8", title: "Storage drive installed and fastened", phases: ["coc1_m2_p3"],
+    conditions: [eq("placed.storage", "drive_bay"), eq("setting.drive_fastened", true)],
+    counted: ["item:storage", "operation:fasten_drive"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.4"],
+  },
+  {
+    code: "COC1_M2_C9", title: "Power cables connected (24-pin ATX, 8-pin EPS, SATA power)", phases: ["coc1_m2_p4"],
+    conditions: [eq("link.atx_24pin>board_atx24", true), eq("link.eps_8pin>board_eps8", true), eq("link.sata_power>drive_power", true)],
+    counted: ["connection:atx_24pin", "connection:eps_8pin", "connection:sata_power"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.4"],
+  },
+  {
+    code: "COC1_M2_C10", title: "SATA data and front-panel cables connected", phases: ["coc1_m2_p4"],
+    conditions: [eq("link.sata_data>drive_data", true), eq("link.front_panel>board_front_panel", true)],
+    counted: ["connection:sata_data", "connection:front_panel"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.4"],
+  },
+  {
+    code: "COC1_M2_C11", title: "Power-on self-test passed and result interpreted", phases: ["coc1_m2_p5"],
+    conditions: [eq("result.coc1_m2_post", true), present("interpretation.coc1_m2_p5")],
+    counted: ["phase:coc1_m2_p5"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.4"],
+  },
+];
+
+const asMap = (value) => (value && typeof value === "object" && !Array.isArray(value) ? value : {});
+const asList = (value) => (Array.isArray(value) ? value : []);
+
+/** Invalid/correction keys that the replay attributes to one phase. */
+export function countedTargetsForPhase(phase) {
+  const presentation = asMap(phase.presentation);
+  const equipment = asMap(presentation.equipment);
+  const family = phase.primaryInteraction;
+  const placement = family === "place" ? presentation : asMap(equipment.placement);
+  const connection = family === "connect" ? presentation : asMap(equipment.connection);
+  const targets = new Set([`phase:${phase.id}`]);
+  for (const item of asList(placement.items)) targets.add(`item:${item.id}`);
+  for (const source of asList(connection.sources)) targets.add(`connection:${source.id}`);
+  for (const operation of asList(equipment.operations)) targets.add(`operation:${operation.id}`);
+  for (const target of asList(equipment.targets ?? presentation.targets)) targets.add(`tool:${target.id}`);
+  return [...targets];
+}
+
+function trace(link, pcs) {
+  const codes = pcs.length ? pcs : link.pcCodes;
+  return `${link.moduleCode} ${link.moduleTitle} · PC ${codes.join(", ")} · ${SOURCE_NOTE}`;
+}
+
+function rule({ phases, conditions, counted, max }) {
+  return {
+    operator: "simulation_condition",
+    phase_ids: phases,
+    conditions,
+    counted_targets: counted,
+    max_incorrect: max,
+  };
+}
+
+/** Rubric criteria for one mission: COC1 M2's eleven steps, otherwise one per work phase. */
+export function simulationCriteria(missionCode, definition, link) {
+  const specs = missionCode === "coc1_m2"
+    ? COC1_M2_CRITERIA
+    : asList(definition.phases)
+      .filter((phase) => phase.primaryInteraction !== "review")
+      .map((phase, index) => ({
+        code: `${missionCode.toUpperCase()}_S${index + 1}`,
+        title: phase.title,
+        description: phase.instruction,
+        phases: [phase.id],
+        conditions: asList(asMap(asMap(phase.presentation).equipment).completion),
+        counted: countedTargetsForPhase(phase),
+        max: DEFAULT_MAX_INCORRECT,
+        pcs: [],
+      }));
+  return specs.map((spec, index) => ({
+    criterion_code: spec.code,
+    title: spec.title,
+    description: spec.description ?? `${spec.title}${spec.safety ? " (safety-critical: correct on the first attempt)" : ""}.`,
+    source_trace: trace(link, spec.pcs),
+    evidence_rule: rule(spec),
+    scoring_rule: BINARY_RULE,
+    max_value: 1,
+    order_index: index + 1,
+    is_required: true,
+  }));
+}
+
+export function buildSimulationPackage({ missionCode, contract, link }) {
+  const definition = contract.definition;
+  return {
+    missionCode,
+    title: `${definition.title} — simulation assessment`,
+    instructions: `${definition.scenario} Work through the simulation without hints; submit when you have finished. Unfinished steps are evaluated as not satisfied.`,
+    learnerPayload: { mission_id: missionCode, definition_version: contract.version, mode: "assessment" },
+    evaluatorConfig: {
+      engine: "simulation_replay_v1",
+      simulation_definition: definition,
+      contract_version: contract.version,
+      scoring_method: "binary_sum",
+      competency_method: "all_required",
+      threshold_rule: "Each step allows at most two incorrect attempts (invalid actions plus corrections); safety-critical steps allow none.",
+      client_score_authoritative: false,
+    },
+    criteria: simulationCriteria(missionCode, definition, link),
+    moduleId: link.moduleId,
+  };
+}
+
+const RULE_OPERATORS = new Set(["equals", "present", "contains", "set_equals", "one_of", "not_equals", "minimum"]);
+const SERVER_PATHS = new Set(["inspected", "placed", "link", "config", "setting", "operation", "tool", "fact", "result",
+  "observation", "interpretation", "selection", "classification", "decision", "sequence", "order"]);
+
+/** Mirrors private.valid_evidence_rule plus contract consistency checks. */
+export function validateSimulationPackages(packages) {
+  const errors = [];
+  const missions = new Set();
+  for (const item of packages) {
+    if (missions.has(item.missionCode)) errors.push(`Duplicate mission ${item.missionCode}`);
+    missions.add(item.missionCode);
+    const payload = JSON.stringify(item.learnerPayload);
+    if (payload.includes("simulation_template") || payload.includes("evidence_rule") || payload.includes("simulation_definition")) {
+      errors.push(`${item.missionCode} learner payload exposes evaluator data`);
+    }
+    const phaseIds = new Set(asList(item.evaluatorConfig.simulation_definition.phases).map((phase) => phase.id));
+    const codes = new Set();
+    if (!item.criteria.length) errors.push(`${item.missionCode} has no criteria`);
+    for (const criterion of item.criteria) {
+      if (codes.has(criterion.criterion_code)) errors.push(`Duplicate criterion ${criterion.criterion_code}`);
+      codes.add(criterion.criterion_code);
+      const evidence = criterion.evidence_rule;
+      if (!evidence.phase_ids.length || evidence.phase_ids.some((id) => !phaseIds.has(id))) {
+        errors.push(`${criterion.criterion_code} names a phase outside its contract`);
+      }
+      if (!Number.isInteger(evidence.max_incorrect) || evidence.max_incorrect < 0 || evidence.max_incorrect > 999) {
+        errors.push(`${criterion.criterion_code} has an invalid threshold`);
+      }
+      for (const condition of evidence.conditions) {
+        if (!SERVER_PATHS.has(String(condition.path).split(".")[0]) || !RULE_OPERATORS.has(condition.operator ?? "equals")) {
+          errors.push(`${criterion.criterion_code} uses a condition the server cannot evaluate: ${JSON.stringify(condition)}`);
+        }
+      }
+      if (criterion.title.length < 2 || criterion.title.length > 300 || criterion.source_trace.length > 1000) {
+        errors.push(`${criterion.criterion_code} title or trace length is invalid`);
+      }
+    }
+  }
+  if (errors.length) throw new Error(errors.join("\n"));
+  return { missions: packages.length, criteria: packages.reduce((sum, item) => sum + item.criteria.length, 0) };
+}
+
+function parseArgs(argv) {
+  const options = { target: "local", confirm: false, dryRun: false, contracts: null };
+  for (let index = 0; index < argv.length; index++) {
+    const arg = argv[index];
+    if (arg === "--target") options.target = argv[++index];
+    else if (arg === "--confirm") options.confirm = true;
+    else if (arg === "--dry-run") options.dryRun = true;
+    else if (arg === "--contracts") options.contracts = argv[++index];
+    else throw new Error(`Unknown argument ${arg}`);
+  }
+  if (!["local", "hosted"].includes(options.target)) throw new Error("--target must be local or hosted.");
+  if (options.target === "hosted" && !options.confirm) throw new Error("Publishing to the hosted project requires --confirm.");
+  return options;
+}
+
+async function loadInputs(service, contractsFile) {
+  const fromFile = contractsFile ? JSON.parse(fs.readFileSync(contractsFile, "utf8")) : null;
+  const contracts = fromFile
+    ? Object.entries(fromFile).map(([mission_id, contract]) => ({ mission_id, ...contract }))
+    : await (async () => {
+      const { data, error } = await service.from("practice_mission_contracts").select("mission_id,version,definition");
+      if (error) throw error;
+      return data;
+    })();
+  const links = fromFile?.__links ?? await (async () => {
+    const { data, error } = await service
+      .from("mission_curriculum_links")
+      .select("mission_code,pc_codes,module_id,curriculum_modules(code,title)");
+    if (error) throw error;
+    return data;
+  })();
+  const linkByMission = new Map(links.map((row) => [row.mission_code, {
+    moduleId: row.module_id,
+    moduleCode: row.curriculum_modules?.code ?? row.module_code,
+    moduleTitle: row.curriculum_modules?.title ?? row.module_title,
+    pcCodes: row.pc_codes ?? [],
+  }]));
+  return contracts
+    .filter((contract) => /^coc[1-4]_m[1-5]$/.test(contract.mission_id))
+    .sort((a, b) => a.mission_id.localeCompare(b.mission_id))
+    .map((contract) => {
+      const link = linkByMission.get(contract.mission_id);
+      if (!link) throw new Error(`${contract.mission_id} has no curriculum module link.`);
+      return buildSimulationPackage({ missionCode: contract.mission_id, contract, link });
+    });
+}
+
+async function createGovernancePrincipal(service, url, publishableKey, createClient) {
+  const password = process.env.BYTEQUEST_E2E_PASSWORD;
+  if (!password) throw new Error("BYTEQUEST_E2E_PASSWORD is required for the temporary governance principal.");
+  const email = `bytequest-simulation-release-${Date.now()}-${randomUUID().slice(0, 8)}@bytequest.invalid`;
+  const { data, error } = await service.auth.admin.createUser({
+    email, password, email_confirm: true,
+    user_metadata: { full_name: "ByteQuest Simulation Release Governance", bytequest_technical_principal: true },
+  });
+  if (error || !data.user) throw new Error(error?.message ?? "Governance principal was not created.");
+  const { error: profileError } = await service.from("profiles")
+    .update({ full_name: "ByteQuest Simulation Release Governance", role: "admin", status: "active" })
+    .eq("user_id", data.user.id);
+  if (profileError) throw profileError;
+  const client = createClient(url, publishableKey, { auth: { autoRefreshToken: false, persistSession: false } });
+  const { error: signInError } = await client.auth.signInWithPassword({ email, password });
+  if (signInError) throw signInError;
+  return { id: data.user.id, client };
+}
+
+// Runs in `finally`: report a failed retirement without masking the publish
+// error, so an operator can deactivate the principal by hand.
+async function retireGovernancePrincipal(service, principal) {
+  if (!principal) return;
+  await principal.client.auth.signOut();
+  const { error: profileError } = await service.from("profiles").update({
+    status: "deactivated",
+    deactivated_at: new Date().toISOString(),
+    deactivation_reason: "Technical release principal retired after publishing simulation assessments.",
+  }).eq("user_id", principal.id);
+  const { error: banError } = await service.auth.admin.updateUserById(principal.id, { ban_duration: "876000h" });
+  for (const error of [profileError, banError]) {
+    if (error) console.error(`Governance principal ${principal.id} was not fully retired: ${error.message}`);
+  }
+}
+
+async function ensurePublishedModule(service, principal, source, cocModule) {
+  const { data: versions, error } = await service.from("module_versions").select("*")
+    .eq("module_id", cocModule.id).eq("tesda_source_id", source.id).order("version_number", { ascending: false });
+  if (error) throw error;
+  const published = versions.find((item) => item.status === "published");
+  if (published) return published;
+  const { data: inserted, error: insertError } = await service.from("module_versions").insert({
+    module_id: cocModule.id,
+    tesda_source_id: source.id,
+    version_number: (versions[0]?.version_number ?? 0) + 1,
+    title: `${cocModule.coc_code.toUpperCase()} simulation assessments`,
+    description: "Versioned ByteQuest module carrying simulation-based assessments evaluated by server replay.",
+    source_trace: { source_classification: "TESDA_OFFICIAL_APPROVED", note: SOURCE_NOTE },
+    content_metadata: { supplementary_platform: true, issues_official_tesda_certification: false, assessment_engine: "simulation_replay_v1" },
+    created_by: principal.id,
+  }).select("*").single();
+  if (insertError) throw insertError;
+  const { data, error: publishError } = await principal.client.rpc("publish_module_version", {
+    p_module_version_id: inserted.id,
+    p_reason: "Publish the module that carries simulation-based assessments.",
+  });
+  if (publishError) throw publishError;
+  return data;
+}
+
+async function ensureActivity(service, principal, pkg, mission, moduleVersion) {
+  const { data: matches, error } = await service.from("activity_versions").select("*")
+    .eq("mission_id", mission.id).contains("learner_payload", pkg.learnerPayload);
+  if (error) throw error;
+  let activity = matches.find((item) => item.status !== "retired") ?? null;
+  if (!activity) {
+    const { data: versions, error: versionError } = await service.from("activity_versions")
+      .select("version_number").eq("mission_id", mission.id).order("version_number", { ascending: false }).limit(1);
+    if (versionError) throw versionError;
+    const { data, error: insertError } = await service.from("activity_versions").insert({
+      mission_id: mission.id,
+      module_version_id: moduleVersion.id,
+      version_number: (versions[0]?.version_number ?? 0) + 1,
+      title: pkg.title.slice(0, 300),
+      instructions: pkg.instructions,
+      delivery_mode: "assessment",
+      learner_payload: pkg.learnerPayload,
+      evaluator_config: pkg.evaluatorConfig,
+      created_by: principal.id,
+    }).select("*").single();
+    if (insertError) throw insertError;
+    activity = data;
+  }
+  if (activity.status === "draft") {
+    const { data, error: publishError } = await principal.client.rpc("publish_activity_version", {
+      p_activity_version_id: activity.id,
+      p_reason: `Publish the ${pkg.missionCode} simulation assessment.`,
+    });
+    if (publishError) throw publishError;
+    activity = data;
+  }
+  if (activity.status !== "published") throw new Error(`${pkg.missionCode} activity is ${activity.status}.`);
+  return activity;
+}
+
+async function ensureRubric(service, principal, pkg, activity, source) {
+  const { data: versions, error } = await service.from("rubric_versions").select("*")
+    .eq("activity_version_id", activity.id).order("version_number", { ascending: false });
+  if (error) throw error;
+  let rubric = versions.find((item) => item.status === "approved") ?? versions[0];
+  if (rubric?.status === "approved") return rubric;
+  if (!rubric) {
+    const { data, error: insertError } = await service.from("rubric_versions").insert({
+      activity_version_id: activity.id,
+      tesda_source_id: source.id,
+      version_number: 1,
+      title: `${pkg.missionCode.toUpperCase()} simulation step rubric`,
+      status: "draft",
+      created_by: principal.id,
+    }).select("*").single();
+    if (insertError) throw insertError;
+    rubric = data;
+  }
+  const { error: criteriaError } = await service.from("rubric_criteria").upsert(
+    pkg.criteria.map((criterion) => ({ ...criterion, rubric_version_id: rubric.id })),
+    { onConflict: "rubric_version_id,criterion_code" },
+  );
+  if (criteriaError) throw criteriaError;
+  const { data: approved, error: approveError } = await principal.client.rpc("approve_rubric_version", {
+    p_rubric_version_id: rubric.id,
+    p_scoring_method: "binary_sum",
+    p_passing_rule: {
+      status: "APPROVED",
+      method: "all_required",
+      classification: "PROJECT_APPROVED_OPERATIONAL_RULE",
+      official_numeric_threshold: null,
+      step_threshold: "At most two incorrect attempts per step; safety-critical steps none (owner decision 7).",
+    },
+    p_reason: "Approve the simulation step rubric generated from the published practice contract.",
+  });
+  if (approveError) throw approveError;
+  return approved;
+}
+
+async function linkFormBasedPackages(service, missionsById, links) {
+  const { data, error } = await service.from("activity_versions")
+    .select("id,mission_id,learner_payload,status").eq("delivery_mode", "assessment");
+  if (error) throw error;
+  const rows = [];
+  for (const activity of data) {
+    const payload = asMap(activity.learner_payload);
+    if (payload.mode === "assessment" && !payload.simulation_template) continue;
+    const mission = missionsById.get(activity.mission_id);
+    const link = mission && links.get(mission.mission_code);
+    if (!link) continue;
+    rows.push({
+      activity_version_id: activity.id,
+      module_id: link.moduleId,
+      delivery_kind: payload.simulation_template === "coc2_cable_termination" ? "protected_reference" : "form_based",
+    });
+  }
+  if (!rows.length) return 0;
+  const { error: linkError } = await service.from("activity_curriculum_links")
+    .upsert(rows, { onConflict: "activity_version_id", ignoreDuplicates: true });
+  if (linkError) throw linkError;
+  return rows.length;
+}
+
+export async function main(argv = process.argv.slice(2)) {
+  const options = parseArgs(argv);
+  if (options.dryRun && options.contracts) {
+    const packages = await loadInputs(null, options.contracts);
+    return { status: "VALIDATED", ...validateSimulationPackages(packages) };
+  }
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !publishableKey || !serviceRoleKey) throw new Error("Trusted Supabase publishing environment is unavailable.");
+  const local = ["127.0.0.1", "localhost"].includes(new URL(url).hostname);
+  if (options.target === "local" && !local) throw new Error("The local target requires a 127.0.0.1/localhost Supabase URL.");
+  if (options.target === "hosted" && local) throw new Error("--target hosted needs the hosted project URL.");
+
+  const { createClient } = await import("@supabase/supabase-js");
+  const service = createClient(url, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } });
+  const packages = await loadInputs(service, options.contracts);
+  const validation = validateSimulationPackages(packages);
+  if (options.dryRun) return { status: "VALIDATED", target: options.target, ...validation };
+
+  const { data: source, error: sourceError } = await service.from("tesda_sources")
+    .select("id,edition,status").eq("qualification_code", "ELCCSS213").eq("status", "active").single();
+  if (sourceError) throw sourceError;
+  const [{ data: cocModules, error: moduleError }, { data: missions, error: missionError }] = await Promise.all([
+    service.from("coc_modules").select("id,coc_code"),
+    service.from("missions").select("id,mission_code"),
+  ]);
+  if (moduleError) throw moduleError;
+  if (missionError) throw missionError;
+  const moduleByCoc = new Map(cocModules.map((row) => [row.coc_code, row]));
+  const missionByCode = new Map(missions.map((row) => [row.mission_code, row]));
+  const missionById = new Map(missions.map((row) => [row.id, row]));
+  const linkByMission = new Map(packages.map((pkg) => [pkg.missionCode, { moduleId: pkg.moduleId }]));
+
+  const principal = await createGovernancePrincipal(service, url, publishableKey, createClient);
+  const published = [];
+  try {
+    const moduleCache = new Map();
+    for (const pkg of packages) {
+      const coc = pkg.missionCode.slice(0, 4);
+      const mission = missionByCode.get(pkg.missionCode);
+      const cocModule = moduleByCoc.get(coc);
+      if (!mission || !cocModule) throw new Error(`Catalog entry missing for ${pkg.missionCode}.`);
+      if (!moduleCache.has(coc)) moduleCache.set(coc, await ensurePublishedModule(service, principal, source, cocModule));
+      const activity = await ensureActivity(service, principal, pkg, mission, moduleCache.get(coc));
+      const rubric = await ensureRubric(service, principal, pkg, activity, source);
+      const { error: linkError } = await service.from("activity_curriculum_links").upsert(
+        { activity_version_id: activity.id, module_id: pkg.moduleId, delivery_kind: "simulation" },
+        { onConflict: "activity_version_id", ignoreDuplicates: true },
+      );
+      if (linkError) throw linkError;
+      const { error: auditError } = await service.from("audit_events").insert({
+        actor_id: principal.id,
+        actor_role: "admin",
+        action: "simulation_assessment.published",
+        target_type: "activity_version",
+        target_id: activity.id,
+        reason: `Publish the ${pkg.missionCode} simulation assessment generated from contract ${pkg.learnerPayload.definition_version}.`,
+        metadata: { mission_code: pkg.missionCode, definition_version: pkg.learnerPayload.definition_version, rubric_version_id: rubric.id, criteria_count: pkg.criteria.length },
+        outcome: "success",
+      });
+      if (auditError) throw auditError;
+      published.push({ mission: pkg.missionCode, activityVersionId: activity.id, rubricVersionId: rubric.id, criteria: pkg.criteria.length });
+    }
+    const formBased = await linkFormBasedPackages(service, missionById, new Map(
+      [...linkByMission].map(([code, link]) => [code, link]),
+    ));
+    return { status: "PUBLISHED", target: options.target, ...validation, missions: published, formBasedLinked: formBased };
+  } finally {
+    await retireGovernancePrincipal(service, principal);
+  }
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().then((result) => console.log(JSON.stringify(result, null, 2))).catch((error) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  });
+}
