@@ -4,10 +4,10 @@ import Link from "next/link";
 import type { ComponentType, ReactNode } from "react";
 import { BookOpenCheck, ClipboardCheck, FileCheck2, GraduationCap, Route, Users } from "lucide-react";
 import { DataTable, EmptyState, Panel } from "@/components/analytics/performance/primitives";
-import { PercentBarChart, TrendLineChart } from "@/components/analytics/performance/charts";
+import { CountBarChart, PercentBarChart, TrendLineChart } from "@/components/analytics/performance/charts";
 import type { ChartConfig } from "@/components/ui/chart";
 import { describePeriod, formatDuration, formatPercent, formatShortDay } from "@/lib/analytics/format";
-import type { AnalyticsOverview } from "@/lib/analytics/performance-types";
+import type { AnalyticsOverview, EvaluationStage } from "@/lib/analytics/performance-types";
 import { analyticsHref, type AnalyticsQuery } from "@/lib/analytics/query";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +18,18 @@ const SOURCE_CONFIG = {
 const COMPLETION_CONFIG = {
   completion: { label: "Completion rate", color: "hsl(var(--chart-2))" },
 } satisfies ChartConfig;
+
+const STAGE_CONFIG = {
+  technical: { label: "Technical assessments", color: "hsl(var(--chart-1))" },
+  homework: { label: "Homework", color: "hsl(var(--chart-4))" },
+} satisfies ChartConfig;
+
+export const STAGE_LABELS: Record<EvaluationStage, string> = {
+  evaluate: "Evaluate",
+  finalize: "Finalize",
+  release: "Release",
+  released: "Released",
+};
 
 export function OverviewPanel({
   data,
@@ -37,13 +49,13 @@ export function OverviewPanel({
   const sources = [
     { source: "Assessments (released)", applicable: data.assessments.applicable, average: data.assessments.avg_percent, basis: `${data.assessments.released} released results` },
     { source: "Quizzes", applicable: data.quizzes.applicable, average: data.quizzes.avg_percent, basis: `${data.quizzes.scored} scored attempts` },
-    { source: "Homework (graded)", applicable: data.homework.applicable, average: data.homework.avg_percent, basis: `${data.homework.graded} graded submissions` },
+    { source: "Homework (released)", applicable: data.homework.applicable, average: data.homework.avg_percent, basis: `${data.homework.released} released grades (share of each maximum score)` },
     { source: "Learning progress", applicable: data.learning_progress.applicable, average: data.learning_progress.avg_percent, basis: `${data.learning_progress.items_total} required items` },
   ];
   const completions = [
     { measure: "Quizzes", applicable: data.quizzes.applicable, completion: data.quizzes.completion_rate, basis: `${data.quizzes.completed} of ${data.quizzes.eligible} learner-quiz pairs` },
     { measure: "Homework", applicable: data.homework.applicable, completion: data.homework.completion_rate, basis: `${data.homework.submitted} submitted, ${data.homework.missing} missing` },
-    { measure: "Practice missions", applicable: data.missions.applicable, completion: data.missions.completion_rate, basis: `${data.missions.verified} verified in period` },
+    { measure: "Practice missions (to date)", applicable: data.missions.applicable, completion: data.missions.completion_rate, basis: `${data.missions.verified} verified in the period` },
   ];
   const link = (tab: "learners" | "missions" | "quizzes") => (pathname ? analyticsHref(pathname, query, { tab }) : undefined);
   const hasTrend = data.trend.length > 0;
@@ -73,11 +85,11 @@ export function OverviewPanel({
           footer={footer} href={link("quizzes")} linkLabel="Open quiz analytics" />
         <SummaryCard icon={FileCheck2} label="Homework scores" applicable={data.homework.applicable}
           value={formatPercent(data.homework.avg_percent)}
-          detail={`${data.homework.submitted} submitted · ${data.homework.missing} missing · ${data.homework.late} late`}
+          detail={`${data.homework.submitted} submitted · ${data.homework.released} released · ${data.homework.pending_evaluation} awaiting evaluation · ${data.homework.missing} missing · ${data.homework.late} late`}
           footer={footer} />
-        <SummaryCard icon={Route} label="Practice missions" applicable={data.missions.applicable}
+        <SummaryCard icon={Route} label="Practice missions · completion to date" applicable={data.missions.applicable}
           value={formatPercent(data.missions.completion_rate)}
-          detail={`${data.missions.verified} verified · ${data.missions.runs} runs (${data.missions.successful_runs} verified, ${data.missions.failed_runs} incomplete) · avg ${formatDuration(data.missions.avg_duration_seconds)}`}
+          detail={`In the period: ${data.missions.verified} verified · ${data.missions.runs} runs (${data.missions.successful_runs} verified, ${data.missions.failed_runs} incomplete) · avg ${formatDuration(data.missions.avg_duration_seconds)}`}
           footer={footer} href={link("missions")} linkLabel="Open mission analytics" />
         <SummaryCard icon={BookOpenCheck} label="Learning progress" applicable={data.learning_progress.applicable}
           value={formatPercent(data.learning_progress.avg_percent)}
@@ -86,7 +98,7 @@ export function OverviewPanel({
       </div>
 
       <div className="grid gap-5 xl:grid-cols-2">
-        <Panel title="Average score by source" description="Released assessment results, scored quizzes, graded homework and learning progress. Each bar is backed by the table below.">
+        <Panel title="Average score by source" description="Released assessment results, scored quizzes, released homework grades and learning progress. Each bar is backed by the table below.">
           {sources.some((row) => row.applicable && row.average !== null) ? (
             <div className="space-y-4 p-4 sm:p-5">
               <PercentBarChart data={sources.filter((row) => row.applicable).map((row) => ({ source: row.source, average: row.average }))}
@@ -94,7 +106,7 @@ export function OverviewPanel({
                 ariaLabel="Average score by source" />
               <SourceTable rows={sources.map((row) => ({ name: row.source, applicable: row.applicable, value: row.average, basis: row.basis }))} valueLabel="Average" />
             </div>
-          ) : <EmptyState title="No scored work in this period" description="Averages appear after results are released, quizzes are submitted or homework is graded." />}
+          ) : <EmptyState title="No scored work in this period" description="Averages appear after results are released, quizzes are scored or homework grades are released." />}
         </Panel>
         <Panel title="Completion rates" description="Quiz and homework completion of eligible learners, and the share of learner-mission pairs verified by the server.">
           {completions.some((row) => row.applicable && row.completion !== null) ? (
@@ -108,13 +120,15 @@ export function OverviewPanel({
         </Panel>
       </div>
 
+      <EvaluationPanel data={data} />
+
       <Panel title="Daily learning activity" description="Recorded events per Manila calendar day for the filtered population.">
         {hasTrend && trendTotals > 0 ? (
           <div className="p-4 sm:p-5">
             <TrendLineChart data={data.trend} ariaLabel={`Daily learning activity, ${data.trend.length} days`} />
             <details className="mt-3 text-xs text-muted-foreground">
               <summary className="cursor-pointer font-medium text-foreground">Show the daily activity table</summary>
-              <div className="mt-2 max-h-72 overflow-auto rounded-lg border border-border">
+              <div className="relative mt-2 max-h-72 overflow-auto rounded-lg border border-border">
                 <table className="w-full text-left">
                   <caption className="sr-only">Daily learning activity</caption>
                   <thead className="sticky top-0 bg-muted">
@@ -149,6 +163,37 @@ export function OverviewPanel({
           ]} />
       </Panel>
     </div>
+  );
+}
+
+function EvaluationPanel({ data }: { data: AnalyticsOverview }) {
+  const stages = (Object.keys(STAGE_LABELS) as EvaluationStage[]);
+  const total = stages.reduce((sum, stage) => sum + data.evaluation.total[stage], 0);
+  return (
+    <Panel title="Evaluation status (Evaluate → Finalize → Release)"
+      description={`Technical assessments and homework submitted in the period, by their current stage (same stages as the Evaluation Center). Only released results enter the averages above.`}>
+      {total ? (
+        <div className="grid gap-5 p-4 sm:p-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,1fr)]">
+          <CountBarChart data={stages.map((stage) => ({ stage: STAGE_LABELS[stage], technical: data.evaluation.technical[stage], homework: data.evaluation.homework[stage] }))}
+            config={STAGE_CONFIG} categoryKey="stage" series={["technical", "homework"]} stacked categoryLabel="Stage" valueLabel="Items"
+            ariaLabel="Submitted work by evaluation stage" height={240} />
+          <table className="w-full self-start text-left text-xs">
+            <caption className="sr-only">Submitted work by evaluation stage</caption>
+            <thead className="text-muted-foreground"><tr><th className="py-1.5 font-medium">Stage</th><th className="py-1.5 text-right font-medium">Technical</th><th className="py-1.5 text-right font-medium">Homework</th><th className="py-1.5 text-right font-medium">Total</th></tr></thead>
+            <tbody className="divide-y divide-border tabular-nums">
+              {stages.map((stage) => (
+                <tr key={stage}>
+                  <td className="py-2 font-medium text-foreground">{STAGE_LABELS[stage]}</td>
+                  <td className="py-2 text-right">{data.evaluation.technical[stage]}</td>
+                  <td className="py-2 text-right">{data.evaluation.homework[stage]}</td>
+                  <td className="py-2 text-right font-semibold">{data.evaluation.total[stage]}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : <EmptyState title="No submitted work in this period" description="Assessment attempts and homework appear here once learners submit them." />}
+    </Panel>
   );
 }
 
