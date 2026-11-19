@@ -31,6 +31,10 @@
 --   place (the earliest row per key is the award) instead of failing the
 --   unique index, and award history still allows the declared ON DELETE
 --   CASCADE of the guarded admin account removal.
+-- * Module points follow the sequential-unlocking methodology
+--   (20261119120000, applied earlier): a module with no required items earns
+--   nothing when it completes on unlock; required items published later and
+--   completed for real award the module once.
 
 begin;
 set local lock_timeout = '5s';
@@ -363,8 +367,37 @@ begin
 end
 $$;
 
+-- Module points reward completing a module's required learning. A module with
+-- no required items (no linked missions and no published topics) completes on
+-- unlock under the sequential-unlocking methodology and earns nothing. A
+-- module is due when the learner has a stored completion, it has at least one
+-- required item, and every required item is complete, as judged by the
+-- single shared methodology (public.learner_module_states). A module that
+-- gains topics after an empty completion is therefore awarded once the learner
+-- completes them. PL/pgSQL for the RLS-aware plan cache, like the
+-- methodology helpers it calls.
+create function private.gamification_module_award_due(p_learner uuid, p_module uuid)
+returns boolean
+language plpgsql
+stable
+security invoker
+set search_path = ''
+as $$
+declare
+  v_due boolean;
+begin
+  select s.stored_completion and s.requirements_met and (s.topics_total + s.missions_total) > 0
+  into v_due
+  from public.curriculum_modules m
+  cross join lateral public.learner_module_states(p_learner, m.coc_code) s
+  where m.id = p_module and s.module_id = m.id;
+  return coalesce(v_due, false);
+end
+$$;
+
 -- Awards one event exactly once. Returns true only when a new event was
--- recorded (unknown or inactive rules, non-learners and repeats return false).
+-- recorded (unknown or inactive rules, non-learners, modules that are not
+-- due and repeats return false).
 create function private.gamification_award(
   p_learner uuid,
   p_event_type text,
@@ -395,6 +428,14 @@ begin
     where e.learner_id = p_learner and e.event_type = p_event_type and e.source_id = v_source
   ) then
     return false;
+  end if;
+  if p_event_type = 'module_completed' then
+    if v_source !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+      return false;
+    end if;
+    if not private.gamification_module_award_due(p_learner, v_source::uuid) then
+      return false;
+    end if;
   end if;
   insert into public.learner_point_events (learner_id, event_type, source_id, points, detail, awarded_at)
   select p_learner, r.event_type, v_source, r.points,
@@ -482,6 +523,11 @@ create trigger trg_learner_point_events_award_achievements
 -- learning record that fired it. The inner block is a subtransaction, so a
 -- failed award leaves no partial rows; private.gamification_backfill() awards
 -- the record later, still exactly once.
+-- Topic and mission completions also re-check their module: a module whose
+-- stored completion predates its required items (for example topics
+-- published after an empty module completed on unlock) is awarded once the
+-- learner completes them. A completion that newly completes a module is
+-- awarded through the learner_module_completions branch instead.
 create function private.gamification_award_from_source()
 returns trigger
 language plpgsql
@@ -493,6 +539,8 @@ declare
   v_event_type text;
   v_source text;
   v_at timestamptz;
+  v_modules uuid[] := '{}';
+  v_module uuid;
 begin
   begin
     if tg_table_name = 'practice_mission_completions' then
@@ -501,11 +549,13 @@ begin
       v_event_type := 'practice_mission_verified';
       v_source := new.mission_id;
       v_at := new.verified_at;
+      v_modules := array(select l.module_id from public.mission_curriculum_links l where l.mission_code = new.mission_id);
     elsif tg_table_name = 'learner_topic_progress' then
       v_learner := new.learner_id;
       v_event_type := 'topic_completed';
       v_source := new.topic_id::text;
       v_at := new.completed_at;
+      v_modules := array(select t.module_id from public.curriculum_topics t where t.id = new.topic_id);
     elsif tg_table_name = 'learner_module_completions' then
       v_learner := new.learner_id;
       v_event_type := 'module_completed';
@@ -554,6 +604,16 @@ begin
     raise warning 'gamification award skipped (event %, learner %, source %, table %): % [%]',
       v_event_type, v_learner, v_source, tg_table_name, sqlerrm, sqlstate;
   end;
+  if coalesce(cardinality(v_modules), 0) > 0 then
+    begin
+      foreach v_module in array v_modules loop
+        perform private.gamification_award(v_learner, 'module_completed', v_module::text, v_at);
+      end loop;
+    exception when others then
+      raise warning 'gamification module award skipped (learner %, modules %, after % %): % [%]',
+        v_learner, v_modules, v_event_type, v_source, sqlerrm, sqlstate;
+    end;
+  end if;
   return null;
 end
 $$;
@@ -697,12 +757,14 @@ revoke all on function private.gamification_award_from_source() from public, ano
 revoke all on function private.gamification_backfill() from public, anon, authenticated;
 revoke all on function private.gamification_ensure_award_index() from public, anon, authenticated;
 revoke all on function private.gamification_achievement_history_guard() from public, anon, authenticated;
+revoke all on function private.gamification_module_award_due(uuid, uuid) from public, anon, authenticated;
 grant execute on function
   private.gamification_source_detail(text, text),
   private.gamification_award(uuid, text, text, timestamptz),
   private.gamification_award_achievements(uuid, text),
   private.gamification_backfill(),
-  private.gamification_ensure_award_index()
+  private.gamification_ensure_award_index(),
+  private.gamification_module_award_due(uuid, uuid)
   to service_role;
 
 revoke all on function public.gamification_level_for_points(integer) from public, anon;

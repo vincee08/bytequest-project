@@ -2,7 +2,7 @@
 -- Every award comes from a real source record, exactly once, and is written
 -- only by trusted server roles. Rollback-only: all fixtures are discarded.
 begin;
-select plan(65);
+select plan(71);
 
 create temporary table gam_ctx (
   teacher uuid not null default gen_random_uuid(),
@@ -11,11 +11,14 @@ create temporary table gam_ctx (
   learner_b uuid not null default gen_random_uuid(),
   learner_c uuid not null default gen_random_uuid(),
   learner_d uuid not null default gen_random_uuid(),
+  learner_e uuid not null default gen_random_uuid(),
   class_a uuid not null default gen_random_uuid(),
   action_id bigint,
   topic_a uuid not null default gen_random_uuid(),
   topic_b uuid not null default gen_random_uuid(),
   topic_c uuid not null default gen_random_uuid(),
+  topic_d uuid not null default gen_random_uuid(),
+  topic_e uuid not null default gen_random_uuid(),
   practice_quiz_a uuid not null default gen_random_uuid(),
   practice_quiz_c uuid not null default gen_random_uuid(),
   quiz uuid not null default gen_random_uuid(),
@@ -44,7 +47,8 @@ select id,'00000000-0000-0000-0000-000000000000'::uuid,'authenticated','authenti
   '{"provider":"email","providers":["email"]}'::jsonb, jsonb_build_object('full_name', name), now(), now()
 from gam_ctx cross join lateral (values
   (teacher, 'Gamification Teacher'), (other_teacher, 'Other Teacher'),
-  (learner_a, 'Ana Reyes'), (learner_b, 'Ben Santos'), (learner_c, 'Carla Mendoza'), (learner_d, 'Dan Lopez')) t(id, name);
+  (learner_a, 'Ana Reyes'), (learner_b, 'Ben Santos'), (learner_c, 'Carla Mendoza'), (learner_d, 'Dan Lopez'),
+  (learner_e, 'Eva Torres')) t(id, name);
 update public.profiles set role = 'instructor'
 where user_id in (select teacher from gam_ctx union all select other_teacher from gam_ctx);
 
@@ -58,6 +62,16 @@ with inserted as (
   select learner_a, 'gamification-rollback', 'coc1_m1', 'inspect', 'object_inspected', 'case', '{}'::jsonb, now() from gam_ctx
   returning id)
 update gam_ctx set action_id = (select id from inserted);
+
+-- Module and accepted contract version lookups. Practice completions use the
+-- accepted (current) contract versions, so the sequential-unlocking refresh
+-- records real module completions exactly as in production.
+create function pg_temp.module_id(p_coc text, p_code text) returns uuid language sql stable as $$
+  select id from public.curriculum_modules where coc_code = p_coc and code = p_code
+$$;
+create function pg_temp.version(p_mission text) returns text language sql stable as $$
+  select version from public.practice_mission_contracts where mission_id = p_mission
+$$;
 
 -- ---------------------------------------------------------------------------
 -- Approved configuration
@@ -119,10 +133,10 @@ select ok(not has_function_privilege('authenticated', 'private.gamification_awar
 -- ---------------------------------------------------------------------------
 set local role service_role;
 insert into public.practice_mission_completions (learner_id, mission_id, contract_version, evidence_through_id, verified_at)
-select learner_a, 'coc1_m1', 'rollback', action_id, '2026-01-01 08:00:00+00' from gam_ctx;
+select learner_a, 'coc1_m1', pg_temp.version('coc1_m1'), action_id, '2026-01-01 08:00:00+00' from gam_ctx;
 -- Re-verification uses the verifier's upsert; it must never re-award.
 insert into public.practice_mission_completions (learner_id, mission_id, contract_version, evidence_through_id, verified_at)
-select learner_a, 'coc1_m1', 'rollback-2', action_id, '2026-01-01 09:00:00+00' from gam_ctx
+select learner_a, 'coc1_m1', pg_temp.version('coc1_m1'), action_id, '2026-01-01 09:00:00+00' from gam_ctx
 on conflict (learner_id, mission_id) do update
   set contract_version = excluded.contract_version, verified_at = excluded.verified_at;
 select is(private.gamification_award((select learner_a from gam_ctx), 'practice_mission_verified', 'coc1_m1', now()), false,
@@ -141,7 +155,8 @@ select ok(exists (select 1 from public.learner_achievements la join gam_ctx c on
 
 set local role service_role;
 insert into public.practice_mission_completions (learner_id, mission_id, contract_version, evidence_through_id, verified_at)
-select learner_a, 'coc1_m' || n, 'rollback', action_id, '2026-01-01 08:00:00+00'::timestamptz + make_interval(days => n - 1)
+select learner_a, 'coc1_m' || n, pg_temp.version('coc1_m' || n), action_id,
+  '2026-01-01 08:00:00+00'::timestamptz + make_interval(days => n - 1)
 from gam_ctx cross join generate_series(2, 4) n;
 reset role;
 select ok(exists (select 1 from public.learner_achievements la join gam_ctx c on la.learner_id = c.learner_a
@@ -151,13 +166,24 @@ select ok(not exists (select 1 from public.learner_achievements la join gam_ctx 
 
 set local role service_role;
 insert into public.practice_mission_completions (learner_id, mission_id, contract_version, evidence_through_id, verified_at)
-select learner_a, 'coc1_m5', 'rollback', action_id, '2026-01-05 08:00:00+00' from gam_ctx;
+select learner_a, 'coc1_m5', pg_temp.version('coc1_m5'), action_id, '2026-01-05 08:00:00+00' from gam_ctx;
 reset role;
 select is((select la.earned_at from public.learner_achievements la join gam_ctx c on la.learner_id = c.learner_a
   where la.code = 'five_missions'), '2026-01-05 08:00:00+00'::timestamptz,
   'five_missions is earned at the time of the fifth verification');
 select ok(not exists (select 1 from public.learner_achievements la join gam_ctx c on la.learner_id = c.learner_a
   where la.code = 'ten_missions'), 'ten_missions stays locked');
+-- The sequential-unlocking refresh records the module completions.
+select is((select string_agg(m.code, ',' order by m.code) from public.learner_point_events e
+  join public.curriculum_modules m on m.id::text = e.source_id
+  join gam_ctx c on e.learner_id = c.learner_a where e.event_type = 'module_completed'),
+  'LO1.1,LO1.2,LO1.4', 'modules completed through their verified missions award module points');
+select is((select format('%s|%s',
+    (select count(*) from public.learner_module_completions mc where mc.learner_id = c.learner_a
+       and mc.module_id = pg_temp.module_id('coc1', 'LO1.3')),
+    (select count(*) from public.learner_point_events e where e.learner_id = c.learner_a
+       and e.source_id = pg_temp.module_id('coc1', 'LO1.3')::text)) from gam_ctx c),
+  '1|0', 'LO1.3 completes without required items and awards no module points');
 
 -- ---------------------------------------------------------------------------
 -- Topics, modules and COCs (service-role progression writes)
@@ -172,9 +198,8 @@ set local role service_role;
 insert into public.learner_topic_progress (learner_id, topic_id, completed_at)
 select learner_a, topic_a, '2026-02-01 08:00:00+00' from gam_ctx;
 insert into public.learner_topic_progress (learner_id, topic_id) select learner_a, topic_a from gam_ctx on conflict do nothing;
-insert into public.learner_module_completions (learner_id, module_id, completed_at)
-select learner_a, (select id from public.curriculum_modules where coc_code = 'coc1' and code = 'LO1.1'), '2026-02-02 08:00:00+00' from gam_ctx;
 reset role;
+-- Every COC1 module is complete, so the practice quiz guard admits the quiz.
 insert into public.practice_quiz_attempts (id, learner_id, coc_code, status, questions, answers, score, passed, submitted_at)
 select practice_quiz_a, learner_a, 'coc1', 'submitted', '[1,2,3,4,5]'::jsonb, '{}'::jsonb, 5, true, now() from gam_ctx;
 set local role service_role;
@@ -184,15 +209,18 @@ insert into public.practice_coc_progress (learner_id, coc_code, quiz_attempt_id)
 select learner_a, 'coc1', practice_quiz_a from gam_ctx on conflict do nothing;
 reset role;
 
-select is((select string_agg(format('%s:%s', e.event_type, e.points), ',' order by e.event_type)
-  from public.learner_point_events e join gam_ctx c on e.learner_id = c.learner_a
-  where e.event_type in ('topic_completed', 'module_completed', 'coc_completed')),
-  'coc_completed:300,module_completed:100,topic_completed:10',
+select is((select string_agg(format('%s:%s:%s', s.event_type, s.events, s.points), ',' order by s.event_type)
+  from (select e.event_type, count(*) as events, sum(e.points) as points
+        from public.learner_point_events e join gam_ctx c on e.learner_id = c.learner_a
+        where e.event_type in ('topic_completed', 'module_completed', 'coc_completed')
+        group by e.event_type) s),
+  'coc_completed:1:300,module_completed:3:300,topic_completed:1:10',
   'topic, module and COC completions each award their configured points once');
 select is((select detail from public.learner_point_events e join gam_ctx c on e.learner_id = c.learner_a
   where e.event_type = 'topic_completed'), 'Rollback ESD precautions', 'topic points record the published topic title');
 select is((select detail from public.learner_point_events e join gam_ctx c on e.learner_id = c.learner_a
-  where e.event_type = 'module_completed'), 'LO1.1 Assemble computer hardware', 'module points record the official module');
+  where e.event_type = 'module_completed' and e.source_id = pg_temp.module_id('coc1', 'LO1.1')::text),
+  'LO1.1 Assemble computer hardware', 'module points record the official module');
 select is((select string_agg(la.code, ',' order by la.code) from public.learner_achievements la join gam_ctx c
   on la.learner_id = c.learner_a where la.code in ('first_module', 'coc1_complete', 'coc2_complete')),
   'coc1_complete,first_module', 'module and COC milestones earn only their own achievements');
@@ -300,13 +328,53 @@ select ok(exists (select 1 from public.learner_achievements la join gam_ctx c on
   where la.code = 'first_release'), 'the first released assessment earns first_release');
 
 -- ---------------------------------------------------------------------------
+-- Modules without required items award nothing; content published later and
+-- completed for real awards the module, exactly once.
+-- ---------------------------------------------------------------------------
+set local role service_role;
+insert into public.learner_module_completions (learner_id, module_id)
+select learner_e, pg_temp.module_id('coc2', 'LO2.3') from gam_ctx;
+reset role;
+select is((select format('%s|%s|%s',
+    (select count(*) from public.learner_module_completions where learner_id = c.learner_e),
+    (select count(*) from public.learner_point_events where learner_id = c.learner_e),
+    (select count(*) from public.user_achievements where user_id = c.learner_e)) from gam_ctx c),
+  '1|0|0', 'an empty module completion earns neither module points nor the first_module achievement');
+
+insert into public.curriculum_topics (id, module_id, sequence_order)
+select t, pg_temp.module_id('coc1', 'LO1.3'), 900 + n
+from gam_ctx cross join lateral (values (topic_d, 1), (topic_e, 2)) v(t, n);
+insert into public.curriculum_topic_revisions (topic_id, revision_number, title, body_markdown, status)
+select topic_d, 1, 'Rollback application install check', 'Install and verify the application.', 'published' from gam_ctx;
+set local role service_role;
+insert into public.learner_topic_progress (learner_id, topic_id, completed_at)
+select learner_a, topic_d, '2026-02-10 08:00:00+00' from gam_ctx;
+reset role;
+select is((select format('%s|%s|%s', count(*), max(e.points), max(e.awarded_at))
+  from public.learner_point_events e join gam_ctx c on e.learner_id = c.learner_a
+  where e.event_type = 'module_completed' and e.source_id = pg_temp.module_id('coc1', 'LO1.3')::text),
+  format('1|100|%s', '2026-02-10 08:00:00+00'::timestamptz),
+  'a topic published later and completed awards the module once, at the time it was completed');
+insert into public.curriculum_topic_revisions (topic_id, revision_number, title, body_markdown, status)
+select topic_e, 1, 'Rollback application update', 'Apply the update.', 'published' from gam_ctx;
+set local role service_role;
+insert into public.learner_topic_progress (learner_id, topic_id, completed_at)
+select learner_a, topic_e, '2026-02-11 08:00:00+00' from gam_ctx;
+reset role;
+select is((select format('%s|%s',
+    (select count(*) from public.learner_point_events e where e.learner_id = c.learner_a and e.event_type = 'topic_completed'),
+    (select count(*) from public.learner_point_events e where e.learner_id = c.learner_a and e.event_type = 'module_completed'))
+  from gam_ctx c),
+  '3|4', 'later topics keep awarding topic points and each module is awarded once');
+
+-- ---------------------------------------------------------------------------
 -- Totals and levels
 -- ---------------------------------------------------------------------------
-select is((select sum(e.points)::integer from public.learner_point_events e join gam_ctx c on e.learner_id = c.learner_a), 735,
-  'the learner total is the sum of eleven real awards');
-select is(public.gamification_level_for_points(735),
-  '{"level":4,"title":"Technician","min_points":600,"next_level":5,"next_min_points":1000,"progress_percent":33}'::jsonb,
-  '735 points is level 4 Technician, a third of the way to level 5');
+select is((select sum(e.points)::integer from public.learner_point_events e join gam_ctx c on e.learner_id = c.learner_a), 1055,
+  'the learner total is the sum of sixteen real awards');
+select is(public.gamification_level_for_points(1055),
+  '{"level":5,"title":"Senior Technician","min_points":1000,"next_level":6,"next_min_points":1500,"progress_percent":11}'::jsonb,
+  '1055 points is level 5 Senior Technician, 11 percent of the way to level 6');
 select is(public.gamification_level_for_points(0)->>'title', 'Trainee', 'zero points is Trainee');
 select is(public.gamification_level_for_points(99),
   '{"level":1,"title":"Trainee","min_points":0,"next_level":2,"next_min_points":100,"progress_percent":99}'::jsonb,
@@ -340,7 +408,7 @@ select throws_ok(format($$insert into public.learner_point_events (learner_id, e
 select throws_ok(format($$insert into public.user_achievements (user_id, achievement_id) select %L, id from public.achievements where achievement_code = 'ten_missions'$$,
   (select learner_a from gam_ctx)), '42501', null, 'a learner cannot grant themselves an achievement');
 select throws_ok($$update public.gamification_point_rules set points = 1000$$, '42501', null, 'a learner cannot change point rules');
-select is((select count(*)::integer from public.learner_point_events), 11, 'a learner reads exactly their own eleven point events');
+select is((select count(*)::integer from public.learner_point_events), 16, 'a learner reads exactly their own sixteen point events');
 select is((select string_agg(code, ',' order by code) from public.learner_achievements),
   'assembly_ready,coc1_complete,first_mission,first_module,first_release,five_missions',
   'a learner reads exactly their own earned achievements');
@@ -350,7 +418,7 @@ select set_config('request.jwt.claim.sub', (select learner_b::text from gam_ctx)
 select is((select count(*)::integer from public.learner_point_events where learner_id <> auth.uid()), 0,
   'a classmate cannot read another learner''s point events');
 select set_config('request.jwt.claim.sub', (select teacher::text from gam_ctx), true);
-select is((select count(*)::integer from public.learner_point_events where learner_id = (select learner_a from gam_ctx)), 11,
+select is((select count(*)::integer from public.learner_point_events where learner_id = (select learner_a from gam_ctx)), 16,
   'the class instructor reads learner points for analytics');
 select set_config('request.jwt.claim.sub', (select other_teacher::text from gam_ctx), true);
 select is((select count(*)::integer from public.learner_point_events), 0, 'an unrelated instructor reads no learner points');
@@ -369,13 +437,21 @@ alter table public.homework_submissions disable trigger trg_homework_submissions
 alter table public.result_releases disable trigger trg_result_releases_award_points;
 
 insert into public.practice_mission_completions (learner_id, mission_id, contract_version, evidence_through_id, verified_at)
-select learner_c, 'coc1_m' || n, 'legacy', action_id, '2026-03-01 08:00:00+00'::timestamptz + make_interval(days => n - 1)
+select learner_c, 'coc1_m' || n, pg_temp.version('coc1_m' || n), action_id,
+  '2026-03-01 08:00:00+00'::timestamptz + make_interval(days => n - 1)
 from gam_ctx cross join generate_series(1, 3) n;
-insert into public.learner_topic_progress (learner_id, topic_id, completed_at) select learner_c, topic_b, '2026-03-05 08:00:00+00' from gam_ctx;
+-- Historical completion records: LO1.1 (its missions and published topic are
+-- complete) and LO2.3, a module that has no required items.
 insert into public.learner_module_completions (learner_id, module_id, completed_at)
-select learner_c, (select id from public.curriculum_modules where coc_code = 'coc1' and code = 'LO1.2'), '2026-03-06 08:00:00+00' from gam_ctx;
+select learner_c, pg_temp.module_id('coc1', 'LO1.1'), '2026-03-06 08:00:00+00'::timestamptz from gam_ctx
+union all
+select learner_c, pg_temp.module_id('coc2', 'LO2.3'), '2026-03-11 08:00:00+00'::timestamptz from gam_ctx;
+insert into public.learner_topic_progress (learner_id, topic_id, completed_at) select learner_c, topic_a, '2026-03-05 08:00:00+00' from gam_ctx;
+-- COC progress recorded before module gating existed.
+alter table public.practice_quiz_attempts disable trigger trg_practice_quiz_requires_complete_modules;
 insert into public.practice_quiz_attempts (id, learner_id, coc_code, status, questions, answers, score, passed, submitted_at)
 select practice_quiz_c, learner_c, 'coc1', 'submitted', '[1,2,3,4,5]'::jsonb, '{}'::jsonb, 5, true, now() from gam_ctx;
+alter table public.practice_quiz_attempts enable trigger trg_practice_quiz_requires_complete_modules;
 insert into public.practice_coc_progress (learner_id, coc_code, quiz_attempt_id, completed_at)
 select learner_c, 'coc1', practice_quiz_c, '2026-03-07 08:00:00+00' from gam_ctx;
 insert into public.quiz_attempts (id, learner_id, class_id, quiz_assignment_id, quiz_version_id, client_start_key, status,
@@ -403,13 +479,24 @@ select is(
   (select jsonb_build_object(
     'practice_mission_verified', (select count(*) from public.practice_mission_completions where learner_id = c.learner_c),
     'topic_completed', (select count(*) from public.learner_topic_progress where learner_id = c.learner_c),
-    'module_completed', (select count(*) from public.learner_module_completions where learner_id = c.learner_c),
+    -- Only completions of modules that have required items qualify.
+    'module_completed', (select count(*) from public.learner_module_completions mc where mc.learner_id = c.learner_c
+      and (exists (select 1 from public.mission_curriculum_links l where l.module_id = mc.module_id)
+           or exists (select 1 from public.curriculum_topics t
+                      join public.curriculum_topic_revisions r on r.topic_id = t.id
+                      where t.module_id = mc.module_id and t.archived_at is null
+                        and r.status = 'published'::public.content_publication_status))),
     'coc_completed', (select count(*) from public.practice_coc_progress where learner_id = c.learner_c),
     'quiz_submitted', (select count(*) from public.quiz_attempts where learner_id = c.learner_c and status::text in ('submitted', 'completed')),
     'homework_submitted_on_time', (select count(*) from public.homework_submissions where learner_id = c.learner_c and lateness_seconds = 0),
     'assessment_released', (select count(distinct rr.attempt_id) from public.result_releases rr join public.attempts a on a.id = rr.attempt_id
       where a.learner_id = c.learner_c)) from gam_ctx c),
   'backfill awards exactly one event per qualifying source record');
+select is((select format('%s|%s',
+    (select count(*) from public.learner_module_completions where learner_id = c.learner_c),
+    (select string_agg(m.code, ',') from public.learner_point_events e join public.curriculum_modules m on m.id::text = e.source_id
+       where e.learner_id = c.learner_c and e.event_type = 'module_completed')) from gam_ctx c),
+  '2|LO1.1', 'the backfill awards the real module completion and skips the empty one');
 select is((select sum(e.points)::integer from public.learner_point_events e join gam_ctx c on e.learner_id = c.learner_c), 635,
   'backfilled total equals the configured points of the source records');
 select is((select e.awarded_at from public.learner_point_events e join gam_ctx c on e.learner_id = c.learner_c
@@ -484,15 +571,16 @@ select is((select format('%s|%s',
   '1|0', 'a failed award never blocks the verified mission and leaves no partial point row');
 revoke select on public.gamification_point_rules from service_role;
 set local role service_role;
-insert into public.learner_module_completions (learner_id, module_id, completed_at)
-select learner_d, (select id from public.curriculum_modules where coc_code = 'coc1' and code = 'LO1.3'), '2026-05-03 08:00:00+00'
+insert into public.homework_submissions (assignment_id, learner_id, answer, submitted_at, effective_deadline_at, deadline_revision)
+select homework_open, learner_d, 'On time.', '2026-05-03 08:00:00+00'::timestamptz, '2035-01-01 00:00:00+00'::timestamptz, 1
 from gam_ctx;
 reset role;
 grant select on public.gamification_point_rules to service_role;
 select is((select format('%s|%s',
-    (select count(*) from public.learner_module_completions where learner_id = c.learner_d),
-    (select count(*) from public.learner_point_events where learner_id = c.learner_d and event_type = 'module_completed')) from gam_ctx c),
-  '1|0', 'a writer without access to the rules still records the module completion');
+    (select count(*) from public.homework_submissions where learner_id = c.learner_d),
+    (select count(*) from public.learner_point_events where learner_id = c.learner_d
+       and event_type = 'homework_submitted_on_time')) from gam_ctx c),
+  '1|0', 'a writer without access to the rules still records the homework submission');
 
 -- The backfill is fail open per record and repairs every missed award once.
 select is(private.gamification_backfill()->>'skipped', '1',
@@ -506,7 +594,7 @@ select is((select format('%s|%s|%s',
     (select count(*) from public.learner_point_events e where e.learner_id = c.learner_d),
     (select string_agg(la.code, ',' order by la.code) from public.learner_achievements la where la.learner_id = c.learner_d))
   from gam_ctx c),
-  'coc2_m2,coc2_m1|3|first_mission,first_module', 'repaired awards and achievements are recorded exactly once');
+  'coc2_m2,coc2_m1|3|first_mission', 'repaired awards and achievements are recorded exactly once');
 
 select * from finish();
 rollback;

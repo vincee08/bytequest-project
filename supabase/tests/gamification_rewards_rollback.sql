@@ -53,8 +53,12 @@ select private.gamification_award(pg_temp.rw(v.person), 'coc_completed', v.coc, 
 from (values ('gio', 'coc1'), ('ben', 'coc1'), ('carla', 'coc1'), ('dina', 'coc1'), ('dina', 'coc2'), ('dina', 'coc3'),
              ('eli', 'coc1'), ('eli', 'coc2'), ('fe', 'coc1'), ('fe', 'coc2'),
              ('hana', 'coc1'), ('hana', 'coc2'), ('hana', 'coc3')) v(person, coc);
-select private.gamification_award(pg_temp.rw(v.person), 'module_completed', gen_random_uuid()::text, now())
-from (values ('carla'), ('carla'), ('eli'), ('eli'), ('fe'), ('hana')) v(person);
+-- 100 points each as two verified practice missions (module points need a
+-- real module completion, which this projection suite does not model).
+select private.gamification_award(pg_temp.rw(v.person), 'practice_mission_verified', v.mission, now())
+from (values ('carla', 'coc2_m1'), ('carla', 'coc2_m2'), ('carla', 'coc2_m3'), ('carla', 'coc2_m4'),
+             ('eli', 'coc2_m1'), ('eli', 'coc2_m2'), ('eli', 'coc2_m3'), ('eli', 'coc2_m4'),
+             ('fe', 'coc2_m1'), ('fe', 'coc2_m2'), ('hana', 'coc2_m1'), ('hana', 'coc2_m2')) v(person, mission);
 reset role;
 
 update public.profiles set show_on_leaderboard = true
