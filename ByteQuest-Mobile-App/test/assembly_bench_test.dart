@@ -4,6 +4,7 @@ import 'package:bytequest/data/mission_simulation_definitions.dart';
 import 'package:bytequest/models/mission_model.dart';
 import 'package:bytequest/screens/simulation/components/assembly/assembly_bench.dart';
 import 'package:bytequest/screens/simulation/components/assembly/assembly_bench_layout.dart';
+import 'package:bytequest/screens/simulation/components/assembly/assembly_bench_painter.dart';
 import 'package:bytequest/screens/simulation/components/simulation_scene.dart';
 import 'package:bytequest/screens/simulation/mission_simulation_screen.dart';
 import 'package:bytequest/screens/simulation/runtime/mission_evidence_gateway.dart';
@@ -126,6 +127,46 @@ bool _enabled(WidgetTester tester, String key) {
 double _turns(WidgetTester tester, String part) => tester
     .widget<AnimatedRotation>(find.byKey(ValueKey('bench-rotation-$part')).first)
     .turns;
+
+/// Which side of its photograph a part's marker is on, on screen: the sign
+/// of the marker centre relative to the photograph centre, after rotation.
+/// Offsets under 15 % of the photograph count as centred (0).
+(int, int) _markerSide(WidgetTester tester, Finder within, String part) {
+  final image = find.descendant(
+      of: within, matching: find.byKey(ValueKey('bench-rotation-$part')));
+  final marker = find.descendant(
+      of: within, matching: find.byKey(ValueKey('bench-marker-$part')));
+  expect(marker, findsOneWidget, reason: 'the marker is drawn on the part');
+  final photo = tester.getRect(image);
+  final offset = tester.getCenter(marker) - photo.center;
+  final tolerance = photo.width * .15;
+  int sign(double value) => value.abs() < tolerance ? 0 : value.sign.toInt();
+  return (sign(offset.dx), sign(offset.dy));
+}
+
+String _description(WidgetTester tester) => tester
+    .widget<Text>(find.byKey(const ValueKey('bench-part-preview-description')))
+    .data!;
+
+/// The practice guide outline on the bench, mapped to the screen through
+/// the canvas, the fitted workspace and the camera.
+List<Rect> _outlinesOnScreen(WidgetTester tester) {
+  final wiring = find.byKey(const ValueKey('assembly-bench-wiring'));
+  final painter =
+      tester.widget<CustomPaint>(wiring).painter! as AssemblyBenchPainter;
+  final box = tester.renderObject<RenderBox>(wiring);
+  final sx = box.size.width / AssemblyBenchLayout.canvas.width;
+  final sy = box.size.height / AssemblyBenchLayout.canvas.height;
+  final toScreen = box.getTransformTo(null);
+  return [
+    for (final rect in AssemblyBenchPainter.highlightRects(
+        painter.view, painter.highlighted))
+      MatrixUtils.transformRect(
+          toScreen,
+          Rect.fromLTRB(rect.left * sx, rect.top * sy, rect.right * sx,
+              rect.bottom * sy)),
+  ];
+}
 
 void main() {
   setUp(() async {
@@ -428,5 +469,276 @@ void main() {
     expect(_enabled(tester, 'bench-operation-ground_wrist_strap'), isFalse);
     await _tapKey(tester, 'bench-operation-wear_wrist_strap');
     expect(_enabled(tester, 'bench-operation-ground_wrist_strap'), isTrue);
+  });
+
+  // Polish round P1: a keyed part's marker is drawn on the part and turns
+  // with it in the tray, the larger preview, the drag ghost and the slot.
+  testWidgets('the CPU triangle moves with every rotation in tray and preview',
+      (tester) async {
+    await _pump(tester, _stateAt(2));
+    await _tapKey(tester, 'bench-part-cpu');
+    final preview = find.byKey(const ValueKey('bench-part-preview'));
+    final tile = find.byKey(const ValueKey('bench-part-cpu'));
+    expect(preview, findsOneWidget);
+    final seen = <(int, int)>{};
+    // From the initial 90°, one clockwise quarter turn per tap.
+    for (final (index, (degrees, corner, side)) in const [
+      (90, 'top-left', (-1, -1)),
+      (180, 'top-right', (1, -1)),
+      (270, 'bottom-right', (1, 1)),
+      (0, 'bottom-left', (-1, 1)),
+    ].indexed) {
+      if (index > 0) await _tapKey(tester, 'bench-rotate');
+      expect(
+          _description(tester),
+          MissionContentData.benchMarkerDescription(
+              MissionContentData.benchMarkerTriangle, corner, degrees));
+      expect(_markerSide(tester, preview, 'cpu'), side,
+          reason: 'preview at $degrees°');
+      expect(_markerSide(tester, tile, 'cpu'), side,
+          reason: 'tray tile at $degrees°');
+      seen.add(side);
+    }
+    expect(seen, hasLength(4), reason: 'each rotation moves the triangle');
+    Rect photo(Finder within) => tester.getRect(find.descendant(
+        of: within, matching: find.byKey(const ValueKey('bench-rotation-cpu'))));
+    expect(photo(preview).width, greaterThanOrEqualTo(2 * photo(tile).width),
+        reason: 'the preview is a larger view of the part in hand');
+  });
+
+  testWidgets('the drag ghost and the seated CPU carry the triangle',
+      (tester) async {
+    final harness = await _pump(tester, _stateAt(2));
+    await _tapKey(tester, 'bench-operation-open_cpu_lever');
+    final part = find.byKey(const ValueKey('bench-part-cpu'));
+    await tester.ensureVisible(part);
+    await tester.pumpAndSettle();
+    final gesture = await tester.startGesture(tester.getCenter(part));
+    await gesture.moveBy(const Offset(0, -120));
+    await tester.pump();
+    expect(
+        _markerSide(
+            tester, find.byKey(const ValueKey('bench-drag-ghost-cpu')), 'cpu'),
+        (-1, -1),
+        reason: 'the ghost shows the part as held: 90°, triangle top-left');
+    await gesture.cancel();
+    await tester.pumpAndSettle();
+    await _tapKey(tester, 'bench-part-cpu');
+    for (var i = 0; i < 3; i++) {
+      await _tapKey(tester, 'bench-rotate');
+    }
+    await _tapKey(tester, 'bench-slot-chip-cpu_socket');
+    expect(harness.controller.state.placements['cpu'], 'cpu_socket');
+    final seated = find.byKey(const ValueKey('bench-placed-cpu'));
+    expect(_markerSide(tester, seated, 'cpu'), (-1, 1));
+    // The seated triangle covers the one printed on the socket.
+    final marker = tester.getRect(find.descendant(
+        of: seated, matching: find.byKey(const ValueKey('bench-marker-cpu'))));
+    final socket =
+        tester.getRect(find.byKey(const ValueKey('bench-slot-cpu_socket')));
+    final mark = AssemblyBenchLayout.markers['cpu']!.box;
+    final printed = Rect.fromLTWH(
+        socket.left + mark.left * socket.width,
+        socket.top + mark.top * socket.height,
+        mark.width * socket.width,
+        mark.height * socket.height);
+    expect((marker.center - printed.center).distance, lessThan(1));
+  });
+
+  testWidgets('the memory notch marker moves with every rotation',
+      (tester) async {
+    await _pump(tester, _stateAt(2));
+    await _tapKey(tester, 'bench-part-ram_1');
+    final preview = find.byKey(const ValueKey('bench-part-preview'));
+    final tile = find.byKey(const ValueKey('bench-part-ram_1'));
+    final seen = <(int, int)>{};
+    for (final (index, (degrees, edge, side)) in const [
+      (180, 'right edge', (1, 0)),
+      (270, 'bottom edge', (0, 1)),
+      (0, 'left edge', (-1, 0)),
+      (90, 'top edge', (0, -1)),
+    ].indexed) {
+      if (index > 0) await _tapKey(tester, 'bench-rotate');
+      expect(
+          _description(tester),
+          MissionContentData.benchMarkerDescription(
+              MissionContentData.benchMarkerNotch, edge, degrees));
+      expect(_markerSide(tester, preview, 'ram_1'), side,
+          reason: 'preview at $degrees°');
+      expect(_markerSide(tester, tile, 'ram_1'), side,
+          reason: 'tray tile at $degrees°');
+      seen.add(side);
+    }
+    expect(seen, hasLength(4));
+  });
+
+  testWidgets('the power-supply fan marker moves with every rotation',
+      (tester) async {
+    final harness = await _pump(tester, _stateAt(3));
+    await _tapKey(tester, 'bench-part-psu');
+    final preview = find.byKey(const ValueKey('bench-part-preview'));
+    final tile = find.byKey(const ValueKey('bench-part-psu'));
+    final seen = <(int, int)>{};
+    for (final (index, (degrees, facing, side)) in const [
+      (180, 'facing up', (0, -1)),
+      (270, 'facing right', (1, 0)),
+      (0, 'facing down', (0, 1)),
+      (90, 'facing left', (-1, 0)),
+    ].indexed) {
+      if (index > 0) await _tapKey(tester, 'bench-rotate');
+      expect(
+          _description(tester),
+          MissionContentData.benchMarkerDescription(
+              MissionContentData.benchMarkerFan, facing, degrees));
+      expect(_markerSide(tester, preview, 'psu'), side,
+          reason: 'preview at $degrees°');
+      expect(_markerSide(tester, tile, 'psu'), side,
+          reason: 'tray tile at $degrees°');
+      seen.add(side);
+    }
+    expect(seen, hasLength(4));
+    for (var i = 0; i < 3; i++) {
+      await _tapKey(tester, 'bench-rotate');
+    }
+    await _tapKey(tester, 'bench-slot-chip-psu_bay');
+    expect(harness.controller.state.placements['psu'], 'psu_bay');
+    expect(
+        _markerSide(
+            tester, find.byKey(const ValueKey('bench-placed-psu')), 'psu'),
+        (0, 1),
+        reason: 'seated, the fan faces the intake vent in the bay floor');
+  });
+
+  testWidgets('assessment shows where the marker is, never whether it fits',
+      (tester) async {
+    await _pump(tester, _stateAt(2, mode: MissionRuntimeMode.assessment));
+    await _tapKey(tester, 'bench-part-cpu');
+    expect(
+        _description(tester),
+        MissionContentData.benchMarkerDescription(
+            MissionContentData.benchMarkerTriangle, 'top-left', 90));
+    expect(
+        _markerSide(
+            tester, find.byKey(const ValueKey('bench-part-preview')), 'cpu'),
+        (-1, -1));
+    expect(find.text(MissionContentData.benchOrientationFeedback['cpu']!),
+        findsNothing);
+  });
+
+  // Polish round P2: an operation confirms what physically changed.
+  testWidgets('bench operations confirm the change without asking for a test',
+      (tester) async {
+    // The confirmation appears in the task panel below the bench.
+    void shows(String text) {
+      expect(find.text(text, skipOffstage: false), findsOneWidget);
+      expect(
+          find.text(MissionContentData.equipmentUpdatedFeedback,
+              skipOffstage: false),
+          findsNothing);
+    }
+
+    await _pump(tester, _stateAt(1));
+    for (final operation in ['wear_wrist_strap', 'ground_wrist_strap']) {
+      await _tapKey(tester, 'bench-operation-$operation');
+      shows(MissionContentData.benchOperationFeedback[operation]!);
+    }
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _pump(tester, _stateAt(2));
+    await _tapKey(tester, 'bench-operation-open_cpu_lever');
+    shows('Load lever opened.');
+    await _tapKey(tester, 'bench-operation-close_cpu_lever');
+    shows(MissionContentData.benchOperationFeedback['close_cpu_lever']!);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _pump(tester, _stateAt(2, mode: MissionRuntimeMode.assessment));
+    await _tapKey(tester, 'bench-operation-open_cpu_lever');
+    shows(MissionContentData.assessmentNeutralRecorded);
+    expect(find.text('Load lever opened.', skipOffstage: false), findsNothing,
+        reason: 'assessment feedback stays neutral');
+  });
+
+  // Polish round P3: the guide outline is drawn in canvas units, so it sits
+  // on its target at any zoom, pan and viewport size.
+  for (final size in const [
+    Size(412, 915),
+    Size(320, 568),
+    Size(915, 412),
+    Size(1280, 800),
+  ]) {
+    testWidgets('the guide outline sits on its target at $size',
+        (tester) async {
+      final p2 = _phase(2);
+      final script = practiceScripts[p2.id]!;
+      for (final (steps, slot) in const [
+        (1, 'cpu_socket'), // Seat the CPU (lever open).
+        (4, 'cooler_mount'), // Mount the cooler over the CPU.
+      ]) {
+        for (final (scale, offset) in const [
+          (1.0, Offset.zero),
+          (2.0, Offset(-300, -150)),
+        ]) {
+          final driver = EquipmentPracticeDriver(_definition)
+            ..complete(_phase(1));
+          for (final step in script.take(steps)) {
+            driver.act(p2, step.$1, step.$2, step.$3);
+          }
+          await _pump(
+              tester,
+              driver.state.copyWith(
+                  currentPhaseId: p2.id,
+                  cameraScale: scale,
+                  cameraOffsetX: offset.dx,
+                  cameraOffsetY: offset.dy),
+              size: size);
+          await _tapKey(tester, 'mission-show-me-how');
+          final target =
+              tester.getRect(find.byKey(ValueKey('bench-slot-$slot')));
+          final outlines = _outlinesOnScreen(tester);
+          final reason = '$slot at ×$scale';
+          expect(outlines, hasLength(1), reason: reason);
+          expect((outlines.single.center - target.center).distance,
+              lessThan(1), reason: reason);
+          expect(outlines.single.contains(target.topLeft), isTrue,
+              reason: reason);
+          expect(outlines.single.contains(target.bottomRight - const Offset(.5, .5)),
+              isTrue, reason: reason);
+          await tester.pumpWidget(const SizedBox.shrink());
+        }
+      }
+    });
+  }
+
+  // Polish round P4: the mat hotspots name their object in both modes.
+  testWidgets('the wrist strap and the mat ground point are labelled',
+      (tester) async {
+    for (final mode in MissionRuntimeMode.values) {
+      await _pump(tester, _stateAt(1, mode: mode));
+      for (final (id, label) in const [
+        ('wear_wrist_strap', 'Wrist strap'),
+        ('ground_wrist_strap', 'Mat ground point'),
+      ]) {
+        final plate = find.byKey(ValueKey('bench-hotspot-label-$id'));
+        expect(find.descendant(of: plate, matching: find.text(label)),
+            findsOneWidget, reason: '$id in ${mode.name}');
+        // Beside its hotspot, inside the canvas, never over it.
+        final rect = AssemblyBenchLayout.hotspotLabel(id)!;
+        final spot = AssemblyBenchLayout.operation(id, BenchView.mat)!;
+        expect((Offset.zero & AssemblyBenchLayout.canvas).contains(rect.topLeft) &&
+                (Offset.zero & AssemblyBenchLayout.canvas)
+                    .contains(rect.bottomRight),
+            isTrue);
+        expect(rect.overlaps(spot), isFalse);
+        expect(rect.center.dx - spot.center.dx, lessThan(260));
+        expect((rect.center.dy - spot.center.dy).abs(), lessThan(160));
+      }
+      final strap = find.byWidgetPredicate((widget) =>
+          widget is Image &&
+          widget.image is AssetImage &&
+          (widget.image as AssetImage).assetName ==
+              AssemblyBenchLayout.strapAsset);
+      expect(strap, findsOneWidget, reason: 'the strap is pictured');
+      expect(find.text('Wear the anti-static wrist strap'), findsWidgets,
+          reason: 'the tray keeps the operation');
+      await tester.pumpWidget(const SizedBox.shrink());
+    }
   });
 }
