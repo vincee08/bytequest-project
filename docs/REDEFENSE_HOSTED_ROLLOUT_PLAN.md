@@ -5,11 +5,26 @@
 **Source:** `vince-branch` after the final fix wave (WEB, SQL and FLUTTER fixers merged, local gates green).
 **Shell:** commands are for PowerShell on the release machine, run from the repository root.
 
+## Corrections from the 2026-11-19 release-readiness review (read first)
+
+`docs/REDEFENSE_RELEASE_READINESS_2026-11-19.md` reviewed this plan. Its corrections take precedence over the steps below:
+
+1. **After Batch B commits, fix forward.** The old dashboard cannot create quizzes, cannot finalize and mis-renders homework against the new schema. "Vercel instant rollback" in step 6 is therefore not a working fallback. The only true rollback is a database restore, which discards every write after the apply.
+2. **Build the Vercel preview of the exact commit before the window, and smoke it.** Then promote it right after step 5.
+3. **Close the window to all traffic**, not only to submissions. Batch B holds exclusive locks on hot tables until it commits.
+4. **Run the pre-flight checks P1–P10 on the restored copy** before step 4. They are in `.superpowers/sdd/2026-11-19-redefense-revision/prerelease-migration-compat.md` §3.3. Also export the legacy `achievements` rows that P5 lists.
+5. **APK.**
+   - Build the production APK **before** the window.
+   - Distribute it right **after** steps 5–6. A 1.2.0 app installed earlier would call functions that do not exist yet.
+   - 1.1.0 learners stop using the app from the start of the window until they install 1.2.0.
+   - **Signing:** an APK built on the current release machine has debug certificate `271cbbf0…`. The installed 1.1.0 was signed with `a4d01056…`. Use the original keystore, or plan an uninstall followed by an install.
+6. **Backup.** No backup or recovery key exists on the current release machine. Step 2 must create a fresh one there, then step 3 must rehearse it.
+
 ## Why a targeted rollout
 
 The hosted migration history differs from the repository history: hosted records an honest batch entry `20261111160000` and the seven 2026-11-13 versions instead of every repository file. `supabase db push`, `--include-all` and `migration repair` are therefore never used, because they would try to replay historical migrations.
 
-Only the re-defense migrations are applied: **every migration version ≥ `20261119100000`** in `supabase/migrations`. At the time of writing that is 39 files from `20261119100000` to `20261119180000`, including `20261119170500_analytics_redefense_final_sources` and `20261119180000_instructor_assignable_rubric_visibility`, plus the final-fix migrations `202611201xxxxx` (`20261120100000`–`20261120100300` on the SQL fix branch). The exact list is whatever `scripts/release-migration-batches.mjs` writes into the release manifest at step 1; nobody types it by hand.
+Only the re-defense migrations are applied: **every migration version ≥ `20261119100000`** in `supabase/migrations`. After the final fix wave that is 43 files, from `20261119100000` to `20261120100300`. The exact list is whatever `scripts/release-migration-batches.mjs` writes into the release manifest at step 1; nobody types it by hand.
 
 ### Two transactions, not one
 
