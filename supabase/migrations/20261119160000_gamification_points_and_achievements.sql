@@ -24,6 +24,13 @@
 --   service-role server code or by an existing SECURITY DEFINER RPC, so the
 --   triggers run with those trusted privileges. Clients have no write path to
 --   any gamification table. No new SECURITY DEFINER function.
+-- * Every gamification trigger fails open: a fault raises a WARNING and the
+--   learning record that fired it still commits. A failed award leaves no
+--   partial rows and is repaired, exactly once, by gamification_backfill().
+-- * Safe on existing production data: duplicate legacy award rows are kept in
+--   place (the earliest row per key is the award) instead of failing the
+--   unique index, and award history still allows the declared ON DELETE
+--   CASCADE of the guarded admin account removal.
 
 begin;
 set local lock_timeout = '5s';
@@ -232,19 +239,74 @@ end
 $$;
 
 -- Earned achievements: one award per learner and achievement, append-only.
-create unique index user_achievements_user_achievement_key
-  on public.user_achievements (user_id, achievement_id);
+-- Legacy award rows are never deleted or rewritten. The unique index is only
+-- created when the legacy table holds no duplicate (user_id, achievement_id)
+-- keys; otherwise every reader treats the earliest row per key as the award
+-- and private.gamification_award_achievements keeps awarding exactly once on
+-- its own (per-learner lock and existence check).
+create function private.gamification_ensure_award_index()
+returns text
+language plpgsql
+volatile
+security invoker
+set search_path = ''
+as $$
+declare
+  v_duplicate_keys bigint;
+begin
+  if to_regclass('public.user_achievements_user_achievement_key') is not null then
+    return 'exists';
+  end if;
+  select count(*) into v_duplicate_keys
+  from (
+    select 1
+    from public.user_achievements
+    group by user_id, achievement_id
+    having count(*) > 1
+  ) duplicates;
+  if v_duplicate_keys > 0 then
+    raise notice 'user_achievements holds % duplicate (user_id, achievement_id) keys. History is kept in place, the earliest row per key is the award, and the unique index is not created.', v_duplicate_keys;
+    return 'skipped_duplicates';
+  end if;
+  create unique index user_achievements_user_achievement_key
+    on public.user_achievements (user_id, achievement_id);
+  return 'created';
+end
+$$;
+
+select private.gamification_ensure_award_index();
+
+-- Append-only, except the declared ON DELETE CASCADE from auth.users when the
+-- guarded admin account removal deletes an identity. That delete is a nested
+-- foreign-key action (trigger depth > 1), the same rule the audit history
+-- uses (private.protect_audit_event_history). Every direct UPDATE or DELETE,
+-- including by service-role code, is rejected.
+create function private.gamification_achievement_history_guard()
+returns trigger
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+begin
+  if tg_op = 'DELETE' and pg_catalog.pg_trigger_depth() > 1 then
+    return old;
+  end if;
+  raise exception 'user_achievements is append-only' using errcode = '55000';
+end
+$$;
 
 create trigger trg_user_achievements_append_only
   before update or delete on public.user_achievements
-  for each row execute function private.prevent_append_only_mutation();
+  for each row execute function private.gamification_achievement_history_guard();
 
+-- One row per learner and achievement; the earliest award wins.
 create view public.learner_achievements
 with (security_invoker = true)
 as
-select ua.user_id as learner_id, a.achievement_code as code, ua.earned_at
+select ua.user_id as learner_id, a.achievement_code as code, min(ua.earned_at) as earned_at
 from public.user_achievements ua
-join public.achievements a on a.id = ua.achievement_id;
+join public.achievements a on a.id = ua.achievement_id
+group by ua.user_id, a.achievement_code;
 
 -- ---------------------------------------------------------------------------
 -- Award path
@@ -348,7 +410,10 @@ $$;
 
 -- Awards every achievement whose rule becomes true for this event type. The
 -- earned time is the time of the event that satisfied the rule, so awards are
--- correct regardless of insertion order (live or backfill).
+-- correct regardless of insertion order (live, repair or backfill).
+-- Evaluation is serialised per learner and checks for an existing award, so
+-- each achievement is recorded once even where the legacy table could not
+-- receive its unique index (no ON CONFLICT dependency on that index).
 create function private.gamification_award_achievements(p_learner uuid, p_event_type text)
 returns integer
 language plpgsql
@@ -359,6 +424,8 @@ as $$
 declare
   v_awarded integer;
 begin
+  perform pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('bytequest.gamification.achievements:' || p_learner::text, 0));
   insert into public.user_achievements (user_id, achievement_id, earned_at)
   select p_learner, a.id, crossing.awarded_at
   from public.achievements a
@@ -375,12 +442,18 @@ begin
   ) crossing
   where a.rule is not null
     and a.rule->>'event_type' = p_event_type
-  on conflict (user_id, achievement_id) do nothing;
+    and not exists (
+      select 1 from public.user_achievements ua
+      where ua.user_id = p_learner and ua.achievement_id = a.id
+    );
   get diagnostics v_awarded = row_count;
   return v_awarded;
 end
 $$;
 
+-- Fails open: the points stay recorded even if achievements cannot be
+-- evaluated now; they are re-evaluated on the learner's next event of this
+-- type and by private.gamification_backfill().
 create function private.gamification_point_event_awarded()
 returns trigger
 language plpgsql
@@ -388,7 +461,12 @@ security invoker
 set search_path = ''
 as $$
 begin
-  perform private.gamification_award_achievements(new.learner_id, new.event_type);
+  begin
+    perform private.gamification_award_achievements(new.learner_id, new.event_type);
+  exception when others then
+    raise warning 'gamification achievements deferred (event %, learner %, source %): % [%]',
+      new.event_type, new.learner_id, new.source_id, sqlerrm, sqlstate;
+  end;
   return null;
 end
 $$;
@@ -399,44 +477,83 @@ create trigger trg_learner_point_events_award_achievements
 
 -- One dispatcher for every source table. Each branch keys on the recorded
 -- fact, so later additive columns or status values do not change awards.
+-- Fails open: points are motivational, so a fault anywhere in the award path
+-- (rules, point event, achievements, leaderboard) must never block the
+-- learning record that fired it. The inner block is a subtransaction, so a
+-- failed award leaves no partial rows; private.gamification_backfill() awards
+-- the record later, still exactly once.
 create function private.gamification_award_from_source()
 returns trigger
 language plpgsql
 security invoker
 set search_path = ''
 as $$
+declare
+  v_learner uuid;
+  v_event_type text;
+  v_source text;
+  v_at timestamptz;
 begin
-  if tg_table_name = 'practice_mission_completions' then
-    -- The verifier upserts on re-verification; only the first insert awards.
-    perform private.gamification_award(new.learner_id, 'practice_mission_verified', new.mission_id, new.verified_at);
-  elsif tg_table_name = 'learner_topic_progress' then
-    perform private.gamification_award(new.learner_id, 'topic_completed', new.topic_id::text, new.completed_at);
-  elsif tg_table_name = 'learner_module_completions' then
-    perform private.gamification_award(new.learner_id, 'module_completed', new.module_id::text, new.completed_at);
-  elsif tg_table_name = 'practice_coc_progress' then
-    perform private.gamification_award(new.learner_id, 'coc_completed', new.coc_code, new.completed_at);
-  elsif tg_table_name = 'quiz_attempts' then
-    -- First transition into submitted or completed.
-    if tg_op = 'UPDATE' then
-      if old.status::text in ('submitted', 'completed') then
+  begin
+    if tg_table_name = 'practice_mission_completions' then
+      -- The verifier upserts on re-verification; only the first insert awards.
+      v_learner := new.learner_id;
+      v_event_type := 'practice_mission_verified';
+      v_source := new.mission_id;
+      v_at := new.verified_at;
+    elsif tg_table_name = 'learner_topic_progress' then
+      v_learner := new.learner_id;
+      v_event_type := 'topic_completed';
+      v_source := new.topic_id::text;
+      v_at := new.completed_at;
+    elsif tg_table_name = 'learner_module_completions' then
+      v_learner := new.learner_id;
+      v_event_type := 'module_completed';
+      v_source := new.module_id::text;
+      v_at := new.completed_at;
+    elsif tg_table_name = 'practice_coc_progress' then
+      v_learner := new.learner_id;
+      v_event_type := 'coc_completed';
+      v_source := new.coc_code;
+      v_at := new.completed_at;
+    elsif tg_table_name = 'quiz_attempts' then
+      -- First transition into submitted or completed.
+      if tg_op = 'UPDATE' then
+        if old.status::text in ('submitted', 'completed') then
+          return null;
+        end if;
+      end if;
+      if new.status::text not in ('submitted', 'completed') then
         return null;
       end if;
+      v_learner := new.learner_id;
+      v_event_type := 'quiz_submitted';
+      v_source := new.id::text;
+      v_at := coalesce(new.submitted_at, new.completed_at, now());
+    elsif tg_table_name = 'homework_submissions' then
+      if new.lateness_seconds is distinct from 0 then
+        return null;
+      end if;
+      v_learner := new.learner_id;
+      v_event_type := 'homework_submitted_on_time';
+      v_source := new.id::text;
+      v_at := new.submitted_at;
+    elsif tg_table_name = 'result_releases' then
+      if new.is_current is not true then
+        return null;
+      end if;
+      v_event_type := 'assessment_released';
+      v_source := new.attempt_id::text;
+      v_at := new.released_at;
+      select a.learner_id into v_learner from public.attempts a where a.id = new.attempt_id;
+    else
+      return null;
     end if;
-    if new.status::text in ('submitted', 'completed') then
-      perform private.gamification_award(new.learner_id, 'quiz_submitted', new.id::text,
-        coalesce(new.submitted_at, new.completed_at, now()));
-    end if;
-  elsif tg_table_name = 'homework_submissions' then
-    if new.lateness_seconds = 0 then
-      perform private.gamification_award(new.learner_id, 'homework_submitted_on_time', new.id::text, new.submitted_at);
-    end if;
-  elsif tg_table_name = 'result_releases' then
-    if new.is_current then
-      perform private.gamification_award(
-        (select a.learner_id from public.attempts a where a.id = new.attempt_id),
-        'assessment_released', new.attempt_id::text, new.released_at);
-    end if;
-  end if;
+    perform private.gamification_award(v_learner, v_event_type, v_source, v_at);
+  exception when others then
+    raise warning 'gamification award skipped (event %, learner %, source %, table %): % [%]',
+      v_event_type, v_learner, v_source, tg_table_name, sqlerrm, sqlstate;
+  end;
   return null;
 end
 $$;
@@ -466,8 +583,10 @@ create trigger trg_result_releases_award_points
   execute function private.gamification_award_from_source();
 
 -- Awards every qualifying record not yet awarded, in chronological order and
--- with the record's original time. Idempotent; used once below and available
--- to trusted maintenance code.
+-- with the record's original time, then re-evaluates achievements that were
+-- deferred. Idempotent and fail open per record (a failing record is skipped
+-- with a warning, so the migration and repairs never abort on one bad row).
+-- Used once below and available to trusted maintenance code as the repair.
 create function private.gamification_backfill()
 returns jsonb
 language plpgsql
@@ -478,6 +597,8 @@ as $$
 declare
   r record;
   v_awarded integer := 0;
+  v_skipped integer := 0;
+  v_achievements integer := 0;
 begin
   for r in
     select s.learner_id, s.event_type, s.source_id, s.occurred_at
@@ -511,11 +632,30 @@ begin
     ) s
     order by s.occurred_at, s.event_type, s.source_id
   loop
-    if private.gamification_award(r.learner_id, r.event_type, r.source_id, r.occurred_at) then
-      v_awarded := v_awarded + 1;
-    end if;
+    begin
+      if private.gamification_award(r.learner_id, r.event_type, r.source_id, r.occurred_at) then
+        v_awarded := v_awarded + 1;
+      end if;
+    exception when others then
+      v_skipped := v_skipped + 1;
+      raise warning 'gamification backfill skipped (event %, learner %, source %): % [%]',
+        r.event_type, r.learner_id, r.source_id, sqlerrm, sqlstate;
+    end;
   end loop;
-  return jsonb_build_object('awarded', v_awarded);
+  for r in
+    select distinct e.learner_id, e.event_type
+    from public.learner_point_events e
+    order by e.learner_id, e.event_type
+  loop
+    begin
+      v_achievements := v_achievements + private.gamification_award_achievements(r.learner_id, r.event_type);
+    exception when others then
+      v_skipped := v_skipped + 1;
+      raise warning 'gamification backfill could not evaluate achievements (event %, learner %): % [%]',
+        r.event_type, r.learner_id, sqlerrm, sqlstate;
+    end;
+  end loop;
+  return jsonb_build_object('awarded', v_awarded, 'achievements', v_achievements, 'skipped', v_skipped);
 end
 $$;
 
@@ -555,11 +695,14 @@ revoke all on function private.gamification_award_achievements(uuid, text) from 
 revoke all on function private.gamification_point_event_awarded() from public, anon, authenticated;
 revoke all on function private.gamification_award_from_source() from public, anon, authenticated;
 revoke all on function private.gamification_backfill() from public, anon, authenticated;
+revoke all on function private.gamification_ensure_award_index() from public, anon, authenticated;
+revoke all on function private.gamification_achievement_history_guard() from public, anon, authenticated;
 grant execute on function
   private.gamification_source_detail(text, text),
   private.gamification_award(uuid, text, text, timestamptz),
   private.gamification_award_achievements(uuid, text),
-  private.gamification_backfill()
+  private.gamification_backfill(),
+  private.gamification_ensure_award_index()
   to service_role;
 
 revoke all on function public.gamification_level_for_points(integer) from public, anon;

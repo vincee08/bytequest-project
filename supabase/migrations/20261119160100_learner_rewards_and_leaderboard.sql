@@ -12,7 +12,8 @@
 -- from profiles and learner_point_events, so no write can store a value that
 -- differs from the source records.
 --
--- Additive only; no new SECURITY DEFINER function.
+-- The refresh triggers fail open (WARNING, never blocking an award, sign-up
+-- or profile change). Additive only; no new SECURITY DEFINER function.
 
 begin;
 set local lock_timeout = '5s';
@@ -103,6 +104,8 @@ create trigger trg_gamification_leaderboard_entries_derive
   for each row execute function private.gamification_leaderboard_derive();
 
 -- New awards refresh the learner's total (runs in the trusted award path).
+-- Fails open: a stale entry heals on the learner's next award or profile
+-- change, so the leaderboard can never block an award.
 create function private.gamification_leaderboard_refresh_points()
 returns trigger
 language plpgsql
@@ -110,10 +113,15 @@ security invoker
 set search_path = ''
 as $$
 begin
-  insert into public.gamification_leaderboard_entries (learner_id)
-  select new.learner_id
-  where exists (select 1 from public.profiles p where p.user_id = new.learner_id)
-  on conflict (learner_id) do update set updated_at = excluded.updated_at;
+  begin
+    insert into public.gamification_leaderboard_entries (learner_id)
+    select new.learner_id
+    where exists (select 1 from public.profiles p where p.user_id = new.learner_id)
+    on conflict (learner_id) do update set updated_at = excluded.updated_at;
+  exception when others then
+    raise warning 'gamification leaderboard entry not refreshed (event %, learner %, source %): % [%]',
+      new.event_type, new.learner_id, new.source_id, sqlerrm, sqlstate;
+  end;
   return null;
 end
 $$;
@@ -125,6 +133,8 @@ create trigger trg_learner_point_events_refresh_leaderboard
 -- Profiles create the entry and keep name, opt-in and account state current.
 -- A learner's own opt-in toggle runs this as that learner, which is why the
 -- entry grants exactly one updatable column and re-derives everything.
+-- Fails open: sign-up, profile edits and account status changes are never
+-- blocked by the leaderboard; a stale entry heals on the next refresh.
 create function private.gamification_leaderboard_refresh_profile()
 returns trigger
 language plpgsql
@@ -132,18 +142,23 @@ security invoker
 set search_path = ''
 as $$
 begin
-  if tg_op = 'INSERT' then
-    insert into public.gamification_leaderboard_entries (learner_id)
-    values (new.user_id)
-    on conflict (learner_id) do nothing;
-  elsif new.full_name is distinct from old.full_name
-     or new.show_on_leaderboard is distinct from old.show_on_leaderboard
-     or new.role is distinct from old.role
-     or new.status is distinct from old.status then
-    update public.gamification_leaderboard_entries
-    set show_on_leaderboard = new.show_on_leaderboard
-    where learner_id = new.user_id;
-  end if;
+  begin
+    if tg_op = 'INSERT' then
+      insert into public.gamification_leaderboard_entries (learner_id)
+      values (new.user_id)
+      on conflict (learner_id) do nothing;
+    elsif new.full_name is distinct from old.full_name
+       or new.show_on_leaderboard is distinct from old.show_on_leaderboard
+       or new.role is distinct from old.role
+       or new.status is distinct from old.status then
+      update public.gamification_leaderboard_entries
+      set show_on_leaderboard = new.show_on_leaderboard
+      where learner_id = new.user_id;
+    end if;
+  exception when others then
+    raise warning 'gamification leaderboard entry not refreshed (profile %, operation %): % [%]',
+      new.user_id, tg_op, sqlerrm, sqlstate;
+  end;
   return null;
 end
 $$;
@@ -229,12 +244,17 @@ begin
           'description', a.description,
           'icon', a.icon,
           'earned_at', ua.earned_at,
-          'progress_current', case when ua.id is not null then progress.target
+          'progress_current', case when ua.earned_at is not null then progress.target
                                    else least(progress.current, progress.target) end,
           'progress_target', progress.target)
         order by a.sort_order, a.achievement_code)
       from public.achievements a
-      left join public.user_achievements ua on ua.achievement_id = a.id and ua.user_id = v_me
+      -- The earliest award per achievement, also where legacy rows repeat.
+      cross join lateral (
+        select min(u.earned_at) as earned_at
+        from public.user_achievements u
+        where u.achievement_id = a.id and u.user_id = v_me
+      ) ua
       cross join lateral (
         select
           case when a.rule->>'type' = 'count' then (a.rule->>'min')::integer else 1 end as target,
