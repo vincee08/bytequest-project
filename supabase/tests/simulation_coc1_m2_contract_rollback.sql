@@ -1,9 +1,10 @@
 -- Rollback-only regression for the COC1 M2 assembly-bench practice contract
 -- css-assembly-20261119-v3 (slice A1.4): server-side realism rules, the POST
--- symptoms of physically possible mistakes, corrections, and the quiz gate
+-- symptoms of physically possible mistakes, corrections, POST faults charged
+-- to their steps, the v2-to-v3 version boundary, and the quiz gate
 -- that keeps earlier verified versions.
 begin;
-select plan(22);
+select plan(28);
 
 create temp table m2_ctx (learner uuid not null default gen_random_uuid()) on commit drop;
 insert into m2_ctx default values;
@@ -176,6 +177,68 @@ select is((select jsonb_build_object('outcome', outcome, 'invalid', invalid_coun
   '{"outcome": "verified", "invalid": 0, "corrections": 2}'::jsonb,
   'the verified run counts the two memory reseats as corrections');
 
+-- Fix round 1 (I2): the faults the first POST exposed still count after they
+-- are fixed: one per failing check, charged to the step target it names.
+select is(pg_temp.m2_replay((select actions from m2_run where name = 'corrected'))->'failed_checks',
+  '{"item:ram_1": 1, "connection:eps_8pin": 1}'::jsonb,
+  'the failed POST charges the memory pair and the missing EPS cable to their steps');
+select is((select step_results->'coc1_m2_p5'->'failed_checks'
+    from public.practice_mission_runs where learner_id = (select learner from m2_ctx) and mission_id = 'coc1_m2'
+    order by run_number desc limit 1),
+  '2'::jsonb, 'the practice run reports the POST faults as learning feedback');
+select is((select jsonb_agg(c->>'counts' order by n) from m2_contract,
+    jsonb_array_elements(definition #> '{phases,4,presentation,equipment,checks}') with ordinality t(c, n)),
+  '["operation:fasten_psu","operation:fasten_motherboard","operation:fasten_drive","connection:front_panel","connection:eps_8pin","operation:close_cpu_lever","connection:cooler_fan","operation:apply_thermal_compound","operation:close_dimm_latches","item:ram_1","connection:sata_power","connection:sata_data"]'::jsonb,
+  'every POST check charges one step target');
+
+-- Fix round 1 (I3): practice saved for the v2 layout does not leak into v3.
+-- The app writes a practice_progress_discarded marker when it starts the new
+-- version; the earlier actions stay on the server but are not replayed.
+create temp table m2_legacy_ctx (with_marker uuid not null default gen_random_uuid(),
+  without_marker uuid not null default gen_random_uuid()) on commit drop;
+insert into m2_legacy_ctx default values;
+insert into auth.users(instance_id,id,aud,role,email,encrypted_password,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
+select '00000000-0000-0000-0000-000000000000'::uuid, id, 'authenticated', 'authenticated',
+  'assembly-legacy-' || id || '@bytequest.invalid', '', '{"provider":"email","providers":["email"]}'::jsonb,
+  '{"full_name":"Assembly bench legacy rollback learner"}'::jsonb, now(), now()
+from m2_legacy_ctx cross join lateral (values (with_marker), (without_marker)) u(id);
+do $$
+declare learner uuid;
+begin
+  for learner in select with_marker from m2_legacy_ctx union all select without_marker from m2_legacy_ctx loop
+    -- Three actions recorded by the v2 layout (card workspace, sequence panel).
+    insert into public.practice_mission_actions(learner_id, client_action_id, mission_id, phase_id, action_type, target, value, client_occurred_at)
+    values
+      (learner, 'v2-1', 'coc1_m2', 'coc1_m2_p2', 'component_drop_attempted', 'motherboard_area',
+        '{"runtime_action_type":"placement_attempted","item_id":"motherboard","destination_id":"motherboard_area","compatible":true}', now() - interval '3 days'),
+      (learner, 'v2-2', 'coc1_m2', 'coc1_m2_p2', 'component_drop_attempted', 'cpu_socket',
+        '{"runtime_action_type":"placement_attempted","item_id":"cpu","destination_id":"cpu_socket","orientation":"aligned","compatible":true}', now() - interval '3 days'),
+      (learner, 'v2-3', 'coc1_m2', 'coc1_m2_p3', 'connection_created', 'board_power',
+        '{"runtime_action_type":"connection_created","source_id":"atx","destination_id":"board_power"}', now() - interval '3 days');
+    if learner = (select with_marker from m2_legacy_ctx) then
+      insert into public.practice_mission_actions(learner_id, client_action_id, mission_id, phase_id, action_type, target, value, client_occurred_at)
+      values (learner, 'v3-start', 'coc1_m2', 'coc1_m2_p1', 'practice_progress_discarded', null,
+        '{"reason":"definition_updated","definition_version":"css-assembly-20261119-v3"}', now() - interval '30 minutes');
+    end if;
+    insert into public.practice_mission_actions(learner_id, client_action_id, mission_id, phase_id, action_type, target, value, client_occurred_at)
+    select learner, 'v3-' || n, 'coc1_m2', x->>'phase_id', x->>'action_type', x->>'target',
+      x->'value' || '{"definition_version":"css-assembly-20261119-v3"}', now() - interval '20 minutes' + n * interval '10 seconds'
+    from jsonb_array_elements((select actions from m2_run where name = 'corrected')) with ordinality t(x, n);
+    perform public.practice_verify_mission(learner, 'coc1_m2');
+  end loop;
+end $$;
+select is((select jsonb_build_object('outcome', outcome, 'invalid', invalid_count, 'actions', action_count)
+    from public.practice_mission_runs where learner_id = (select with_marker from m2_legacy_ctx) and mission_id = 'coc1_m2'),
+  jsonb_build_object('outcome', 'verified', 'invalid', 0,
+    'actions', jsonb_array_length((select actions from m2_run where name = 'corrected'))),
+  'after the version marker the v3 run replays only v3 actions');
+select ok((select invalid_count >= 3 from public.practice_mission_runs
+    where learner_id = (select without_marker from m2_legacy_ctx) and mission_id = 'coc1_m2'),
+  'without the marker the v2 actions would be counted against the new layout');
+select is((select count(*)::integer from public.practice_mission_actions
+    where learner_id = (select with_marker from m2_legacy_ctx) and client_action_id like 'v2-%'),
+  3, 'the v2 evidence is kept for audit');
+
 -- Earlier verified COC1 M2 versions keep counting toward the COC1 quiz gate.
 do $$
 declare learner uuid := (select learner from m2_ctx); evidence bigint;
@@ -193,15 +256,15 @@ select lives_ok(format('select public.practice_begin_quiz(%L::uuid, %L, gen_rand
   'a verified css-sag-20261011-v2 COC1 M2 completion still opens the COC1 quiz');
 update public.practice_mission_completions set contract_version = 'css-sag-20261009-v1'
   where learner_id = (select learner from m2_ctx) and mission_id = 'coc1_m2';
-select ok((select count(*) = 5 from public.practice_mission_completions c join public.practice_mission_contracts d using (mission_id)
+select ok((select count(*) = 5 from public.practice_mission_completions c
     where c.learner_id = (select learner from m2_ctx) and left(c.mission_id, 4) = 'coc1'
-      and public.practice_completion_version_accepted(c.mission_id, c.contract_version, d.version)),
+      and public.practice_completion_accepted(c.mission_id, c.contract_version)),
   'a verified css-sag-20261009-v1 COC1 M2 completion still counts');
 update public.practice_mission_completions set contract_version = 'unsupported-version'
   where learner_id = (select learner from m2_ctx) and mission_id = 'coc1_m2';
-select ok((select count(*) = 4 from public.practice_mission_completions c join public.practice_mission_contracts d using (mission_id)
+select ok((select count(*) = 4 from public.practice_mission_completions c
     where c.learner_id = (select learner from m2_ctx) and left(c.mission_id, 4) = 'coc1'
-      and public.practice_completion_version_accepted(c.mission_id, c.contract_version, d.version)),
+      and public.practice_completion_accepted(c.mission_id, c.contract_version)),
   'an unknown COC1 M2 version does not count');
 
 select * from finish();

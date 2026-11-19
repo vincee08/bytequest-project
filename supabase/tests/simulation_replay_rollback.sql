@@ -15,7 +15,7 @@
 --   cd ByteQuest-Mobile-App
 --   dart run tool/export_practice_contracts.dart --replay-fixtures <file>
 begin;
-select plan(104);
+select plan(109);
 
 -- ---------------------------------------------------------------------------
 -- Reference: the verifier loop exactly as published in 20261009090000
@@ -251,7 +251,7 @@ insert into replay_fixture(mission_id, ordinal, phase_id, action_type, target, v
 ('coc1_m3', 1, 'coc1_m3_p1', 'placement_attempted', 'system_unit_position', '{"item_id":"system_unit","destination_id":"system_unit_position","runtime_action_type":"placement_attempted"}'::jsonb),
 ('coc1_m3', 2, 'coc1_m3_p1', 'placement_attempted', 'boot_usb_position', '{"item_id":"boot_usb","destination_id":"boot_usb_position","runtime_action_type":"placement_attempted"}'::jsonb),
 ('coc1_m3', 3, 'coc1_m3_p1', 'configuration_applied', 'coc1_m3_p1', '{"values":{"boot_mode":"uefi","storage_mode":"ahci","install_target":"system_disk"},"runtime_action_type":"configuration_applied"}'::jsonb),
-('coc1_m3', 4, 'coc1_m3_p2', 'sequence_reordered', 'coc1_m3_p2', '{"order":["boot_media","select_disk","copy_files","configure_device"],"runtime_action_type":"sequence_reordered"}'::jsonb),
+('coc1_m3', 4, 'coc1_m3_p2', 'sequence_reordered', 'coc1_m3_p2', '{"order":["boot_media","select_disk","copy_files","configure_device"],"confirmed":true,"runtime_action_type":"sequence_reordered"}'::jsonb),
 ('coc1_m3', 5, 'coc1_m3_p2', 'equipment_operation', 'install_os', '{"runtime_action_type":"equipment_operation"}'::jsonb),
 ('coc1_m3', 6, 'coc1_m3_p2', 'equipment_operation', 'prepare_boot_media', '{"runtime_action_type":"equipment_operation"}'::jsonb),
 ('coc1_m3', 7, 'coc1_m3_p2', 'equipment_operation', 'install_os', '{"runtime_action_type":"equipment_operation"}'::jsonb),
@@ -310,7 +310,7 @@ insert into replay_fixture(mission_id, ordinal, phase_id, action_type, target, v
 ('coc2_m1', 6, 'coc2_m1_p2', 'tool_attempted', 'copper_cable', '{"tool_id":"crimping_tool","runtime_action_type":"tool_attempted"}'::jsonb),
 ('coc2_m1', 7, 'coc2_m1_p2', 'tool_attempted', 'lan_cable_tester', '{"tool_id":"lan_cable_tester","runtime_action_type":"tool_attempted"}'::jsonb),
 ('coc2_m1', 8, 'coc2_m1_p3', 'configuration_applied', 'coc2_m1_p3', '{"values":{"cable_route":"protected_design_route","raceway_material":"pvc"},"runtime_action_type":"configuration_applied"}'::jsonb),
-('coc2_m1', 9, 'coc2_m1_p3', 'sequence_reordered', 'coc2_m1_p3', '{"order":["measure","strip","arrange","terminate","inspect"],"runtime_action_type":"sequence_reordered"}'::jsonb),
+('coc2_m1', 9, 'coc2_m1_p3', 'sequence_reordered', 'coc2_m1_p3', '{"order":["measure","strip","arrange","terminate","inspect"],"confirmed":true,"runtime_action_type":"sequence_reordered"}'::jsonb),
 ('coc2_m1', 10, 'coc2_m1_p4', 'connection_created', 'lan_cable_tester', '{"source_id":"copper_cable","destination_id":"lan_cable_tester","runtime_action_type":"connection_created"}'::jsonb),
 ('coc2_m1', 11, 'coc2_m1_p5', 'equipment_operation', 'close_work_area', '{"runtime_action_type":"equipment_operation"}'::jsonb),
 ('coc2_m1', 12, 'coc2_m1_p5', 'equipment_operation', 'prepare_service_report', '{"runtime_action_type":"equipment_operation"}'::jsonb),
@@ -321,7 +321,7 @@ insert into replay_fixture(mission_id, ordinal, phase_id, action_type, target, v
 ('coc2_m2', 2, 'coc2_m2_p1', 'placement_attempted', 'switch_position', '{"item_id":"switch","destination_id":"switch_position","runtime_action_type":"placement_attempted"}'::jsonb),
 ('coc2_m2', 3, 'coc2_m2_p1', 'placement_attempted', 'router_position', '{"item_id":"router","destination_id":"router_position","runtime_action_type":"placement_attempted"}'::jsonb),
 ('coc2_m2', 4, 'coc2_m2_p1', 'configuration_applied', 'coc2_m2_p1', '{"values":{"ppe_prepared":true,"termination_tool":"crimping_tool"},"runtime_action_type":"configuration_applied"}'::jsonb),
-('coc2_m2', 5, 'coc2_m2_p2', 'sequence_reordered', 'coc2_m2_p2', '{"order":["white_orange","orange","white_green","blue","white_blue","green","white_brown","brown"],"runtime_action_type":"sequence_reordered"}'::jsonb),
+('coc2_m2', 5, 'coc2_m2_p2', 'sequence_reordered', 'coc2_m2_p2', '{"order":["white_orange","orange","white_green","blue","white_blue","green","white_brown","brown"],"confirmed":true,"runtime_action_type":"sequence_reordered"}'::jsonb),
 ('coc2_m2', 6, 'coc2_m2_p3', 'connection_created', 'switch', '{"source_id":"workstation","destination_id":"switch","runtime_action_type":"connection_created"}'::jsonb),
 ('coc2_m2', 7, 'coc2_m2_p3', 'connection_created', 'router', '{"source_id":"switch","destination_id":"router","runtime_action_type":"connection_created"}'::jsonb),
 ('coc2_m2', 8, 'coc2_m2_p4', 'configuration_applied', 'coc2_m2_p4', '{"values":{"workstation_interface":"ethernet_auto","physical_link_inspected":true},"runtime_action_type":"configuration_applied"}'::jsonb),
@@ -387,7 +387,7 @@ insert into replay_fixture(mission_id, ordinal, phase_id, action_type, target, v
 ('coc3_m1', 10, 'coc3_m1_p1', 'object_inspected', 'setup_document', '{"runtime_action_type":"object_inspected"}'::jsonb),
 ('coc3_m1', 11, 'coc3_m1_p2', 'scenario_decision', 'record_server_requirements', '{"runtime_action_type":"scenario_decision"}'::jsonb),
 ('coc3_m1', 12, 'coc3_m1_p3', 'scenario_decision', 'file_service', '{"runtime_action_type":"scenario_decision"}'::jsonb),
-('coc3_m1', 13, 'coc3_m1_p4', 'sequence_reordered', 'coc3_m1_p4', '{"order":["power","network","capacity","media"],"runtime_action_type":"sequence_reordered"}'::jsonb),
+('coc3_m1', 13, 'coc3_m1_p4', 'sequence_reordered', 'coc3_m1_p4', '{"order":["power","network","capacity","media"],"confirmed":true,"runtime_action_type":"sequence_reordered"}'::jsonb),
 ('coc3_m1', 14, 'coc3_m1_p5', 'equipment_operation', 'close_work_area', '{"runtime_action_type":"equipment_operation"}'::jsonb),
 ('coc3_m1', 15, 'coc3_m1_p5', 'equipment_operation', 'prepare_service_report', '{"runtime_action_type":"equipment_operation"}'::jsonb),
 ('coc3_m1', 16, 'coc3_m1_p5', 'test_started', 'coc3_m1_test_5', '{"test_status":"running","runtime_action_type":"test_started"}'::jsonb),
@@ -395,7 +395,7 @@ insert into replay_fixture(mission_id, ordinal, phase_id, action_type, target, v
 ('coc3_m2', 1, 'coc3_m2_p1', 'placement_attempted', 'server_node_position', '{"item_id":"server_node","destination_id":"server_node_position","runtime_action_type":"placement_attempted"}'::jsonb),
 ('coc3_m2', 2, 'coc3_m2_p1', 'placement_attempted', 'client_node_position', '{"item_id":"client_node","destination_id":"client_node_position","runtime_action_type":"placement_attempted"}'::jsonb),
 ('coc3_m2', 3, 'coc3_m2_p1', 'configuration_applied', 'coc3_m2_p1', '{"values":{"server_role":"file_service","host_name":"BQ-FS01","management_address":"192.168.30.10"},"runtime_action_type":"configuration_applied"}'::jsonb),
-('coc3_m2', 4, 'coc3_m2_p2', 'sequence_reordered', 'coc3_m2_p2', '{"order":["validate","partition","install","role"],"runtime_action_type":"sequence_reordered"}'::jsonb),
+('coc3_m2', 4, 'coc3_m2_p2', 'sequence_reordered', 'coc3_m2_p2', '{"order":["validate","partition","install","role"],"confirmed":true,"runtime_action_type":"sequence_reordered"}'::jsonb),
 ('coc3_m2', 5, 'coc3_m2_p3', 'scenario_decision', 'restart_after_configuration', '{"runtime_action_type":"scenario_decision"}'::jsonb),
 ('coc3_m2', 6, 'coc3_m2_p4', 'equipment_operation', 'close_work_area', '{"runtime_action_type":"equipment_operation"}'::jsonb),
 ('coc3_m2', 7, 'coc3_m2_p4', 'equipment_operation', 'prepare_service_report', '{"runtime_action_type":"equipment_operation"}'::jsonb),
@@ -490,12 +490,12 @@ insert into replay_fixture(mission_id, ordinal, phase_id, action_type, target, v
 ('coc4_m3', 14, 'coc4_m3_p4', 'result_interpreted', 'coc4_m3_p4', '{"interpretation":"Recorded output supports the next service action; verify each measured subsystem.","runtime_action_type":"result_interpreted"}'::jsonb),
 ('coc4_m3', 15, 'coc4_m3_p5', 'result_interpreted', 'coc4_m3_p5', '{"interpretation":"The measured outputs isolate the service path; correction and retest are recorded.","runtime_action_type":"result_interpreted"}'::jsonb),
 ('coc4_m4', 1, 'coc4_m4_p1', 'tool_attempted', 'retaining_screw', '{"tool_id":"esd_driver","runtime_action_type":"tool_attempted"}'::jsonb),
-('coc4_m4', 2, 'coc4_m4_p1', 'sequence_reordered', 'coc4_m4_p1', '{"order":["isolate","remove","inspect"],"runtime_action_type":"sequence_reordered"}'::jsonb),
+('coc4_m4', 2, 'coc4_m4_p1', 'sequence_reordered', 'coc4_m4_p1', '{"order":["isolate","remove","inspect"],"confirmed":true,"runtime_action_type":"sequence_reordered"}'::jsonb),
 ('coc4_m4', 3, 'coc4_m4_p1', 'equipment_operation', 'protect_service_data', '{"runtime_action_type":"equipment_operation"}'::jsonb),
 ('coc4_m4', 4, 'coc4_m4_p1', 'equipment_operation', 'protect_service_data', '{"runtime_action_type":"equipment_operation"}'::jsonb),
 ('coc4_m4', 5, 'coc4_m4_p2', 'placement_attempted', 'workstation', '{"item_id":"replacement_component","destination_id":"workstation","orientation":"aligned","runtime_action_type":"placement_attempted"}'::jsonb),
 ('coc4_m4', 6, 'coc4_m4_p3', 'configuration_applied', 'coc4_m4_p3', '{"values":{"device_mode":"automatic","device_identifier":"BQ-ETH01","driver_state":"installed"},"runtime_action_type":"configuration_applied"}'::jsonb),
-('coc4_m4', 7, 'coc4_m4_p4', 'sequence_reordered', 'coc4_m4_p4', '{"order":["seat","fasten","configure","restore"],"runtime_action_type":"sequence_reordered"}'::jsonb),
+('coc4_m4', 7, 'coc4_m4_p4', 'sequence_reordered', 'coc4_m4_p4', '{"order":["seat","fasten","configure","restore"],"confirmed":true,"runtime_action_type":"sequence_reordered"}'::jsonb),
 ('coc4_m4', 8, 'coc4_m4_p5', 'equipment_operation', 'close_work_area', '{"runtime_action_type":"equipment_operation"}'::jsonb),
 ('coc4_m4', 9, 'coc4_m4_p5', 'equipment_operation', 'prepare_service_report', '{"runtime_action_type":"equipment_operation"}'::jsonb),
 ('coc4_m4', 10, 'coc4_m4_p5', 'test_started', 'coc4_m4_test_5', '{"test_status":"running","runtime_action_type":"test_started"}'::jsonb),
@@ -540,8 +540,11 @@ $$;
 
 -- ---------------------------------------------------------------------------
 -- Learners (the Auth trigger creates active learner profiles); every row is
--- rolled back. The parity learner has COC1-COC3 practice progress and every
--- module unlocked so each mission is open under COC- or module-level rules.
+-- rolled back. Both learners hold a stored unlock for every module. The
+-- parity learner then opens COC2-COC4 through the real chain: once the five
+-- missions of a COC are verified in the parity loop (and any published lesson
+-- of the COC is completed), the passed COC quiz satisfies
+-- trg_practice_quiz_requires_complete_modules (20261119120000).
 -- ---------------------------------------------------------------------------
 create temp table replay_ctx (learner uuid, locked_learner uuid, metrics_learner uuid) on commit drop;
 insert into replay_ctx values (gen_random_uuid(), gen_random_uuid(), gen_random_uuid());
@@ -552,20 +555,34 @@ select '00000000-0000-0000-0000-000000000000'::uuid, id, 'authenticated', 'authe
 from replay_ctx cross join lateral (values (learner), (locked_learner), (metrics_learner)) u(id);
 
 do $$
-declare learner uuid; n integer; quiz uuid;
+declare learner uuid;
 begin
   for learner in select r.learner from replay_ctx r union all select r.metrics_learner from replay_ctx r loop
-    for n in 1..3 loop
-      quiz := gen_random_uuid();
-      insert into public.practice_quiz_attempts(id, learner_id, coc_code, status, questions, answers, score, passed, submitted_at)
-      values (quiz, learner, 'coc' || n, 'submitted',
-        (select jsonb_agg(jsonb_build_object('id', 'q' || i, 'answer', 0)) from generate_series(1, 5) i),
-        '{}'::jsonb, 5, true, now());
-      insert into public.practice_coc_progress(learner_id, coc_code, quiz_attempt_id) values (learner, 'coc' || n, quiz);
-    end loop;
     insert into public.learner_module_unlocks(learner_id, module_id, reason)
     select learner, m.id, 'bypass' from public.curriculum_modules m on conflict do nothing;
   end loop;
+end $$;
+
+-- Passes a COC practice quiz the way a learner does once the COC is complete:
+-- the published lessons are completed and the passed attempt is recorded.
+-- The module-completion gate itself is never disabled.
+create function pg_temp.pass_coc_quiz(p_learner uuid, p_coc text)
+returns void language plpgsql as $$
+declare quiz uuid := gen_random_uuid();
+begin
+  insert into public.learner_topic_progress(learner_id, topic_id, revision_id, completed_at)
+  select p_learner, t.id, (select tr.id from public.curriculum_topic_revisions tr
+      where tr.topic_id = t.id and tr.status = 'published' order by tr.revision_number desc limit 1), now()
+  from public.curriculum_topics t
+  join public.curriculum_modules m on m.id = t.module_id
+  where m.coc_code = p_coc and t.archived_at is null
+    and exists (select 1 from public.curriculum_topic_revisions tr where tr.topic_id = t.id and tr.status = 'published')
+  on conflict do nothing;
+  insert into public.practice_quiz_attempts(id, learner_id, coc_code, status, questions, answers, score, passed, submitted_at)
+  values (quiz, p_learner, p_coc, 'submitted',
+    (select jsonb_agg(jsonb_build_object('id', 'q' || i, 'answer', 0)) from generate_series(1, 5) i),
+    '{}'::jsonb, 5, true, now());
+  insert into public.practice_coc_progress(learner_id, coc_code, quiz_attempt_id) values (p_learner, p_coc, quiz);
 end $$;
 
 create function pg_temp.insert_actions(p_learner uuid, p_mission text, p_actions jsonb, p_tag text,
@@ -605,7 +622,7 @@ select is(
 
 select is(
   (select r - 'invalid' - 'corrections' - 'phase_invalid' - 'action_count' - 'invalid_count'
-      - 'correction_count' - 'first_at' - 'last_at'
+      - 'correction_count' - 'first_at' - 'last_at' - 'failed_checks' - 'phase_failed_checks' - 'failed_check_count'
    from private.simulation_replay(c.definition, pg_temp.fixture_actions(c.mission_id)) r),
   pg_temp.legacy_replay(c.definition, pg_temp.fixture_actions(c.mission_id)),
   c.mission_id || ' replay reproduces the legacy done set and state')
@@ -628,6 +645,10 @@ begin
     perform pg_temp.insert_actions(learner, c.mission_id, complete, 'complete', now() - interval '20 minutes');
     insert into verify_parity values (c.mission_id, 'complete',
       pg_temp.legacy_outcome(c.definition, complete), pg_temp.verify_outcome(learner, c.mission_id));
+    -- The fifth verified mission completes COC1-COC3; its quiz opens the next COC.
+    if c.mission_id in ('coc1_m5', 'coc2_m5', 'coc3_m5') then
+      perform pg_temp.pass_coc_quiz(learner, left(c.mission_id, 4));
+    end if;
   end loop;
 end $$;
 
@@ -762,10 +783,73 @@ select is(private.simulation_replay(null, null)->'done', '{}'::jsonb,
   'replay of nothing completes nothing');
 select is((private.simulation_replay(
     (select definition from public.practice_mission_contracts where mission_id = 'coc1_m3'),
-    '[{"action_type":"sequence_reordered","phase_id":"coc1_m3_p2","target":"coc1_m3_p2","value":{"order":"boot_media"}},
+    '[{"action_type":"sequence_reordered","phase_id":"coc1_m3_p2","target":"coc1_m3_p2","value":{"order":"boot_media","confirmed":true}},
       {"action_type":"configuration_applied","phase_id":"coc1_m3_p1","target":"coc1_m3_p1","value":{"values":"broken"}},
       {"action_type":"placement_attempted","phase_id":"coc1_m3_p1","target":"x","value":{"item_id":["not","text"],"destination_id":{"a":1}}}]'::jsonb
   )->>'invalid_count')::integer, 3, 'malformed learner values are invalid actions, not errors');
+
+-- Reordering a list step by step records each order in progress; only a
+-- confirmed wrong order is an incorrect attempt (fix round 1, C1).
+create temp table sequence_result on commit drop as select private.simulation_replay(
+    (select definition from public.practice_mission_contracts where mission_id = 'coc1_m3'),
+    '[{"action_type":"sequence_reordered","phase_id":"coc1_m3_p2","target":"coc1_m3_p2","value":{"order":["configure_device","copy_files","select_disk","boot_media"]}},
+      {"action_type":"sequence_reordered","phase_id":"coc1_m3_p2","target":"coc1_m3_p2","value":{"order":["boot_media","configure_device","copy_files","select_disk"]}},
+      {"action_type":"sequence_reordered","phase_id":"coc1_m3_p2","target":"coc1_m3_p2","value":{"order":["boot_media","select_disk","configure_device","copy_files"],"confirmed":true}},
+      {"action_type":"sequence_reordered","phase_id":"coc1_m3_p2","target":"coc1_m3_p2","value":{"order":["boot_media","select_disk","copy_files","configure_device"]}},
+      {"action_type":"sequence_reordered","phase_id":"coc1_m3_p2","target":"coc1_m3_p2","value":{"order":["boot_media","select_disk","copy_files","configure_device"],"confirmed":true}}]'::jsonb
+  ) result;
+select is((select jsonb_build_object('invalid', result->'invalid', 'done', result->'done'->'coc1_m3_p2',
+    'sequence', result->'state'->'sequence.coc1_m3_p2') from sequence_result),
+  '{"invalid": {"phase:coc1_m3_p2": 1}, "done": true, "sequence": true}'::jsonb,
+  'orders in progress are not counted; a confirmed wrong order is, and the confirmed right order completes the step');
+
+-- Failing test checks that name a step target ("counts") charge that target
+-- on every completed test, even when the mistake is fixed afterwards
+-- (fix round 1, I2). Checks without "counts" charge nothing.
+create temp table post_bench(definition jsonb) on commit drop;
+insert into post_bench values ('{
+  "phases": [
+    {"id": "q_p1", "primaryInteraction": "testRun", "presentation": {
+      "target": "post",
+      "equipment": {
+        "operations": [
+          {"id": "close_lever", "effects": {"lever": "closed"}, "requires": []},
+          {"id": "label_case", "effects": {"labelled": true}, "requires": []}
+        ],
+        "connection": {"sources": [{"id": "eps", "interfaces": ["eps"]}],
+          "destinations": [{"id": "board_eps", "interface": "eps"}]},
+        "checks": [
+          {"id": "cpu", "requires": [{"path": "setting.lever", "value": "closed"}], "counts": "operation:close_lever"},
+          {"id": "power", "requires": [{"path": "link.eps>board_eps", "value": true}], "counts": "connection:eps"},
+          {"id": "label", "requires": [{"path": "setting.labelled", "value": true}]}
+        ]}}}
+  ]}');
+create function pg_temp.post_replay(p_actions jsonb)
+returns jsonb language sql stable as $$
+  select private.simulation_replay((select definition from post_bench), p_actions)
+$$;
+create temp table post_result on commit drop as select pg_temp.post_replay('[
+  {"action_type":"test_completed","phase_id":"q_p1","target":"other","value":{}},
+  {"action_type":"test_started","phase_id":"q_p1","target":"post","value":{}},
+  {"action_type":"test_completed","phase_id":"q_p1","target":"post","value":{}},
+  {"action_type":"equipment_operation","phase_id":"q_p1","target":"close_lever","value":{}},
+  {"action_type":"test_started","phase_id":"q_p1","target":"post","value":{}},
+  {"action_type":"test_completed","phase_id":"q_p1","target":"post","value":{}},
+  {"action_type":"connection_created","phase_id":"q_p1","target":"board_eps","value":{"source_id":"eps","destination_id":"board_eps"}},
+  {"action_type":"equipment_operation","phase_id":"q_p1","target":"label_case","value":{}},
+  {"action_type":"test_started","phase_id":"q_p1","target":"post","value":{}},
+  {"action_type":"test_completed","phase_id":"q_p1","target":"post","value":{}}]') result;
+select is((select result->'failed_checks' from post_result),
+  '{"connection:eps": 2, "operation:close_lever": 1}'::jsonb,
+  'each completed test charges every failing check to the target it names');
+select is((select jsonb_build_object('total', result->'failed_check_count', 'phase', result->'phase_failed_checks')
+    from post_result),
+  '{"total": 3, "phase": {"q_p1": 3}}'::jsonb,
+  'failed checks are totalled and attributed to the test phase; checks without counts charge nothing');
+select is((select jsonb_build_object('invalid', result->'invalid', 'done', result->'done')
+    from post_result),
+  '{"invalid": {"phase:q_p1": 1}, "done": {"q_p1": true}}'::jsonb,
+  'a test completed on the wrong target is invalid, charges no check, and the passing retest completes the phase');
 
 -- ---------------------------------------------------------------------------
 -- 3. Verification guards and practice run metrics.
@@ -819,7 +903,8 @@ select is((select action_count from public.practice_mission_runs
 select is((select step_results from public.practice_mission_runs
     where learner_id = (select metrics_learner from replay_ctx) and mission_id = 'coc1_m3'),
   (select jsonb_object_agg(phase_id, jsonb_build_object('done', true,
-      'invalid', coalesce((replay->'phase_invalid'->>phase_id)::integer, 0) + case when phase_id = 'coc1_m3_p1' then 2 else 0 end))
+      'invalid', coalesce((replay->'phase_invalid'->>phase_id)::integer, 0) + case when phase_id = 'coc1_m3_p1' then 2 else 0 end,
+      'failed_checks', 0))
     from coc1_m3_baseline, unnest(array['coc1_m3_p1', 'coc1_m3_p2', 'coc1_m3_p3', 'coc1_m3_p4']) phase_id),
   'step_results reports each work phase as done with its invalid actions');
 select is((select (replay->>'invalid_count')::integer from coc1_m3_baseline), 1,
@@ -847,7 +932,8 @@ select is((select jsonb_build_object('run', run_number, 'outcome', outcome, 'fai
       and mission_id = 'coc1_m3' and run_number = 2),
   jsonb_build_object('run', 2, 'outcome', 'incomplete', 'failure', 'PRACTICE_WORK_INCOMPLETE:coc1_m3_p2',
     'actions', (select count(*)::integer from replay_fixture where mission_id = 'coc1_m3' and phase_id = 'coc1_m3_p1'),
-    'p1', '{"done": true, "invalid": 0}'::jsonb, 'p2', '{"done": false, "invalid": 0}'::jsonb),
+    'p1', '{"done": true, "invalid": 0, "failed_checks": 0}'::jsonb,
+    'p2', '{"done": false, "invalid": 0, "failed_checks": 0}'::jsonb),
   'a failed verification is recorded as an incomplete run of the current evidence window');
 select is((select count(*)::integer from public.practice_mission_runs
     where learner_id = (select metrics_learner from replay_ctx) and mission_id = 'coc1_m3'),
@@ -883,10 +969,17 @@ select ok(not has_function_privilege('authenticated', 'public.practice_verify_mi
   'practice verification remains server-only');
 select is((select count(*)::integer from pg_proc where oid in (
     'private.simulation_replay(jsonb,jsonb)'::regprocedure,
+    'private.practice_record_run(uuid,text,public.practice_mission_contracts,jsonb,text,text)'::regprocedure,
     'public.practice_verify_mission(uuid,text)'::regprocedure,
     'public.practice_record_failed_verification(uuid,text,text)'::regprocedure,
-    'public.practice_completion_version_accepted(text,text,text)'::regprocedure) and prosecdef),
+    'public.practice_begin_quiz(uuid,text,uuid,jsonb)'::regprocedure,
+    'public.practice_submit_quiz(uuid,uuid,jsonb)'::regprocedure) and prosecdef),
   0, 'the replay refactor introduces no SECURITY DEFINER function');
+select ok(to_regprocedure('public.practice_completion_version_accepted(text,text,text)') is null
+    and (select bool_and(prosrc like '%public.practice_completion_accepted(c.mission_id, c.contract_version)%')
+      from pg_proc where oid in ('public.practice_begin_quiz(uuid,text,uuid,jsonb)'::regprocedure,
+        'public.practice_submit_quiz(uuid,uuid,jsonb)'::regprocedure)),
+  'one accepted-version rule: the quiz gate calls practice_completion_accepted');
 select ok((select pg_get_function_identity_arguments(oid) = 'p_learner uuid, p_mission text'
       and prorettype = 'void'::regtype
     from pg_proc where oid = 'public.practice_verify_mission(uuid,text)'::regprocedure),

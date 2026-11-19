@@ -134,7 +134,9 @@ class _SequencingInteractionState extends State<SequencingInteraction> {
           ),
           FilledButton.icon(
               key: ValueKey('sequence-confirm-${widget.phase.id}'),
-              onPressed: widget.enabled ? () => _record('button') : null,
+              onPressed: widget.enabled
+                  ? () => _record('button', confirmed: true)
+                  : null,
               icon: const Icon(Icons.playlist_add_check_rounded),
               label: const Text(MissionContentData.confirmSequenceLabel)),
         ],
@@ -148,10 +150,14 @@ class _SequencingInteractionState extends State<SequencingInteraction> {
     _record(inputMethod);
   }
 
-  void _record(String inputMethod) {
+  /// Each move records the order in progress; only the confirmed order is the
+  /// learner's answer, so the server counts a wrong order as an incorrect
+  /// attempt only when it is confirmed.
+  void _record(String inputMethod, {bool confirmed = false}) {
     unawaited(widget.onAction('sequence_reordered', widget.phase.id, {
       'order': List<String>.from(_order),
       'input_method': inputMethod,
+      if (confirmed) 'confirmed': true,
     }));
   }
 }

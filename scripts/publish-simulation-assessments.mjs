@@ -249,6 +249,9 @@ function parseArgs(argv) {
   }
   if (!["local", "hosted"].includes(options.target)) throw new Error("--target must be local or hosted.");
   if (options.target === "hosted" && !options.confirm) throw new Error("Publishing to the hosted project requires --confirm.");
+  // A live publish snapshots the published contracts from the database, never
+  // from a local file.
+  if (options.contracts && !options.dryRun) throw new Error("--contracts is only accepted with --dry-run.");
   return options;
 }
 
