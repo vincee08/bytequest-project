@@ -41,6 +41,21 @@ select ok(to_regclass('public.user_achievements_user_achievement_key') is not nu
 
 -- Simulate a legacy database that already holds a duplicated award.
 drop index public.user_achievements_user_achievement_key;
+-- A production-shaped copy also enforces uniqueness with its own pre-existing
+-- constraint; drop it inside this rolled-back transaction so the legacy
+-- duplicate scenario can be simulated on any copy (local or restored).
+do $$
+declare c record;
+begin
+  for c in select conname from pg_constraint
+           where conrelid = 'public.user_achievements'::regclass and contype = 'u'
+             and conkey @> array[(select attnum from pg_attribute where attrelid = 'public.user_achievements'::regclass and attname = 'user_id'),
+                                 (select attnum from pg_attribute where attrelid = 'public.user_achievements'::regclass and attname = 'achievement_id')]::int2[]
+  loop
+    execute format('alter table public.user_achievements drop constraint %I', c.conname);
+  end loop;
+end
+$$;
 insert into public.user_achievements (user_id, achievement_id, earned_at)
 select c.learner_l, a.id, v.earned_at
 from legacy_ctx c, public.achievements a,
