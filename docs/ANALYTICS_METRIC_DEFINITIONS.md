@@ -16,7 +16,7 @@ Every number on `/analytics`, `/progress/learners/[userId]`, `/admin/analytics` 
 | `get_criteria_analytics(p_filters)` | Criteria tab |
 | `get_my_performance()` | learner app, Performance section |
 
-Source: `supabase/migrations/20261119170000`–`20261119170300`. Tests with known expected values: `supabase/tests/analytics_redefense_rollback.sql`.
+Source: `supabase/migrations/20261119170000`–`20261119170400` (170400: integration with slices A2, A4 and A5). Tests with known expected values: `supabase/tests/analytics_redefense_rollback.sql`.
 
 ## 1. Scope, population and period
 
@@ -32,10 +32,10 @@ Source: `supabase/migrations/20261119170000`–`20261119170300`. Tests with know
 |---|---|
 | Technical assessment attempt | `submitted_at` (`started_at` while unsubmitted) |
 | Quiz result | `submitted_at` |
-| Quiz eligibility | the quiz assignment was open at some time in the period (opened on/before the period end, not due/closed before the period start) |
+| Quiz eligibility | the quiz assignment was open at some time in the period (opened on/before the period end, not due/closed before the period start) and the learner was enrolled (`class_memberships.enrolled_at`) before it closed |
 | Homework submission | `submitted_at` |
-| Homework eligibility | published by the period end and not due before the period start |
-| Missing homework | the deadline passed inside the period (and before now) without a submission |
+| Homework eligibility | published by the period end and not due before the period start; a learner enrolled after the deadline is eligible only if they submitted |
+| Missing homework | the deadline passed inside the period (and before now) without a submission, for learners enrolled before the deadline |
 | Practice run | `ended_at` (or `created_at`) |
 | Practice completion (verified) | `verified_at`; completion *rates* use every completion verified by the period end |
 | Learning progress | completions recorded by the period end (cumulative) |
@@ -46,7 +46,7 @@ Source: `supabase/migrations/20261119170000`–`20261119170300`. Tests with know
 |---|---|
 | Technical assessments | COC, module (mission's module), mission |
 | Quizzes | COC (quiz COC), quiz |
-| Homework | none yet (homework is not linked to the curriculum until slice A4) |
+| Homework | COC (`coc_module_id`, or the module's / mission's COC), module (`module_id`, or the mission's module), mission (`mission_code`); unlinked homework is excluded under any curriculum filter |
 | Practice runs/completions | COC, module, mission |
 | Learning progress | COC, module, topic, mission |
 
@@ -65,10 +65,12 @@ Source: `supabase/migrations/20261119170000`–`20261119170300`. Tests with know
 | Quizzes: average | mean percent of scored counted attempts (`correct_count ÷ question_count × 100`) | `quiz_results` |
 | Quizzes: completion rate | completed (learner, quiz) pairs ÷ eligible (learner, quiz) pairs | `quiz_assignments`, `quiz_attempts` |
 | Homework: submitted / late | submissions in the period / of which `lateness_seconds > 0` | `homework_submissions` |
+| Homework: released / pending evaluation | submissions in the period whose status is `released` / `submitted`, `graded` or `finalized` (pending evaluation never enters an average) | `homework_submissions` |
 | Homework: missing | eligible pairs whose deadline passed in the period without a submission | `homework_assignments`, `homework_submissions` |
-| Homework: average | mean score (0–100) of graded submissions in the period; graded work without a score and missing work are never turned into a number | `homework_submissions` |
-| Missions: verified | server-verified practice completions in the period | `practice_mission_completions` |
-| Missions: completion rate | verified (learner, mission) pairs by the period end ÷ (population × missions in scope) | `practice_mission_completions`, `mission_curriculum_links` |
+| Homework: average | mean of `score ÷ max_score × 100` over **released** submissions in the period; graded or finalized grades, released work without a score and missing work are never turned into a number | `homework_submissions`, `homework_assignments` |
+| Evaluation status | technical assessment attempts and homework submitted in the period, by their current stage. Technical: `submitted`/`evaluated` → Evaluate, `under_review` → Finalize, `finalized` → Release, `released` → Released. Homework: `submitted` → Evaluate, `graded` → Finalize, `finalized` → Release, `released` → Released (the Evaluation Center mapping) | `attempts`, `homework_submissions` |
+| Missions: verified | server-verified practice completions (accepted contract version, `practice_completion_accepted`) in the period | `practice_mission_completions` |
+| Missions: completion to date | verified (learner, mission) pairs by the period end ÷ (population × missions in scope) | `practice_mission_completions`, `mission_curriculum_links` |
 | Missions: runs / successful / failed | recorded practice runs in the period / outcome `verified` / outcome `incomplete` | `practice_mission_runs` |
 | Missions: average completion time | mean `duration_seconds` of verified runs in the period | `practice_mission_runs` |
 | Learning progress | mean over population learners of each learner's learning progress (§7) | see §7 |
@@ -81,7 +83,7 @@ Assessment, quiz and homework results belong to the class of the attempt or subm
 | Metric | Formula |
 |---|---|
 | Enrolled / active in period | as in the overview, for the class |
-| Learner performance score | mean of the learner's scored results in the class and period: released assessment percentages, quiz percentages, graded homework percentages (each result once) |
+| Learner performance score | mean of the learner's scored results in the class and period: released assessment percentages, quiz percentages, released homework percentages of `max_score` (each result once) |
 | Average score | mean of learner performance scores in the class (each learner once; learners without a scored result are excluded) |
 | Highest / lowest | learner with the highest / lowest performance score in the class |
 | Quiz average | mean quiz percent of the class's counted attempts |
@@ -93,7 +95,7 @@ Assessment, quiz and homework results belong to the class of the attempt or subm
 
 ## 4. Learners and status rules
 
-Per learner: learning progress, performance score, quiz average, released/competent/pending assessments, verified missions, practice runs in the period, homework submitted/missing/late, last activity.
+Per learner: learning progress, performance score, quiz average, released/competent/pending assessments (`evaluated` and `under_review` are pending), verified missions, practice runs in the period, homework submitted/pending evaluation/missing/late, last activity.
 
 | Status | Rule (any reason triggers it) |
 |---|---|
@@ -116,32 +118,34 @@ Falling behind takes precedence over struggling; every matching reason is listed
 
 ## 6. Missions and criteria
 
-**Practice** (labelled separately from technical assessments):
+**Practice** (labelled separately from technical assessments). Every column is either *in the period* or explicitly *to date* (by the period end); a mission is listed when it has activity in the period or a verified completion to date:
 
-| Metric | Formula |
-|---|---|
-| Learners attempted | distinct learners with a recorded run or a verified completion by the period end |
-| Learners verified / completion rate | learners with a server-verified completion by the period end / ÷ population |
-| Runs, successful, failed | recorded runs in the period (outcome `verified` / `incomplete`) — attempt counts always come from `practice_mission_runs`, never from completion counts |
-| Runs per learner | runs in the period ÷ learners with a run in the period |
-| Average completion time | mean duration of verified runs in the period |
-| Invalid actions per run | mean `invalid_count` of runs in the period |
+| Metric | Window | Formula |
+|---|---|---|
+| Learners attempted | period | distinct learners with a recorded run or a verified completion in the period |
+| Learners verified | period | distinct learners whose accepted completion was verified in the period |
+| Runs, successful, failed | period | recorded runs (outcome `verified` / `incomplete`) — attempt counts always come from `practice_mission_runs`, never from completion counts |
+| Runs per learner | period | runs ÷ learners with a run |
+| Average completion time | period | mean duration of verified runs |
+| Invalid actions per run | period | mean `invalid_count` of runs |
+| Learners verified to date | to date | learners with an accepted, server-verified completion by the period end |
+| Completion to date | to date | learners verified to date ÷ population |
 
 An incomplete run never counts as a completion. Runs are recorded from the release of run tracking onward; completions verified earlier have no run rows.
 
-**Technical assessments by mission**: attempts (started or submitted in the period), submitted, released, competent, not yet competent, pending, average released percentage.
+**Technical assessments by mission**: attempts (started or submitted in the period), submitted, released, competent, not yet competent, pending (submitted, `evaluated` or `under_review`, or `finalized`, and not yet released), average released percentage.
 
-**Criteria** (`source: 'assessment'`): from released results only. The released score revision's `criterion_values` are authoritative (they include instructor adjustments); `criterion_results` are the fallback for revisions without criterion values. Each learner counts once per criterion: their latest released result. *Average* = mean criterion score, *percent* = average ÷ criterion maximum × 100 (or the satisfied share when a criterion has no numeric maximum). *Strongest* = up to 3 highest percentages, *weakest* = up to 3 lowest (the two lists never overlap). Simulation steps and essay rubric criteria are added after integration of slices A1 and A3.
+**Criteria**: from released results only. *Assessment* criteria (`source: 'assessment'`): The released score revision's `criterion_values` are authoritative (they include instructor adjustments); `criterion_results` are the fallback for revisions without criterion values. Each learner counts once per criterion: their latest released result. *Average* = mean criterion score, *percent* = average ÷ criterion maximum × 100 (or the satisfied share when a criterion has no numeric maximum). *Strongest* = up to 3 highest percentages, *weakest* = up to 3 lowest (the two lists never overlap). *Homework* criteria (`source: 'homework'`, slice A4): each assignment criterion (`criteria[].id`, `max_points`) scored by `criterion_scores` of **released** submissions in the period; one value per learner (one submission per learner and homework); percent = average points ÷ `max_points`; satisfied counts do not apply (points-based). Simulation steps and essay rubric criteria are added after integration of slices A1 and A3.
 
 ## 7. Learning progress (shared WS3 methodology)
 
-Required items: every **published topic** (latest published revision, not archived), every **mission placed in a module** (`mission_curriculum_links`) and one **COC practice quiz** per COC. Completion: a `learner_topic_progress` row, a server-verified `practice_mission_completions` row, a `practice_coc_progress` row. Learning progress = completed required items ÷ required items in scope. Performance scores (quiz, assessment, homework) are reported separately and never mixed into progress.
+Required items: every **published topic** (latest published revision, not archived), every **mission placed in a module** (`mission_curriculum_links`) and one **COC practice quiz** per COC. Completion: a `learner_topic_progress` row, a server-verified `practice_mission_completions` row **of an accepted contract version** (`public.practice_completion_accepted`, slice A2), a `practice_coc_progress` row. Learning progress = completed required items ÷ required items in scope. Performance scores (quiz, assessment, homework) are reported separately and never mixed into progress.
 
-A module is complete when it has at least one required item and all are complete (or a `learner_module_completions` row exists). The learner app's "modules completed of total" counts only modules with required items; a module without required items shows "No required activities yet".
+Instructor analytics: a module is complete when it has at least one required item and all are complete by the period end (or a `learner_module_completions` row exists). The learner app uses slice A2's `public.learner_module_states` for its module counts (every module of the COC; a module without required items completes once unlocked), exactly like the Progress screen.
 
 ## 8. Learner view (`get_my_performance`)
 
-The learner sees only their own rows: overall and per-COC learning progress; competency per criterion of their **latest released result per mission** (outcome = released criterion observation); quiz scores of their completed attempts; homework submissions with the score shown only once graded (released); every currently released assessment result; verified missions, recorded runs and best verified time per mission. Unreleased (pending) assessment results never appear.
+The learner sees only their own rows: overall and per-COC learning progress (from `learner_module_states`: (completed topics + verified missions + passed COC quiz) ÷ (topics + missions + 1) per COC); competency per criterion of their **latest released result per mission** (outcome = released criterion observation); quiz scores of their completed attempts; homework submissions visible to them (A4: only `submitted` or `released`), with the score and its share of `max_score` only once released; every currently released assessment result; verified missions (accepted versions), recorded runs and best verified time per mission; and a `summary` (quiz average, released homework average, released/competent assessments, criteria achieved) shown in the Progress screen. Unreleased (pending) assessment results and unreleased homework grades never appear.
 
 ## 9. Real time
 
