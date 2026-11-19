@@ -88,6 +88,7 @@ class _AssemblyBenchState extends State<AssemblyBench> {
       _closeUp = false;
       _inspected = null;
       _hint = null;
+      _dismissed = null;
       _reportedMode = null;
     }
     if (_selectedPart != null &&
@@ -149,6 +150,8 @@ class _AssemblyBenchState extends State<AssemblyBench> {
     setState(() {
       _applying = true;
       _hint = hint;
+      // A new action may repeat an earlier message; show it again.
+      _dismissed = null;
     });
     try {
       await widget.onAction(type, target, value);
@@ -306,7 +309,7 @@ class _AssemblyBenchState extends State<AssemblyBench> {
             ? null
             : model.inspectables
                 .where((object) => object.id == _inspected)
-                .map((object) => '${object.label}: ${object.inspection}')
+                .map((object) => '${object.label}: ${_assessment ? MissionContentData.benchAssessmentInspection[object.id] ?? object.inspection : object.inspection}')
                 .firstOrNull);
     return LayoutBuilder(builder: (context, constraints) {
       // On short screens the step header floats over the canvas so the
@@ -471,7 +474,7 @@ class _BenchHeader extends StatelessWidget {
           const SizedBox(width: 8),
           Semantics(
             label: MissionContentData.benchCountsSemantics(model.validCount,
-                model.invalidCount, model.correctionCount),
+                model.invalidCount, model.correctionCount, model.faultCount),
             excludeSemantics: true,
             child: Row(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.check_circle_outline,
@@ -490,6 +493,14 @@ class _BenchHeader extends StatelessWidget {
                 const Icon(Icons.autorenew,
                     size: 16, color: AppTheme.textMedium),
                 Text(' ${model.correctionCount}', style: AppTheme.labelSmall),
+              ],
+              if (model.faultCount > 0) ...[
+                const SizedBox(width: 6),
+                const Icon(Icons.report_problem_outlined,
+                    size: 16, color: AppTheme.accentOrange),
+                Text(' ${model.faultCount}',
+                    key: const ValueKey('assembly-bench-fault-count'),
+                    style: AppTheme.labelSmall),
               ],
             ]),
           ),

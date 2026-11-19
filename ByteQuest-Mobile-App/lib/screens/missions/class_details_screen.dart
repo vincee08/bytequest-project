@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/learner_ui.dart';
+import '../../data/mission_content_data.dart';
 import '../../data/missions_data.dart';
 import '../../models/assigned_activity_model.dart';
 import '../../models/learning_resource_model.dart';
@@ -210,8 +211,10 @@ class _ClassDetailsScreenState extends State<ClassDetailsScreen> {
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('This activity could not be opened. Try again.')),
+        SnackBar(
+            content: Text(error is AssessmentUpdateRequiredException
+                ? MissionContentData.assessmentUpdateRequired
+                : 'This activity could not be opened. Try again.')),
       );
       debugPrint('Class activity launch failed: $error');
     } finally {

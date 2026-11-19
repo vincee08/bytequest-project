@@ -119,6 +119,7 @@ final class AssemblyBenchModel {
     required this.validCount,
     required this.invalidCount,
     required this.correctionCount,
+    required this.faultCount,
     required this.startedAt,
   });
 
@@ -220,6 +221,7 @@ final class AssemblyBenchModel {
       validCount: (counts['valid'] as num? ?? 0).toInt(),
       invalidCount: (counts['invalid'] as num? ?? 0).toInt(),
       correctionCount: (counts['corrections'] as num? ?? 0).toInt(),
+      faultCount: (counts['faults'] as num? ?? 0).toInt(),
       startedAt: started is String ? DateTime.tryParse(started) : null,
     );
   }
@@ -234,6 +236,9 @@ final class AssemblyBenchModel {
   final int validCount;
   final int invalidCount;
   final int correctionCount;
+
+  /// POST checks that failed on completed tests (each charges its step).
+  final int faultCount;
   final DateTime? startedAt;
 
   /// Index of the first unfinished step, or the step count when all are done.

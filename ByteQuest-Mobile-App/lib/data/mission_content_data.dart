@@ -713,8 +713,10 @@ class MissionContentData {
       'All $total steps done · continue when ready';
   static const benchAssessmentHeader = 'Assessment · work without hints';
   static String benchElapsedSemantics(String time) => 'Elapsed time $time';
-  static String benchCountsSemantics(int valid, int invalid, int corrections) =>
-      '$valid actions accepted, $invalid refused, $corrections corrections';
+  static String benchCountsSemantics(
+          int valid, int invalid, int corrections, int faults) =>
+      '$valid actions accepted, $invalid refused, $corrections corrections, '
+      '$faults power-on faults';
   static const benchMatView = 'Anti-static mat';
   static const benchBoardView = 'Motherboard close-up';
   static const benchChassisView = 'Open case';
@@ -788,6 +790,131 @@ class MissionContentData {
       'No change — the equipment is not in a state for that action.';
   static const assessmentNeutralTool = 'No effect on the selected target.';
   static const assessmentNeutralRecorded = 'Action recorded.';
+
+  // Assessment mode: goal-level task text, neutral part descriptions and
+  // symptom-only test readouts. None of them names the slot, header, cable
+  // or step that is expected; practice keeps the specific technical wording.
+  static const Map<String, String> assessmentPhaseInstructions = {
+    'coc1_m2_p1': 'Prepare the work area and inspect the parts before assembly.',
+    'coc1_m2_p2': 'Prepare the motherboard on the anti-static mat.',
+    'coc1_m2_p3': 'Install the components into the case.',
+    'coc1_m2_p4': 'Connect the required power and data cables.',
+    'coc1_m2_p5':
+        'Power on the system, resolve any fault you observe, then interpret the result.',
+  };
+  static String? assessmentInstruction(String phaseId) =>
+      assessmentPhaseInstructions[phaseId];
+
+  static const Map<String, String> benchAssessmentInspection = {
+    'system_case':
+        'ATX mid-tower with the side panel removed. Standoffs, a rear I/O cutout, a bottom bay and a drive bay are visible.',
+    'motherboard':
+        'ATX motherboard on the anti-static mat: processor socket with a load lever, memory slots, fan headers, power headers, SATA ports and case headers.',
+    'cpu': 'LGA processor in its tray. A gold triangle marks one corner.',
+    'cooler':
+        'Tower cooler without pre-applied thermal compound. It has a 4-pin fan cable.',
+    'ram': 'Two identical DDR4 modules with an off-centre notch.',
+    'psu':
+        'ATX power supply, switched off and unplugged, with its modular power cables attached.',
+    'storage':
+        '3.5-inch SATA hard disk drive with separate power and data ports.',
+  };
+
+  static const assessmentReadingNominal = 'Operating normally';
+  static const assessmentReadingFault = 'Fault detected';
+
+  /// COC1 M2 power-on readouts in assessment: what the technician observes.
+  /// Two causes may share one symptom (both CPU checks show the debug LED),
+  /// so the learner diagnoses the assembly instead of reading the answer.
+  static const Map<String, ({String label, String nominal, String fault})>
+      assemblyPostSymptoms = {
+    'coc1_m2_p5.psu_mounting': (
+      label: 'Pre-power inspection',
+      nominal: 'Power supply secure.',
+      fault: 'The power supply moves in its bay.',
+    ),
+    'coc1_m2_p5.board_mounting': (
+      label: 'Pre-power inspection',
+      nominal: 'Motherboard secure.',
+      fault: 'The motherboard moves when it is touched.',
+    ),
+    'coc1_m2_p5.drive_mounting': (
+      label: 'Pre-power inspection',
+      nominal: 'Drive secure.',
+      fault: 'The drive moves in its bay.',
+    ),
+    'coc1_m2_p5.power_switch': (
+      label: 'Power-on',
+      nominal: 'The system powers on.',
+      fault: 'Pressing the case power button does nothing.',
+    ),
+    'coc1_m2_p5.cpu_power': (
+      label: 'POST',
+      nominal: 'POST passes the processor stage.',
+      fault: 'No POST: the fans spin but the CPU debug LED stays lit.',
+    ),
+    'coc1_m2_p5.cpu_detection': (
+      label: 'POST',
+      nominal: 'Processor detected.',
+      fault: 'No POST: the fans spin but the CPU debug LED stays lit.',
+    ),
+    'coc1_m2_p5.cpu_fan': (
+      label: 'Cooling',
+      nominal: 'CPU fan speed reported.',
+      fault: 'CPU fan error at power-on.',
+    ),
+    'coc1_m2_p5.cpu_temperature': (
+      label: 'Cooling',
+      nominal: 'CPU temperature stable.',
+      fault: 'CPU over-temperature warning within seconds of power-on.',
+    ),
+    'coc1_m2_p5.memory_detection': (
+      label: 'Memory',
+      nominal: 'Memory detected.',
+      fault: 'Memory not detected: the DRAM debug LED is lit and the board beeps.',
+    ),
+    'coc1_m2_p5.memory_channels': (
+      label: 'Memory',
+      nominal: 'Memory is running in dual-channel mode.',
+      fault: 'Memory is running in single-channel mode.',
+    ),
+    'coc1_m2_p5.drive_power': (
+      label: 'Boot',
+      nominal: 'The drive spins up.',
+      fault: 'No boot device detected.',
+    ),
+    'coc1_m2_p5.boot_device': (
+      label: 'Boot',
+      nominal: 'Boot drive detected.',
+      fault: 'No boot device detected.',
+    ),
+  };
+
+  static String assessmentReading(
+      String phaseId, String? checkId, bool operating) {
+    final symptom = assemblyPostSymptoms['$phaseId.$checkId'];
+    if (symptom != null) return operating ? symptom.nominal : symptom.fault;
+    return operating ? assessmentReadingNominal : assessmentReadingFault;
+  }
+
+  static String assessmentReadingLabel(
+          String phaseId, String? checkId, String label) =>
+      assemblyPostSymptoms['$phaseId.$checkId']?.label ?? label;
+
+  // A practice session saved for an earlier version of a mission.
+  static const missionUpdatedTitle = 'Mission updated';
+  static const missionUpdatedNotice =
+      'This mission was updated. Your earlier verified result is kept; start the new version.';
+  static const missionUpdatedDismiss = 'Start the new version';
+  static const missionUpdateFailed =
+      'This mission was updated, but the new version could not be started. Check your connection, then retry.';
+
+  // Assembly-bench board silkscreen (printed header names on the board).
+  static const benchSilkscreenCpuFan = 'CPU_FAN';
+  static const benchSilkscreenSysFan = 'SYS_FAN';
+  static const benchSilkscreenAtx24 = '24-PIN';
+  static const benchSilkscreenEps8 = '8-PIN';
+  static const benchSilkscreenFrontPanel = 'F_PANEL';
   static const placementPrerequisiteFeedback =
       'The mounting support or safety preparation is not installed yet.';
   static const occupiedDestinationFeedback =
