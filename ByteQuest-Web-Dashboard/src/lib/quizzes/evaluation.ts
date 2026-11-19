@@ -55,6 +55,7 @@ const knownErrors: [string, number, string][] = [
   ["QUIZ_ESSAY_SCORE_INVALID", 422, "Give every rubric criterion a score from 0 to its maximum points."],
   ["QUIZ_ESSAY_FEEDBACK_TOO_LONG", 422, "Keep feedback under 5,000 characters."],
   ["QUIZ_ESSAY_ITEM_NOT_FOUND", 404, "This essay question is not part of the attempt."],
+  ["QUIZ_ESSAY_NOT_ANSWERED", 409, "The learner did not answer this essay; it scores zero and needs no score."],
   ["QUIZ_ESSAYS_NOT_SCORED", 409, "Score every answered essay before finalizing."],
   ["QUIZ_RESULT_NOT_FINALIZED", 409, "Finalize each result before releasing it."],
   ["QUIZ_EVALUATION_STATE_INVALID", 409, "This result is already finalized. Refresh to see its current stage."],

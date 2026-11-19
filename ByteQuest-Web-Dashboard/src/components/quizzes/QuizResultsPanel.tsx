@@ -566,9 +566,10 @@ function EssayScoreForm({
       <div className="rounded-md border border-border p-3">
         <p className="text-xs font-medium text-muted-foreground">Learner answer</p>
         <p className="mt-1 whitespace-pre-wrap break-words text-sm">
-          {essay.answer ?? "No answer was saved before submission (scores zero unless you record a score)."}
+          {essay.answer ?? "No answer was saved before submission. This essay scores zero and needs no score."}
         </p>
       </div>
+      {essay.answer === null ? null : (
       <fieldset disabled={!editable || busy} className="space-y-3">
         <legend className="text-sm font-medium">
           Rubric · {total}/{essay.points} points
@@ -614,6 +615,7 @@ function EssayScoreForm({
           <p className="text-xs text-muted-foreground">Scores are locked after finalization.</p>
         )}
       </fieldset>
+      )}
     </form>
   );
 }
