@@ -30,7 +30,7 @@ begin
 end $$;
 select set_config('request.jwt.claim.sub',(select instructor_id::text from quiz_revision_context),true);
 set local role authenticated;
-update quiz_revision_context set quiz_id=(public.create_instructor_quiz('Quiz revision QA','Network testing')).id;
+update quiz_revision_context set quiz_id=(public.create_instructor_quiz('Quiz revision QA','Network testing',p_coc_module_id=>(select id from public.coc_modules where coc_code='coc2'),p_focus=>'Identify network devices and their roles')).id;
 update quiz_revision_context set version_id=(select id from public.quiz_versions where quiz_id=quiz_revision_context.quiz_id);
 select pg_temp.denied(format('select public.publish_quiz_version(%L)',version_id),'APPROVED_QUIZ_ITEM_REQUIRED') from quiz_revision_context;
 update quiz_revision_context set item_id=(public.upsert_quiz_item(version_id,'identification','Name the routing device.','[]','"Router"')).id;
