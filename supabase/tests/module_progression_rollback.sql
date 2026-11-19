@@ -5,6 +5,11 @@
 begin;
 select plan(42);
 
+-- Isolate the required items from lessons published in the target database
+-- (rolled back with everything else): the fixtures below define the only
+-- curriculum topics.
+update public.curriculum_topics set archived_at = now() where archived_at is null;
+
 -- ---------------------------------------------------------------------------
 -- Fixture helpers (temporary, rolled back with the transaction)
 -- ---------------------------------------------------------------------------
@@ -280,7 +285,7 @@ select pg_temp.a2_complete(pg_temp.a2('service'), 'coc1_m2');
 -- The two LO1.1 topics published above are required for every learner.
 insert into public.learner_topic_progress(learner_id, topic_id)
 select pg_temp.a2('service'), t.id from public.curriculum_topics t
-where t.module_id = pg_temp.a2_module('coc1', 'LO1.1');
+where t.module_id = pg_temp.a2_module('coc1', 'LO1.1') and t.archived_at is null;
 select ok(exists(select 1 from public.learner_module_unlocks where learner_id = pg_temp.a2('service')
     and module_id = pg_temp.a2_module('coc1', 'LO1.2') and reason = 'sequence'),
   'a service-role verification write records the next module unlock through the trigger');

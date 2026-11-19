@@ -5,6 +5,11 @@
 begin;
 select plan(57);
 
+-- Notifications that already exist in the target database (for example the
+-- releases of a seeded demo class) are not this test's: the release checks
+-- below look only at notifications created inside this transaction.
+create temporary table hw_prior_notifications as select id from public.notifications;
+
 create temporary table hw as select
   gen_random_uuid() teacher, gen_random_uuid() other_teacher,
   gen_random_uuid() learner_a, gen_random_uuid() learner_b, gen_random_uuid() learner_c,
@@ -222,7 +227,8 @@ select is((select count(*)::integer from public.audit_events where action='homew
 select is((select count(*)::integer from public.notifications n where n.event_key='homework.released:'||(select sub_a from hw)
   and n.user_id=(select learner_a from hw) and n.metadata->>'activity_type'='homework'),1,'release notifies the learner exactly once');
 select is((select count(*)::integer from public.notifications n where n.event_key like 'homework.released:%'
-  and n.user_id not in ((select learner_a from hw),(select learner_b from hw))),0,'no other learner is notified of a release');
+  and n.user_id not in ((select learner_a from hw),(select learner_b from hw))
+  and not exists (select 1 from hw_prior_notifications p where p.id=n.id)),0,'no other learner is notified of a release');
 
 select set_config('request.jwt.claim.sub',(select learner_a::text from hw),true);
 set local role authenticated;
