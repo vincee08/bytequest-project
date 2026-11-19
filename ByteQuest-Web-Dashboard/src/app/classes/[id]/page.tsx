@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, BookOpenCheck, Files, ShieldCheck, Users } from "lucide-react";
+import { ArrowLeft, BookOpenCheck, FileSpreadsheet, Files, ShieldCheck, Users } from "lucide-react";
 import {
   ArchiveClassForm,
   AssignmentAccessPolicyForm,
@@ -25,6 +25,8 @@ import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { activitiesClient } from "@/lib/activities/types";
 import { HomeworkManager } from "@/components/classes/HomeworkManager";
 import { QuizDeadlineControls } from "@/components/quizzes/QuizDeadlineControls";
+import { PendingRosterEntries } from "@/components/roster/PendingRosterEntries";
+import { rosterClient } from "@/lib/roster/server";
 
 export const dynamic = "force-dynamic";
 
@@ -54,11 +56,23 @@ export default async function ClassDetailPage({
 
   if (!classroom) notFound();
 
-  const [homeworkResult, quizAssignmentResult] = await Promise.all([
+  const [homeworkResult, quizAssignmentResult, rosterResult] = await Promise.all([
     activitiesClient(supabase).from('homework_assignments').select('*').eq('class_id', id).order('created_at', { ascending: false }),
     supabase.from('quiz_assignments').select('id,due_at,status,quiz_versions(status,quizzes(title))').eq('class_id', id).eq('status', 'active'),
+    rosterClient(supabase).from('class_roster_entries').select('id,email_normalized,student_id,last_name,first_name,course_section,status,created_at,claimed_user_id,claimed_at').eq('class_id', id).in('status', ['pending', 'enrolled']).order('created_at', { ascending: false }),
   ]);
-  if (homeworkResult.error || quizAssignmentResult.error) throw new Error('Class activities could not be loaded.');
+  if (homeworkResult.error || quizAssignmentResult.error || rosterResult.error) throw new Error('Class activities could not be loaded.');
+  const pendingRoster = (rosterResult.data ?? []).filter((entry) => entry.status === 'pending').map((entry) => ({
+    id: entry.id, name: `${entry.last_name}, ${entry.first_name}`, email: entry.email_normalized,
+    studentId: entry.student_id, courseSection: entry.course_section, createdAt: entry.created_at,
+  }));
+  // A claimed entry and the membership it created share (almost) the same timestamp.
+  const rosterClaimedAt = new Map((rosterResult.data ?? []).filter((entry) => entry.status === 'enrolled' && entry.claimed_user_id && entry.claimed_at)
+    .map((entry) => [entry.claimed_user_id as string, new Date(entry.claimed_at as string).getTime()]));
+  const joinedViaRoster = (learnerId: string, enrolledAt: string) => {
+    const claimedAt = rosterClaimedAt.get(learnerId);
+    return claimedAt !== undefined && Math.abs(new Date(enrolledAt).getTime() - claimedAt) < 5 * 60 * 1000;
+  };
 
   const [membershipResult, assignmentResult, activityResult, rubricResult, moduleResult, bypassResult, resourceResult] =
     await Promise.all([
@@ -168,17 +182,33 @@ export default async function ClassDetailPage({
 
           <TabsContent id="learners" value="learners" className="space-y-5">
             {classroom.status === "active" ? (
-              <section className="rounded-xl border border-border bg-card p-5">
-                <h2 className="font-semibold">Enroll a learner</h2>
-                <p className="mb-4 mt-1 text-sm text-muted-foreground">Find a registered learner by name or email, then select their profile. Previous enrollment records are retained.</p>
-                <EnrollLearnerForm classId={id} />
-              </section>
+              <div className="grid gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+                <section className="rounded-xl border border-border bg-card p-5">
+                  <h2 className="font-semibold">Enroll a learner</h2>
+                  <p className="mb-4 mt-1 text-sm text-muted-foreground">Find a registered learner by name or email, then select their profile. Previous enrollment records are retained.</p>
+                  <EnrollLearnerForm classId={id} />
+                </section>
+                <section className="flex flex-col rounded-xl border border-border bg-card p-5">
+                  <h2 className="font-semibold">Import a roster from Excel</h2>
+                  <p className="mb-4 mt-1 text-sm text-muted-foreground">Upload a class list (.xlsx or .xls). You review a preview before anything changes; new emails enroll automatically after the learner signs up.</p>
+                  <Button asChild variant="outline" className="mt-auto min-h-11 self-start">
+                    <Link href={`/classes/${id}/import`}><FileSpreadsheet className="mr-2 h-4 w-4" aria-hidden="true" />Import roster</Link>
+                  </Button>
+                </section>
+              </div>
             ) : null}
+            <section className="overflow-hidden rounded-xl border border-border bg-card" aria-labelledby="pending-roster-heading">
+              <div className="flex flex-col gap-1 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                <h2 id="pending-roster-heading" className="font-semibold">Pending roster <span className="tabular-nums text-muted-foreground">({pendingRoster.length})</span></h2>
+                <p className="text-xs text-muted-foreground">Enroll automatically when the learner signs up with the same email. Sign-up email is not verified yet, so review new joiners.</p>
+              </div>
+              <PendingRosterEntries classId={id} entries={pendingRoster} canManage={classroom.status === "active"} />
+            </section>
             <section className="overflow-hidden rounded-xl border border-border bg-card">
               <div className="border-b border-border px-5 py-4"><h2 className="font-semibold">Membership history</h2></div>
               {memberships.length ? <div className="divide-y divide-border">{memberships.map((membership) => {
                 const learner = profileById.get(membership.learner_id);
-                return <div key={membership.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm font-medium">{learner?.full_name ?? "Learner"}</p><p className="mt-0.5 text-xs text-muted-foreground">{learner?.email ?? "Email unavailable"} · enrolled {new Intl.DateTimeFormat("en-PH", { dateStyle: "medium" }).format(new Date(membership.enrolled_at))}</p>{membership.deactivation_reason ? <p className="mt-1 text-xs text-muted-foreground">Reason: {membership.deactivation_reason}</p> : null}</div><div className="flex flex-col items-end gap-2"><Badge variant={membership.status === "active" ? "secondary" : "outline"}>{membership.status}</Badge>{membership.status === "active" && classroom.status === "active" ? <div className="flex flex-col items-end gap-2"><DeactivateMembershipForm membershipId={membership.id} learnerName={learner?.full_name ?? "Learner"} /><DeactivateLearnerAccountForm learnerId={membership.learner_id} learnerName={learner?.full_name ?? "Learner"} /></div> : null}</div></div>;
+                return <div key={membership.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm font-medium">{learner?.full_name ?? "Learner"}</p><p className="mt-0.5 text-xs text-muted-foreground">{learner?.email ?? "Email unavailable"} · enrolled {new Intl.DateTimeFormat("en-PH", { dateStyle: "medium" }).format(new Date(membership.enrolled_at))}</p>{membership.deactivation_reason ? <p className="mt-1 text-xs text-muted-foreground">Reason: {membership.deactivation_reason}</p> : null}</div><div className="flex flex-col items-end gap-2"><div className="flex flex-wrap justify-end gap-1.5">{joinedViaRoster(membership.learner_id, membership.enrolled_at) ? <Badge variant="default">Joined via roster</Badge> : null}<Badge variant={membership.status === "active" ? "secondary" : "outline"}>{membership.status}</Badge></div>{membership.status === "active" && classroom.status === "active" ? <div className="flex flex-col items-end gap-2"><DeactivateMembershipForm membershipId={membership.id} learnerName={learner?.full_name ?? "Learner"} /><DeactivateLearnerAccountForm learnerId={membership.learner_id} learnerName={learner?.full_name ?? "Learner"} /></div> : null}</div></div>;
               })}</div> : <p className="px-5 py-10 text-center text-sm text-muted-foreground">No learner has been enrolled.</p>}
             </section>
           </TabsContent>
