@@ -1,6 +1,7 @@
-import { InstructorAnalyticsDashboard } from "@/components/analytics/InstructorAnalyticsDashboard";
+import { PerformanceAnalyticsWorkspace } from "@/components/analytics/performance/PerformanceAnalyticsWorkspace";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { getInstructorAnalytics, parseAnalyticsFilters } from "@/lib/analytics/server";
+import { loadAnalyticsView } from "@/lib/analytics/performance-server";
+import { parseAnalyticsQuery } from "@/lib/analytics/query";
 import { requireStaffProfile } from "@/lib/auth/server";
 
 export const dynamic = "force-dynamic";
@@ -10,14 +11,13 @@ export default async function AnalyticsPage({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  await requireStaffProfile(["instructor"]);
-  const filters = parseAnalyticsFilters(await searchParams);
-  const data = await getInstructorAnalytics(filters);
+  const profile = await requireStaffProfile(["instructor", "admin"]);
+  const query = parseAnalyticsQuery(await searchParams);
+  const result = await loadAnalyticsView(query);
 
   return (
     <DashboardLayout>
-      <InstructorAnalyticsDashboard data={data} filters={filters} />
+      <PerformanceAnalyticsWorkspace query={query} result={result} role={profile.role === "admin" ? "admin" : "instructor"} />
     </DashboardLayout>
   );
 }
-
