@@ -1,7 +1,7 @@
 -- Re-defense foundation: evaluator secrecy, official curriculum seed, shared
 -- progression tables and canonical catalog. Rollback-only.
 begin;
-select plan(24);
+select plan(25);
 
 -- WS0 security: learners can no longer read evaluator rules.
 select ok(not has_column_privilege('authenticated', 'public.activity_versions', 'evaluator_config', 'SELECT'),
@@ -50,6 +50,7 @@ select ok((select count(*) from public.mission_catalog_history) >= 9, 'previous 
 select ok(not has_table_privilege('authenticated', 'public.learner_module_unlocks', 'INSERT'), 'learners cannot grant themselves unlocks');
 select ok(not has_table_privilege('authenticated', 'public.practice_mission_runs', 'INSERT'), 'learners cannot write run metrics');
 select ok(not has_table_privilege('authenticated', 'public.learner_topic_progress', 'INSERT'), 'topic completion is server-recorded');
+select ok(not has_table_privilege('authenticated', 'public.learner_module_completions', 'INSERT'), 'module completion is server-recorded');
 select is((select count(*)::integer from pg_class c join pg_namespace n on n.oid = c.relnamespace
   where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity), 0, 'every public table keeps RLS enabled');
 
