@@ -7,6 +7,8 @@
 -- evaluation needs both class and quiz ownership. Rollback-only.
 begin;
 select plan(31);
+-- Learner calls identify as the 1.2.0 app (client version guard, 20261120100000).
+select set_config('request.headers', '{"x-bytequest-app-version":"1.2.0"}', true);
 
 create temp table activity_clock(at timestamptz);
 insert into activity_clock values ('2035-03-01 08:00:00+00');

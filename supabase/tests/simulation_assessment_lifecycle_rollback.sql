@@ -18,7 +18,9 @@
 --     {moduleCode:'LO1.1',moduleTitle:'Assemble computer hardware',pcCodes:['1.4']})))"
 -- (single quotes doubled for SQL).
 begin;
-select plan(29);
+select plan(31);
+-- Learner calls identify as the 1.2.0 app (client version guard, 20261120100000).
+select set_config('request.headers', '{"x-bytequest-app-version":"1.2.0"}', true);
 
 create temp table sim_ctx (
   admin uuid not null default gen_random_uuid(),
@@ -295,14 +297,27 @@ begin
       from sim_step s where s.name = v_run.steps[i];
     end loop;
     perform public.submit_attempt(v_attempt, gen_random_uuid(), 600);
-    -- Class practice is not evaluated on submit; the learner may request it.
-    if v_run.practice then
-      perform public.evaluate_submitted_attempt(v_attempt);
-    end if;
     update sim_run set attempt = v_attempt where name = v_run.name;
   end loop;
 end $$;
+-- A learner cannot run the evaluator and read the unreleased provisional
+-- result (final review SQL-A I2, 20261120100200).
+select throws_ok(format('select public.evaluate_submitted_attempt(%L)', (select attempt from sim_run where name = 'perfect')),
+  '42501', 'permission denied for function evaluate_submitted_attempt',
+  'a learner cannot evaluate an attempt and read its unreleased provisional result');
 reset role;
+-- Class practice is not evaluated on submit; the server evaluates it on
+-- request with the service role.
+grant select on sim_run to service_role;
+set local role service_role;
+select set_config('request.jwt.claim.role', 'service_role', true);
+select count(public.evaluate_submitted_attempt(attempt)) from sim_run where practice;
+reset role;
+select set_config('request.jwt.claim.role', '', true);
+select ok(not has_function_privilege('authenticated', 'public.evaluate_submitted_attempt(uuid)', 'EXECUTE')
+    and not has_function_privilege('anon', 'public.evaluate_submitted_attempt(uuid)', 'EXECUTE')
+    and has_function_privilege('service_role', 'public.evaluate_submitted_attempt(uuid)', 'EXECUTE'),
+  'only the service role (and submit_attempt) can run the provisional evaluation');
 
 create function pg_temp.observation(p_run text, p_code text)
 returns text language sql stable as $$
