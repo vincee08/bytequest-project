@@ -42,7 +42,7 @@ export async function loadCurriculumWorkspace(actor: Actor): Promise<CurriculumW
   }
 
   return {
-    role: actor.role,
+    role: actor.role === 'admin' ? 'admin' : 'instructor',
     actorId: actor.id,
     cocs: cocs.data ?? [],
     modules: modules.data ?? [],
