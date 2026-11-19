@@ -4,7 +4,8 @@ select is((select count(*)::integer from public.practice_mission_contracts),20,'
 select is((select count(*)::integer from public.practice_mission_contracts c
   where left(c.mission_id,4) in ('coc1','coc2','coc3')
   and c.mission_id <> 'coc1_m1'
-  and c.version='css-sag-20261011-v2'
+  and (c.version='css-sag-20261011-v2'
+    or c.mission_id='coc1_m2' and c.version='css-assembly-20261119-v3')
   and exists(select 1 from jsonb_array_elements(c.definition->'phases') p
     where p->'presentation'->'equipment'->'placement'->'items' is not null)
 ),14,'fourteen practical COC1-COC3 contracts retain equipment placement');

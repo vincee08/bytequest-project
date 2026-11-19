@@ -3,6 +3,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:uuid/uuid.dart';
 import '../core/config/supabase_config.dart';
+import '../data/mission_content_data.dart';
+import '../data/mission_simulation_definitions.dart';
 import '../models/assigned_activity_model.dart';
 import '../models/attempt_history_model.dart';
 import '../screens/simulation/runtime/mission_evidence_gateway.dart';
@@ -14,6 +16,15 @@ typedef AuthoritativeAssessmentRpc = Future<dynamic> Function(
 );
 typedef AuthoritativeAssessmentActionsReader
     = Future<List<Map<String, dynamic>>> Function();
+
+/// The simulation assessment was published from a different definition
+/// version than the one installed; the learner must update the app.
+class AssessmentUpdateRequiredException implements Exception {
+  const AssessmentUpdateRequiredException();
+
+  @override
+  String toString() => MissionContentData.assessmentUpdateRequired;
+}
 
 class AttemptSession {
   final String attemptId;
@@ -174,9 +185,31 @@ class AuthoritativeAssessmentService implements MissionEvidenceTransport {
     return [...assignments, ...bypassed];
   }
 
+  /// True when [payload] is a simulation-based assessment published from a
+  /// contract version this app does not have (no attempt may start).
+  static bool requiresAppUpdate(Map<String, dynamic> payload,
+      {String? missionCode}) {
+    if (payload['mode'] != 'assessment' ||
+        payload['simulation_template'] != null) {
+      return false;
+    }
+    final mission = payload['mission_id'] as String? ?? missionCode;
+    final version = payload['definition_version'];
+    if (mission == null || version is! String) return true;
+    try {
+      return MissionSimulationDefinitions.contractVersion(mission) != version;
+    } on ArgumentError {
+      return true;
+    }
+  }
+
   Future<AttemptSession> startAttempt(AssignedActivity assignment) async {
     if (assignment.isBypassAccess) {
       throw StateError('Bypassed content is practice-only and has no attempt.');
+    }
+    if (requiresAppUpdate(assignment.learnerPayload,
+        missionCode: assignment.missionCode)) {
+      throw const AssessmentUpdateRequiredException();
     }
 
     final preferences = await SharedPreferences.getInstance();

@@ -23,6 +23,7 @@ final class MissionRuntimeController {
     MissionRuntimeActionReducer? restoreReducer,
     ClientActionIdFactory? clientActionIdFactory,
     MissionRuntimeClock? clock,
+    String? unstampedDefinitionVersion,
   })  : _userId = userId,
         _initialState = initialState,
         _state = initialState,
@@ -31,10 +32,25 @@ final class MissionRuntimeController {
         _submissionPhaseIds = Set<String>.unmodifiable(submissionPhaseIds),
         _restoreReducer = restoreReducer,
         _clientActionIdFactory = clientActionIdFactory ?? const Uuid().v4,
-        _clock = clock ?? DateTime.now;
+        _clock = clock ?? DateTime.now,
+        _unstampedDefinitionVersion = unstampedDefinitionVersion;
+
+  static const progressDiscardedActionType = 'practice_progress_discarded';
 
   final String _userId;
   final MissionRuntimeState _initialState;
+
+  /// Contract version assumed for practice progress saved before snapshots
+  /// and actions carried [MissionRuntimeState.definitionVersion]; null means
+  /// such progress belongs to the current version.
+  final String? _unstampedDefinitionVersion;
+  bool _definitionChanged = false;
+  MissionRuntimeState? _staleSnapshot;
+
+  /// True after [restore] found practice progress saved for another
+  /// definition version. Nothing of it was restored; call
+  /// [startNewDefinitionVersion] to begin the current version.
+  bool get definitionChanged => _definitionChanged;
   final MissionRuntimeStore _store;
   final MissionEvidenceGateway _evidenceGateway;
   final Set<String> _submissionPhaseIds;
@@ -66,16 +82,98 @@ final class MissionRuntimeController {
     Map<String, dynamic> value = const {},
     required MissionRuntimeTransition transition,
   }) {
+    final version = _initialState.definitionVersion;
     final action = MissionEvidenceAction(
       clientActionId: _clientActionIdFactory(),
       missionId: _state.missionId,
       phaseId: phaseId,
       actionType: actionType,
       target: target,
-      value: value,
+      value: version == null || value.containsKey('definition_version')
+          ? value
+          : {...value, 'definition_version': version},
       occurredAt: _clock(),
     );
     return _enqueue(() => _dispatchNow(action, transition));
+  }
+
+  /// Practice progress saved for another definition version (a snapshot or
+  /// acknowledged actions after the last discard marker) is never replayed
+  /// into this version.
+  bool _isOtherDefinition(MissionRuntimeState? local,
+      Iterable<AcknowledgedMissionEvidenceAction> acknowledged) {
+    final current = _initialState.definitionVersion;
+    if (current == null || _initialState.mode != MissionRuntimeMode.practice) {
+      return false;
+    }
+    String versionOf(Object? stamped) =>
+        stamped is String ? stamped : _unstampedDefinitionVersion ?? current;
+    return local != null && versionOf(local.definitionVersion) != current ||
+        acknowledged.any((record) =>
+            versionOf(record.action.value['definition_version']) != current);
+  }
+
+  /// Begins the current definition after [restore] reported
+  /// [definitionChanged]. Unsent actions of the earlier version are sent
+  /// first and a `practice_progress_discarded` marker follows, so the server
+  /// keeps every earlier action for audit but no longer replays it into the
+  /// learner's run. The local snapshot is then cleared.
+  Future<void> startNewDefinitionVersion() {
+    return _enqueue(() async {
+      if (!_definitionChanged) return;
+      final stale = _staleSnapshot;
+      if (stale != null) {
+        for (final action in stale.pendingEvidence) {
+          if (action.missionId == _state.missionId) {
+            await _evidenceGateway.record(action);
+          }
+        }
+      }
+      final version = _initialState.definitionVersion;
+      await _evidenceGateway.record(MissionEvidenceAction(
+        clientActionId: _clientActionIdFactory(),
+        missionId: _state.missionId,
+        phaseId: _initialState.currentPhaseId ?? '${_state.missionId}_p1',
+        actionType: progressDiscardedActionType,
+        value: {
+          'reason': 'definition_updated',
+          if (version != null) 'definition_version': version,
+        },
+        occurredAt: _clock(),
+      ));
+      final cleared = await _store.clearMissionRuntime(
+        userId: _userId,
+        missionId: _state.missionId,
+        mode: _state.mode,
+        assessmentAttemptId: _state.assessmentAttemptId,
+      );
+      if (!cleared) {
+        throw StateError('Mission runtime progress could not be cleared.');
+      }
+      _state = _initialState;
+      _staleSnapshot = null;
+      _definitionChanged = false;
+      _failedEvidenceIds.clear();
+      // Persist the new version stamp, so the restart happens only once even
+      // when the next open cannot reach the server.
+      if (!await _saveState()) {
+        throw StateError('Mission runtime progress could not be saved.');
+      }
+    });
+  }
+
+  /// In practice mode, the actions after the latest
+  /// `practice_progress_discarded` marker. The practice transport already
+  /// drops earlier actions; a class-practice attempt transport returns its
+  /// whole timeline, so the marker is honoured here as well. Assessment never
+  /// honours a marker: the server evaluates every recorded action, and the
+  /// app restores them all.
+  List<AcknowledgedMissionEvidenceAction> _afterLatestDiscard(
+      List<AcknowledgedMissionEvidenceAction> records) {
+    if (_initialState.mode != MissionRuntimeMode.practice) return records;
+    final marker = records.lastIndexWhere(
+        (record) => record.action.actionType == progressDiscardedActionType);
+    return marker < 0 ? records : records.sublist(marker + 1);
   }
 
   Future<void> restore() {
@@ -98,18 +196,34 @@ final class MissionRuntimeController {
         }
       }
 
+      _definitionChanged = false;
+      _staleSnapshot = null;
       late final List<AcknowledgedMissionEvidenceAction> acknowledged;
       try {
         final serverActions = await _evidenceGateway.readAcknowledgedActions();
         // Assessment transports read the complete active-attempt timeline.
         // Reconcile only this mission; other mission actions must not reach
         // this mission's reducer.
-        acknowledged = serverActions
+        acknowledged = _afterLatestDiscard(serverActions
             .where((record) => record.action.missionId == _state.missionId)
-            .toList(growable: false);
+            .toList(growable: false));
       } catch (_) {
         if (local == null) rethrow;
+        if (_isOtherDefinition(local, const [])) {
+          _definitionChanged = true;
+          _staleSnapshot = local;
+          _state = _initialState;
+          return;
+        }
         _state = local;
+        _failedEvidenceIds.clear();
+        return;
+      }
+      if (_isOtherDefinition(local, acknowledged)) {
+        // Progress of an earlier version: restore nothing of it.
+        _definitionChanged = true;
+        _staleSnapshot = local;
+        _state = _initialState;
         _failedEvidenceIds.clear();
         return;
       }

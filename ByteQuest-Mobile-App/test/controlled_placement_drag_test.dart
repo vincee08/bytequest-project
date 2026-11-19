@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'support/equipment_practice_driver.dart';
+import 'support/legacy_assembly_fixture.dart';
 
 void main() {
   for (final installation in [true, false]) {
@@ -15,8 +16,9 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      final definition = MissionSimulationDefinitions.byId(
-          installation ? 'coc1_m2' : 'coc1_m4');
+      final definition = installation
+          ? legacyAssemblyDefinition
+          : MissionSimulationDefinitions.byId('coc1_m4');
       final driver = EquipmentPracticeDriver(definition);
       for (final phase in definition.phases.take(installation ? 1 : 2)) {
         driver.complete(phase);
@@ -95,7 +97,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.resetPhysicalSize);
       addTearDown(tester.view.resetDevicePixelRatio);
-      final definition = MissionSimulationDefinitions.byId('coc1_m2');
+      final definition = legacyAssemblyDefinition;
       final driver = EquipmentPracticeDriver(definition);
       driver.complete(definition.phases.first);
       final phase = definition.phases[1];

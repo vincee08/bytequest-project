@@ -114,6 +114,7 @@ final class MissionRuntimeActionReducer {
     'sequence_reordered',
     'match_created',
     'placement_attempted',
+    'placement_removed',
     'diagnostic_action',
     'correction_applied',
     'retest_requested',
@@ -210,6 +211,12 @@ final class MissionRuntimeActionReducer {
           ...state.placements,
           item: destination,
         });
+      case 'placement_removed':
+        final item = value['item_id'] as String?;
+        if (item == null || value['compatible'] != true) return state;
+        return state.copyWith(
+          placements: Map<String, String>.from(state.placements)..remove(item),
+        );
       case 'diagnostic_action':
       case 'test_completed':
         final factId = value['reveals_fact_id'] as String?;

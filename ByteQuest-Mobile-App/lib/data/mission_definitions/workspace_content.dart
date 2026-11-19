@@ -11,10 +11,6 @@ Map<String, dynamic> _practiceWorkspacePanel(String missionId) {
         ('ram', 'Memory module', 'Memory inspection mat'),
         ('psu', 'Power supply', 'Isolated electrical bench'),
       ],
-    'coc1_m2' => const [
-        ('service_chassis', 'Empty computer chassis', 'Assembly bench'),
-        ('esd_mat', 'Anti-static mat', 'Grounded work area'),
-      ],
     'coc1_m3' => const [
         ('system_unit', 'Workstation', 'OS installation bench'),
         ('boot_usb', 'Bootable USB device', 'Installation media station'),

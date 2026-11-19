@@ -39,6 +39,10 @@ class SimulationScene extends StatefulWidget {
   final bool highlightObjects;
   final String? highlightObjectId;
 
+  /// Scenes that render their own accessible part list (the assembly bench)
+  /// hide the object-list button of the toolbar.
+  final bool showObjectsButton;
+
   const SimulationScene({
     super.key,
     this.scene,
@@ -60,6 +64,7 @@ class SimulationScene extends StatefulWidget {
     this.compactToolbar = false,
     this.highlightObjects = false,
     this.highlightObjectId,
+    this.showObjectsButton = true,
   }) : assert(
           scene != null || profile != null,
           'Provide either a runtime scene definition or a legacy profile.',
@@ -212,6 +217,7 @@ class _SimulationSceneState extends State<SimulationScene> {
                   title: resolved.title,
                   interactionHint: widget.interactionHint,
                   compact: widget.compactToolbar,
+                  showObjects: widget.showObjectsButton,
                   highlightObjects: widget.highlightObjects,
                   onShowObjects: () => _showObjectPicker(resolved),
                   onFit: _fitView,
@@ -279,6 +285,7 @@ class _SceneToolbar extends StatelessWidget {
   final String? interactionHint;
   final bool compact;
   final bool highlightObjects;
+  final bool showObjects;
   final VoidCallback onShowObjects;
   final VoidCallback onFit;
   final VoidCallback onZoomOut;
@@ -289,6 +296,7 @@ class _SceneToolbar extends StatelessWidget {
     this.interactionHint,
     this.compact = false,
     this.highlightObjects = false,
+    this.showObjects = true,
     required this.onShowObjects,
     required this.onFit,
     required this.onZoomOut,
@@ -324,7 +332,9 @@ class _SceneToolbar extends StatelessWidget {
               alignment: WrapAlignment.end,
               runAlignment: WrapAlignment.end,
               children: [
-                if (compact)
+                if (!showObjects)
+                  const SizedBox.shrink()
+                else if (compact)
                   IconButton(
                     key: const ValueKey('simulation-objects-button'),
                     tooltip: MissionContentData.workspaceObjectsLabel,
