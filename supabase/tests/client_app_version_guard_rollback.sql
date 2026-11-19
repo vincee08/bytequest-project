@@ -7,6 +7,9 @@
 -- Form-based packages and objective-only quizzes are unchanged. Rollback-only.
 begin;
 select plan(33);
+-- The suite's own minimum (rolled back), whatever the database is configured with.
+insert into public.app_release_config(key, value) values ('min_supported_app_version', '1.2.0')
+on conflict (key) do update set value = excluded.value;
 
 create temporary table vg as select
   gen_random_uuid() admin_user, gen_random_uuid() teacher, gen_random_uuid() learner, gen_random_uuid() learner2,
