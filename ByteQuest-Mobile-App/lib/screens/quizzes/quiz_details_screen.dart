@@ -5,24 +5,34 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/learner_ui.dart';
 import '../../models/learner_quiz_model.dart';
 import '../../data/mission_content_data.dart';
+import '../../data/quiz_content_data.dart';
 import '../../services/learner_quiz_service.dart';
+import 'quiz_result_screen.dart';
+import 'quiz_status_label.dart';
 import 'quiz_taking_screen.dart';
 
 class QuizDetailsScreen extends StatefulWidget {
-  const QuizDetailsScreen({super.key, required this.quiz});
+  const QuizDetailsScreen({super.key, required this.quiz, this.service});
   final LearnerQuizSummary quiz;
+  final LearnerQuizService? service;
 
   @override
   State<QuizDetailsScreen> createState() => _QuizDetailsScreenState();
 }
 
 class _QuizDetailsScreenState extends State<QuizDetailsScreen> {
-  final _service = LearnerQuizService();
+  late final LearnerQuizService _service =
+      widget.service ?? LearnerQuizService();
   bool _starting = false;
 
   @override
   Widget build(BuildContext context) {
     final quiz = widget.quiz;
+    final typeLabel = quizTypeLabel(quiz.quizType);
+    final canStart = quiz.isAvailable &&
+        !_starting &&
+        (quiz.state == LearnerQuizState.available ||
+            quiz.state == LearnerQuizState.inProgress);
     return Scaffold(
       backgroundColor: AppTheme.backgroundOffWhite,
       body: SafeArea(
@@ -30,12 +40,12 @@ class _QuizDetailsScreenState extends State<QuizDetailsScreen> {
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
           children: [
             LearnerPageHeader(
-              title: 'Quiz briefing',
+              title: QuizContentData.briefingTitle,
               subtitle: quiz.classTitle,
               padding: EdgeInsets.zero,
               trailing: IconButton.filledTonal(
                 onPressed: () => Navigator.pop(context),
-                tooltip: 'Close quiz briefing',
+                tooltip: QuizContentData.briefingClose,
                 icon: const Icon(Icons.close_rounded),
               ),
             ),
@@ -68,12 +78,29 @@ class _QuizDetailsScreenState extends State<QuizDetailsScreen> {
                     children: [
                       _Fact(
                         icon: Icons.format_list_numbered_rounded,
-                        label: '${quiz.questionCount} questions',
+                        label:
+                            QuizContentData.questionsCount(quiz.questionCount),
                       ),
                       if (quiz.cocCode != null)
                         _Fact(
                           icon: Icons.route_outlined,
-                          label: quiz.cocCode!.toUpperCase(),
+                          label: [
+                            quiz.cocCode!.toUpperCase(),
+                            ...quiz.moduleCodes,
+                          ].join(' · '),
+                        ),
+                      if (typeLabel != null)
+                        _Fact(icon: Icons.category_outlined, label: typeLabel),
+                      if (quiz.hasEssays)
+                        _Fact(
+                          icon: Icons.edit_note_rounded,
+                          label: QuizContentData.essaysCount(quiz.essayCount),
+                        ),
+                      if (quiz.timeLimitMinutes != null)
+                        _Fact(
+                          icon: Icons.timer_outlined,
+                          label:
+                              QuizContentData.timeLimit(quiz.timeLimitMinutes!),
                         ),
                       if (quiz.dueAt != null)
                         _Fact(
@@ -86,9 +113,16 @@ class _QuizDetailsScreenState extends State<QuizDetailsScreen> {
                 ],
               ),
             ),
+            if (quiz.focus?.isNotEmpty ?? false) ...[
+              const SizedBox(height: 20),
+              const LearnerSectionHeader(title: QuizContentData.focusHeading),
+              const SizedBox(height: 10),
+              LearnerSurface(
+                  child: Text(quiz.focus!, style: AppTheme.bodyMedium)),
+            ],
             if (quiz.instructions?.isNotEmpty ?? false) ...[
               const SizedBox(height: 20),
-              const LearnerSectionHeader(title: 'Instructions'),
+              const LearnerSectionHeader(title: QuizContentData.instructions),
               const SizedBox(height: 10),
               LearnerSurface(
                 child: Text(quiz.instructions!, style: AppTheme.bodyMedium),
@@ -97,40 +131,70 @@ class _QuizDetailsScreenState extends State<QuizDetailsScreen> {
             const SizedBox(height: 20),
             LearnerSurface(
               color: AppTheme.backgroundPaleBlue,
-              child: Text(
-                'Your answers are saved as you continue. The database evaluates the published answer contract only after you confirm submission. Quiz results never change competency status.',
-                style: AppTheme.bodySmall.copyWith(color: AppTheme.deepBlue),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    QuizContentData.briefingAnswersSaved,
+                    style:
+                        AppTheme.bodySmall.copyWith(color: AppTheme.deepBlue),
+                  ),
+                  if (quiz.timeLimitMinutes != null || quiz.dueAt != null) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      quiz.timeLimitMinutes != null
+                          ? QuizContentData.timeLimitBriefing
+                          : QuizContentData.deadlineAutoSubmitBriefing,
+                      style:
+                          AppTheme.bodySmall.copyWith(color: AppTheme.deepBlue),
+                    ),
+                  ],
+                  if (quiz.usesInstructorRelease) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      QuizContentData.briefingInstructorRelease,
+                      style:
+                          AppTheme.bodySmall.copyWith(color: AppTheme.deepBlue),
+                    ),
+                  ],
+                ],
               ),
             ),
             const SizedBox(height: 24),
-            FilledButton.icon(
-              onPressed: !quiz.isAvailable ||
-                      _starting ||
-                      (quiz.state != LearnerQuizState.available &&
-                          quiz.state != LearnerQuizState.inProgress)
-                  ? null
-                  : _start,
-              icon: _starting
-                  ? const SizedBox.square(
-                      dimension: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Icon(quiz.state == LearnerQuizState.inProgress
-                      ? Icons.play_arrow_rounded
-                      : Icons.rocket_launch_outlined),
-              label: Text(_starting
-                  ? 'Opening quiz…'
-                  : quiz.state == LearnerQuizState.completed ||
-                          quiz.state == LearnerQuizState.submitted
-                      ? MissionContentData.quizAttemptUsed
-                      : quiz.state == LearnerQuizState.inProgress
-                          ? MissionContentData.quizAttemptInProgress
-                          : quiz.isAvailable
-                              ? MissionContentData.quizAttemptAvailable
-                              : quiz.closedReason == 'deadline_passed'
-                                  ? MissionContentData.quizClosedDeadline
-                                  : MissionContentData.quizAttemptUnavailable),
-            ),
+            if (quizOpensResult(quiz))
+              FilledButton.icon(
+                onPressed: () => Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => QuizResultScreen(
+                        attemptId: quiz.attemptId!, service: _service),
+                  ),
+                ),
+                icon: const Icon(Icons.fact_check_outlined),
+                label: Text(quiz.awaitingEvaluation
+                    ? QuizContentData.viewSubmission
+                    : QuizContentData.viewResult),
+              )
+            else
+              FilledButton.icon(
+                onPressed: canStart ? _start : null,
+                icon: _starting
+                    ? const SizedBox.square(
+                        dimension: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(quiz.state == LearnerQuizState.inProgress
+                        ? Icons.play_arrow_rounded
+                        : Icons.rocket_launch_outlined),
+                label: Text(_starting
+                    ? QuizContentData.openingQuiz
+                    : quizStatusLabel(quiz)),
+              ),
+            if (quizOpensResult(quiz)) ...[
+              const SizedBox(height: 10),
+              Text(quizStatusLabel(quiz),
+                  textAlign: TextAlign.center, style: AppTheme.labelMedium),
+            ],
           ],
         ),
       ),
@@ -145,17 +209,14 @@ class _QuizDetailsScreenState extends State<QuizDetailsScreen> {
       await Navigator.pushReplacement(
         context,
         MaterialPageRoute<void>(
-          builder: (_) => QuizTakingScreen(attempt: attempt),
+          builder: (_) => QuizTakingScreen(attempt: attempt, service: _service),
         ),
       );
     } catch (error) {
       debugPrint('Quiz start failed: $error');
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-              'This quiz could not be opened. Check its availability and try again.'),
-        ),
+        const SnackBar(content: Text(QuizContentData.openFailed)),
       );
     } finally {
       if (mounted) setState(() => _starting = false);
