@@ -34,7 +34,7 @@ end $$;
 -- Instructor publication still requires review and persists separate quiz assignments.
 select set_config('request.jwt.claim.sub',(select teacher::text from activity_test),true);
 set local role authenticated;
-update activity_test set quiz=(public.create_instructor_quiz('Deadline rollback quiz','Networking')).id;
+update activity_test set quiz=(public.create_instructor_quiz('Deadline rollback quiz','Networking',p_coc_module_id=>(select id from public.coc_modules where coc_code='coc2'),p_focus=>'Identify network devices and their roles')).id;
 update activity_test set version=(select id from public.quiz_versions where quiz_id=activity_test.quiz);
 update activity_test set item=(public.upsert_quiz_item(version,'true_false','A router connects networks.','[]','"True"')).id;
 select public.review_quiz_item(item,'approved') from activity_test;
