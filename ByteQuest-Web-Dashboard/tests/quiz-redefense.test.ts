@@ -363,5 +363,7 @@ test("evaluation requests are validated before reaching the database", () => {
   });
   assert.equal(evaluationError("QUIZ_RESULT_NOT_FINALIZED").status, 409);
   assert.equal(evaluationError("QUIZ_EVALUATION_SCOPE_DENIED").status, 403);
+  assert.equal(evaluationError("QUIZ_ESSAY_NOT_ANSWERED").status, 409);
+  assert.match(evaluationError("QUIZ_ESSAY_NOT_ANSWERED").error, /scores zero/);
   assert.equal(evaluationError("unexpected").status, 503);
 });
