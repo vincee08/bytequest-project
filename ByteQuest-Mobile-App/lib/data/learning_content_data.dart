@@ -58,6 +58,13 @@ abstract final class LearningContentData {
   static const noMissions =
       'No practice mission for this module yet. Complete its lessons to progress.';
   static const openPractice = 'Practice this mission';
+  static const moduleQuizzesTitle = 'Class quizzes for this module';
+  static const noModuleQuizzes =
+      'No class quiz from your instructor is linked to this module yet.';
+  static const moduleQuizzesFailed =
+      'Class quizzes could not be loaded. Pull down to try again.';
+  static String moduleQuizSemantics(String title, String status) =>
+      '$title. $status. Double tap to open.';
   static const lockedModuleBanner = 'This module is locked';
   static const lessonCompleted = 'Lesson completed';
   static const lessonOpen = 'Open lesson';
