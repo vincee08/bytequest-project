@@ -9,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/config/supabase_config.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/learner_ui.dart';
+import '../../data/homework_content_data.dart';
 import '../../data/mission_content_data.dart';
 import '../../models/homework_model.dart';
 import '../../services/homework_service.dart';
@@ -145,11 +146,111 @@ class _HomeworkDetailsScreenState extends State<HomeworkDetailsScreen>
                             MissionContentData.homeworkLateBy(
                                 latenessDuration(submission.latenessSeconds)),
                             style: AppTheme.labelMedium)),
+                  Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(HomeworkContentData.maxScore(h.maxScore),
+                          style: AppTheme.labelMedium)),
+                  if (h.cocCode != null ||
+                      h.missionCode != null ||
+                      h.moduleCode != null) ...[
+                    const SizedBox(height: 20),
+                    const LearnerSectionHeader(
+                        title: HomeworkContentData.competencyTitle),
+                    const SizedBox(height: 10),
+                    LearnerSurface(
+                        color: AppTheme.softBlueAccent,
+                        child: Text(h.competencyLine,
+                            style: AppTheme.labelLarge
+                                .copyWith(color: AppTheme.navy))),
+                  ],
                   const SizedBox(height: 20),
                   const LearnerSectionHeader(
                       title: MissionContentData.homeworkInstructions),
                   const SizedBox(height: 10),
                   LearnerSurface(child: SelectableText(h.instructions)),
+                  if (h.learningObjectives.isNotEmpty) ...[
+                    const SizedBox(height: 20),
+                    const LearnerSectionHeader(
+                        title: HomeworkContentData.objectivesTitle),
+                    const SizedBox(height: 10),
+                    LearnerSurface(
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                          for (final objective in h.learningObjectives)
+                            Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 4),
+                                child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Padding(
+                                          padding: EdgeInsets.only(top: 2),
+                                          child: Icon(
+                                              Icons.check_circle_outline,
+                                              size: 18,
+                                              color: AppTheme.primaryBlue)),
+                                      const SizedBox(width: 8),
+                                      Expanded(child: Text(objective)),
+                                    ])),
+                        ])),
+                  ],
+                  if (h.criteria.isNotEmpty) ...[
+                  const SizedBox(height: 20),
+                  const LearnerSectionHeader(
+                      title: HomeworkContentData.criteriaTitle),
+                  const SizedBox(height: 10),
+                  LearnerSurface(
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                        for (final criterion in h.criteria)
+                          Semantics(
+                              container: true,
+                              label: HomeworkContentData.criterionSemantics(
+                                  criterion.criterion, criterion.maxPoints),
+                              child: ExcludeSemantics(
+                                  child: Padding(
+                                      padding: const EdgeInsets.only(bottom: 12),
+                                      child: Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Expanded(
+                                                child: Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    children: [
+                                                  Text(criterion.criterion,
+                                                      style:
+                                                          AppTheme.labelLarge),
+                                                  if (criterion.description !=
+                                                      null)
+                                                    Text(
+                                                        criterion.description!,
+                                                        style:
+                                                            AppTheme.bodySmall),
+                                                ])),
+                                            const SizedBox(width: 12),
+                                            Flexible(
+                                                child: Text(
+                                                    HomeworkContentData.points(
+                                                        criterion.maxPoints),
+                                                    textAlign: TextAlign.end,
+                                                    style:
+                                                        AppTheme.labelMedium)),
+                                          ])))),
+                      ])),
+                  ],
+                  if (h.submissionRequirements != null) ...[
+                    const SizedBox(height: 20),
+                    const LearnerSectionHeader(
+                        title: HomeworkContentData.requirementsTitle),
+                    const SizedBox(height: 10),
+                    LearnerSurface(
+                        child: SelectableText(h.submissionRequirements!)),
+                  ],
                   if (h.instructionFiles.isNotEmpty) ...[
                     const SizedBox(height: 20),
                     const LearnerSectionHeader(
@@ -179,19 +280,59 @@ class _HomeworkDetailsScreenState extends State<HomeworkDetailsScreen>
                             ? MissionContentData.homeworkNoAnswer
                             : submission.answer)),
                     ...h.answerFiles.map(_fileButton),
-                    if (submission.status == 'graded') ...[
+                    if (submission.isBeingEvaluated) ...[
+                      const SizedBox(height: 20),
+                      Semantics(
+                          liveRegion: true,
+                          child: LearnerSurface(
+                              color: AppTheme.softBlueAccent,
+                              child: Text(HomeworkContentData.beingEvaluatedHelp,
+                                  style: AppTheme.bodyMedium))),
+                    ],
+                    // Score and feedback exist only for a released result.
+                    if (submission.isReleased) ...[
                       const SizedBox(height: 20),
                       const LearnerSectionHeader(
-                          title: MissionContentData.homeworkFeedback),
-                      if (submission.feedback?.isNotEmpty ?? false)
-                        Padding(
-                            padding: const EdgeInsets.only(top: 10),
-                            child: SelectableText(submission.feedback!)),
+                          title: HomeworkContentData.resultTitle),
                       if (submission.score != null)
                         Padding(
                             padding: const EdgeInsets.only(top: 10),
-                            child: Text(MissionContentData.homeworkScore(
-                                submission.score!)))
+                            child: Text(
+                                HomeworkContentData.score(
+                                    submission.score!, h.maxScore),
+                                style: AppTheme.titleLarge)),
+                      if (submission.criterionScores.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Text(HomeworkContentData.resultCriteriaTitle,
+                            style: AppTheme.labelLarge),
+                        for (final criterion in h.criteria)
+                          if (submission.criterionScores[criterion.id] != null)
+                            Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Expanded(child: Text(criterion.criterion)),
+                                      const SizedBox(width: 12),
+                                      Flexible(
+                                          child: Text(
+                                              HomeworkContentData.criterionScore(
+                                                  submission.criterionScores[
+                                                      criterion.id]!,
+                                                  criterion.maxPoints),
+                                              textAlign: TextAlign.end,
+                                              style: AppTheme.labelLarge)),
+                                    ])),
+                      ],
+                      if (submission.feedback?.isNotEmpty ?? false) ...[
+                        const SizedBox(height: 16),
+                        const LearnerSectionHeader(
+                            title: MissionContentData.homeworkFeedback),
+                        Padding(
+                            padding: const EdgeInsets.only(top: 10),
+                            child: SelectableText(submission.feedback!)),
+                      ],
                     ],
                   ] else ...[
                     const Text(MissionContentData.homeworkOutside),

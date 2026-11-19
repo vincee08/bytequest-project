@@ -1,32 +1,33 @@
 import 'package:flutter/material.dart';
-import 'dart:async';
 
 import '../../core/theme/app_theme.dart';
 import '../../core/config/supabase_config.dart';
 import '../../core/widgets/learner_ui.dart';
 import '../../core/widgets/learner_navigation_shell.dart';
+import '../../data/learning_content_data.dart';
 import '../../data/missions_data.dart';
 import '../../data/mission_content_data.dart';
-import '../../models/practice_progress_model.dart';
-import '../../services/practice_progress_service.dart';
-import '../../widgets/practice_progress_panel.dart';
-import '../../widgets/practice_coc_session_panel.dart';
 import '../../models/assigned_activity_model.dart';
 import '../../models/learning_resource_model.dart';
 import '../../models/mission_model.dart';
 import '../../services/authoritative_assessment_service.dart';
 import '../../services/learning_resource_service.dart';
 import '../../services/learner_realtime_coordinator.dart';
+import '../practice/practice_launch.dart';
 import '../simulation/mission_launcher.dart';
-import '../courses/courses_screen.dart';
 import '../quizzes/learner_quizzes_screen.dart';
 import '../resources/resource_viewer_screen.dart';
 import 'class_details_screen.dart';
 
-/// Shared learning hub. Assigned content is authoritative; the retained local
-/// catalog is explicitly practice-only until mapped to an approved source.
+/// Class work opened from Home: assigned Tasks, Classes and Files. Assigned
+/// content is authoritative. Practice missions live in the Practice tab.
 class MissionsScreen extends StatefulWidget {
-  const MissionsScreen({super.key});
+  const MissionsScreen({super.key, this.initialTab = 0});
+
+  /// 0 Tasks, 1 Classes, 2 Files.
+  final int initialTab;
+
+  static const tabCount = 3;
 
   @override
   State<MissionsScreen> createState() => _MissionsScreenState();
@@ -45,30 +46,6 @@ class _MissionsScreenState extends State<MissionsScreen>
   bool _loading = true;
   String? _error;
   String? _startingAssignmentId;
-  List<PracticeCocProgress> _practiceProgress = const [];
-  String? _practiceError;
-  bool _practiceLoading = true;
-  String? _selectedPracticeMissionId;
-  String? _expandedPracticeMissionId;
-  Future<void> _loadPracticeProgress() async {
-    if (mounted) setState(() => _practiceLoading = true);
-    try {
-      final progress = await PracticeProgressService().getProgress();
-      if (mounted)
-        setState(() {
-          _practiceProgress = progress;
-          _practiceError = null;
-          _practiceLoading = false;
-        });
-    } catch (_) {
-      if (mounted)
-        setState(() {
-          _practiceProgress = const [];
-          _practiceError = MissionContentData.practiceProgressUnavailable;
-          _practiceLoading = false;
-        });
-    }
-  }
 
   @override
   Set<LearnerRealtimeDomain> get realtimeDomains => const {
@@ -78,16 +55,16 @@ class _MissionsScreenState extends State<MissionsScreen>
       };
 
   @override
-  Future<void> refreshFromRealtime() async {
-    await Future.wait([_loadAssignments(), _loadPracticeProgress()]);
-  }
+  Future<void> refreshFromRealtime() => _loadAssignments();
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 4, vsync: this);
+    _tabController = TabController(
+        length: MissionsScreen.tabCount,
+        initialIndex: widget.initialTab.clamp(0, MissionsScreen.tabCount - 1),
+        vsync: this);
     _loadAssignments();
-    unawaited(_loadPracticeProgress());
   }
 
   @override
@@ -187,18 +164,21 @@ class _MissionsScreenState extends State<MissionsScreen>
     } catch (error) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unable to start this assignment: $error')),
+        SnackBar(
+            content: Text(error is AssessmentUpdateRequiredException
+                ? MissionContentData.assessmentUpdateRequired
+                : 'Unable to start this assignment: $error')),
       );
     } finally {
       if (mounted) setState(() => _startingAssignmentId = null);
     }
   }
 
+  /// Instructor-unlocked practice goes through the same server access check
+  /// as the Practice tab (an active COC bypass unlocks the module there).
   Future<void> _launchPractice(Mission mission) async {
-    _assessmentService.abandonLocalSession();
-    setState(() => _selectedPracticeMissionId = mission.id);
-    await MissionLauncher.launch(context, mission);
-    await _loadPracticeProgress();
+    await PracticeMissionLauncher.open(context, mission.id);
+    if (mounted) await _loadAssignments();
   }
 
   Future<void> _openResource(LearningResource resource) async {
@@ -218,14 +198,14 @@ class _MissionsScreenState extends State<MissionsScreen>
               Navigator.canPop(context)
           ? AppBar(
               leading: BackButton(onPressed: () => Navigator.pop(context)),
-              title: const Text(MissionContentData.learnLabel))
+              title: const Text(LearningContentData.classWorkTitle))
           : null,
       body: SafeArea(
         child: Column(
           children: [
             LearnerPageHeader(
-              title: 'Learn',
-              subtitle: 'Assignments, practice missions, and class resources',
+              title: LearningContentData.classWorkTitle,
+              subtitle: LearningContentData.classWorkSubtitle,
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -244,14 +224,6 @@ class _MissionsScreenState extends State<MissionsScreen>
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
               child: Wrap(spacing: 8, runSpacing: 8, children: [
-                OutlinedButton.icon(
-                  onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute<void>(
-                          builder: (_) => const CoursesScreen())),
-                  icon: const Icon(Icons.route_outlined),
-                  label: const Text(MissionContentData.learningPathLabel),
-                ),
                 OutlinedButton.icon(
                   onPressed: () => Navigator.push(
                       context,
@@ -284,10 +256,9 @@ class _MissionsScreenState extends State<MissionsScreen>
                   labelColor: AppTheme.primaryBlue,
                   unselectedLabelColor: AppTheme.textMedium,
                   tabs: const [
-                    Tab(text: 'Tasks'),
-                    Tab(text: 'Classes'),
-                    Tab(text: 'Practice'),
-                    Tab(text: 'Files'),
+                    Tab(text: LearningContentData.shortcutTasks),
+                    Tab(text: LearningContentData.shortcutClasses),
+                    Tab(text: LearningContentData.shortcutFiles),
                   ],
                 ),
               ),
@@ -299,7 +270,6 @@ class _MissionsScreenState extends State<MissionsScreen>
                 children: [
                   _buildAssignedTab(),
                   _buildClassesTab(),
-                  _buildPracticeTab(),
                   _buildResourcesTab(),
                 ],
               ),
@@ -486,163 +456,6 @@ class _MissionsScreenState extends State<MissionsScreen>
             ),
           );
         },
-      ),
-    );
-  }
-
-  Widget _buildPracticeTab() {
-    if (_practiceLoading) {
-      return const LearnerLoadingView(
-          label: MissionContentData.loadingPracticeProgressLabel);
-    }
-    if (_practiceError != null) {
-      return _EmptyState(
-          icon: Icons.cloud_off_outlined,
-          title: MissionContentData.practiceProgressTitle,
-          message: _practiceError!,
-          actionLabel: MissionContentData.practiceQuizRetry,
-          onAction: _loadPracticeProgress);
-    }
-    final missions = MissionsData.getAllMissions();
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
-      children: [
-        Text(MissionContentData.practiceQuizNotice, style: AppTheme.bodySmall),
-        const SizedBox(height: 12),
-        for (var index = 1; index <= 4; index++) ...[
-          _buildPracticeCocCard('coc$index', missions),
-          const SizedBox(height: 12),
-        ],
-      ],
-    );
-  }
-
-  Widget _buildPracticeCocCard(String cocId, List<Mission> missions) {
-    final progress =
-        _practiceProgress.where((item) => item.coc == cocId).firstOrNull;
-    final unlocked = progress?.unlocked ?? false;
-    final cocMissions =
-        missions.where((mission) => mission.cocId == cocId).toList();
-    final verified = progress?.completedMissions.length ?? 0;
-    final selected = cocMissions
-        .where((mission) => mission.id == _selectedPracticeMissionId)
-        .firstOrNull;
-    return Card(
-      elevation: 0,
-      color: AppTheme.cardWhite,
-      shape: RoundedRectangleBorder(
-        borderRadius: AppTheme.radiusMd,
-        side: BorderSide(color: AppTheme.borderMedium),
-      ),
-      child: ExpansionTile(
-        key: PageStorageKey('learn-$cocId'),
-        initiallyExpanded: cocId == 'coc1',
-        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: CircleAvatar(
-          backgroundColor: AppTheme.softBlueAccent,
-          foregroundColor: AppTheme.deepBlue,
-          child: Text(cocId.substring(3)),
-        ),
-        title: Text(MissionContentData.practiceCocTitle(cocId),
-            style: AppTheme.titleMedium),
-        subtitle: Text(
-          '${MissionContentData.practiceMissionCount(verified)}'
-          '${progress?.completed == true ? ' · ${MissionContentData.practiceCocCompleteLabel}' : !unlocked ? ' · ${MissionContentData.practiceCocLockedLabel}' : ''}'
-          '${selected == null ? '' : ' · ${MissionContentData.practiceMissionSelectedLabel}: ${selected.missionCode}'}',
-          style: AppTheme.bodySmall,
-        ),
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  LearnerProgressBar(
-                    value: verified / 5,
-                    semanticLabel:
-                        MissionContentData.practiceMissionCount(verified),
-                  ),
-                  if (unlocked) ...[
-                    const SizedBox(height: 12),
-                    PracticeCocSessionPanel(cocId: cocId),
-                  ],
-                  for (final mission in cocMissions)
-                    _buildPracticeMissionTile(
-                      mission,
-                      unlocked: unlocked,
-                      verified:
-                          progress?.completedMissions.contains(mission.id) ??
-                              false,
-                    ),
-                  if (unlocked)
-                    PracticeProgressPanel(
-                        coc: cocId, onChanged: _loadPracticeProgress),
-                ]),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPracticeMissionTile(Mission mission,
-      {required bool unlocked, required bool verified}) {
-    final selected = mission.id == _selectedPracticeMissionId;
-    final detailsOpen = mission.id == _expandedPracticeMissionId;
-    return Semantics(
-      button: true,
-      enabled: unlocked,
-      selected: selected,
-      label:
-          '${MissionContentData.practiceMissionNumber(mission.missionNumber)}, '
-          '${mission.title}, ${verified ? MissionContentData.practiceMissionVerifiedLabel : unlocked ? MissionContentData.practiceMissionAvailableLabel : MissionContentData.practiceLockedMessage}',
-      child: Card(
-        elevation: 0,
-        color: selected ? AppTheme.backgroundPaleBlue : AppTheme.cardWhite,
-        shape: RoundedRectangleBorder(
-          borderRadius: AppTheme.radiusSm,
-          side: BorderSide(
-              color: selected ? AppTheme.primaryBlue : AppTheme.borderLight),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            ListTile(
-              key: ValueKey('learn-practice-${mission.id}'),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-              minVerticalPadding: 2,
-              leading: CircleAvatar(
-                radius: 18,
-                backgroundColor: AppTheme.softBlueAccent,
-                foregroundColor: AppTheme.deepBlue,
-                child: Text('${mission.missionNumber}'),
-              ),
-              title: Text(mission.title, style: AppTheme.labelLarge),
-              subtitle: Text(
-                '${MissionContentData.practiceMissionNumber(mission.missionNumber)}'
-                '${verified ? ' · ${MissionContentData.practiceMissionVerifiedShortLabel}' : !unlocked ? ' · ${MissionContentData.practiceCocLockedLabel}' : ''}',
-                style: AppTheme.bodySmall,
-              ),
-              trailing: IconButton(
-                key: ValueKey('learn-practice-details-${mission.id}'),
-                tooltip: detailsOpen
-                    ? MissionContentData.practiceHideMissionDetails
-                    : MissionContentData.practiceShowMissionDetails,
-                onPressed: () => setState(() => _expandedPracticeMissionId =
-                    detailsOpen ? null : mission.id),
-                icon: Icon(detailsOpen
-                    ? Icons.expand_less_rounded
-                    : Icons.info_outline_rounded),
-              ),
-              onTap: unlocked ? () => _launchPractice(mission) : null,
-            ),
-            if (detailsOpen)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-                child: Text(mission.description ?? mission.title,
-                    style: AppTheme.bodySmall),
-              ),
-          ],
-        ),
       ),
     );
   }

@@ -23,6 +23,25 @@ abstract final class MissionPhaseCompletionPolicy {
     required String? target,
     required Map<String, dynamic> value,
   }) {
+    if (state.mode == MissionRuntimeMode.assessment &&
+        emittedActionType == 'sequence_reordered' &&
+        interactionFor(phase) == InteractionFamily.sequence) {
+      // Assessment: the confirmed order is the answer, right or wrong. The
+      // learner may continue only after confirming, and never because the
+      // current order happens to be valid.
+      final confirmed = value['confirmed'] == true &&
+          _containsAll(
+            state.sequenceOrder,
+            _requiredIds(
+              phase.presentation['items'],
+              fallback: phase.availableObjectIds,
+            ),
+          );
+      return state.copyWith(interactionCompletedPhaseIds: {
+        ...state.interactionCompletedPhaseIds.where((id) => id != phase.id),
+        if (confirmed) phase.id,
+      });
+    }
     if (value['simulation_valid'] == false) {
       return state.copyWith(interactionCompletedPhaseIds: {
         ...state.interactionCompletedPhaseIds.where((id) => id != phase.id),
@@ -78,7 +97,7 @@ abstract final class MissionPhaseCompletionPolicy {
           target != null &&
           state.toolApplications.containsKey(target),
       InteractionFamily.connect => emittedActionType == 'connection_created' &&
-          _requiredIds(phase.presentation['sources']).every(
+          _requiredIds(_required(phase.presentation['sources'])).every(
             (source) => state.connectedNodePairs.any(
               (pair) => pair.startsWith('$source>'),
             ),
@@ -99,7 +118,7 @@ abstract final class MissionPhaseCompletionPolicy {
               .every(state.matches.containsKey),
       InteractionFamily.place => emittedActionType == 'placement_attempted' &&
           value['compatible'] == true &&
-          _requiredIds(phase.presentation['items'])
+          _requiredIds(_required(phase.presentation['items']))
               .every(state.placements.containsKey),
       InteractionFamily.troubleshoot =>
         (emittedActionType == 'diagnostic_action' ||
@@ -171,4 +190,10 @@ abstract final class MissionPhaseCompletionPolicy {
 
   static List<String> _stringList(Object? value) =>
       (value as List? ?? const []).whereType<String>().toList(growable: false);
+
+  /// Parts and cables marked `required: false` are physically optional for
+  /// finishing the phase (a missing one surfaces later as a test symptom).
+  static List<Object?> _required(Object? value) => (value as List? ?? const [])
+      .where((item) => item is! Map || item['required'] != false)
+      .toList(growable: false);
 }

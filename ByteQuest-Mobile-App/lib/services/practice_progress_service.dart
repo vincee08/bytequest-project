@@ -2,8 +2,22 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
+import 'package:supabase_flutter/supabase_flutter.dart'
+    show AuthRetryableFetchException;
+import '../core/config/app_release.dart';
 import '../core/config/supabase_config.dart';
 import '../models/practice_progress_model.dart';
+
+/// ByteQuest could not be reached (offline, timed out, blocked by the
+/// browser, or the service was down), so the work was not judged at all.
+/// Distinct from a refused verification (HTTP 403 or 422).
+class PracticeServiceUnreachableException implements Exception {
+  const PracticeServiceUnreachableException(this.cause);
+  final Object cause;
+
+  @override
+  String toString() => 'PracticeServiceUnreachableException($cause)';
+}
 
 class PracticeProgressService {
   static const _configuredUrl = String.fromEnvironment('BQ_PRACTICE_API_URL');
@@ -15,14 +29,21 @@ class PracticeProgressService {
         .toList();
   }
 
+  /// Server access check before a practice mission opens. Uses the same
+  /// module-level rule as the evidence gate (`practice_mission_unlocked`), so
+  /// a locked module can never be started from any screen. The error code is
+  /// kept for the simulation screen, which maps it to the locked message.
   Future<void> requireMissionAccess(String mission) async {
     if (!RegExp(r'^coc[1-4]_m[1-5]$').hasMatch(mission)) {
       throw StateError('INVALID_MISSION');
     }
-    final progress = await getProgress();
-    if (!progress.any((p) => p.coc == mission.substring(0, 4) && p.unlocked)) {
-      throw StateError('PRACTICE_COC_LOCKED');
-    }
+    final learner = SupabaseConfig.currentUserId;
+    if (learner == null) throw StateError('AUTHENTICATION_REQUIRED');
+    final unlocked = await SupabaseConfig.client.rpc(
+      'practice_mission_unlocked',
+      params: {'p_mission': mission, 'p_learner': learner},
+    );
+    if (unlocked != true) throw StateError('PRACTICE_COC_LOCKED');
   }
 
   Future<void> verifyMission(String mission) async {
@@ -52,18 +73,33 @@ class PracticeProgressService {
     }
     final client = SupabaseConfig.client;
     var session = client.auth.currentSession;
-    if (session?.isExpired == true) {
-      session = (await client.auth.refreshSession()).session;
+    final http.Response response;
+    try {
+      if (session?.isExpired == true) {
+        session = (await client.auth.refreshSession()).session;
+      }
+      if (session == null) throw StateError('AUTHENTICATION_REQUIRED');
+      response = await http
+          .post(uri,
+              headers: {
+                ...kAppVersionHeaders,
+                'Authorization': 'Bearer ${session.accessToken}',
+                'Content-Type': 'application/json'
+              },
+              body: jsonEncode(body))
+          .timeout(const Duration(seconds: 45));
+    } on TimeoutException catch (error) {
+      throw PracticeServiceUnreachableException(error);
+    } on http.ClientException catch (error) {
+      // Includes socket errors and a browser CORS block.
+      throw PracticeServiceUnreachableException(error);
+    } on AuthRetryableFetchException catch (error) {
+      throw PracticeServiceUnreachableException(error);
     }
-    if (session == null) throw StateError('AUTHENTICATION_REQUIRED');
-    final response = await http
-        .post(uri,
-            headers: {
-              'Authorization': 'Bearer ${session.accessToken}',
-              'Content-Type': 'application/json'
-            },
-            body: jsonEncode(body))
-        .timeout(const Duration(seconds: 45));
+    if (response.statusCode >= 500) {
+      throw PracticeServiceUnreachableException(
+          StateError('PRACTICE_SERVICE_${response.statusCode}'));
+    }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError('PRACTICE_REQUEST_FAILED');
     }

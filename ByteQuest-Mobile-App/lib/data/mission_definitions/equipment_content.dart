@@ -253,70 +253,7 @@ _PhaseSpec _equipmentPhase(String missionId, int number, _PhaseSpec original,
       }
       break;
     case 'coc1_m2':
-      if (number == 2) {
-        p['items'] = [
-          for (final raw in p['items'] as List)
-            {
-              ...Map<String, dynamic>.from(raw as Map),
-              'orientations': ['aligned', 'rotated'],
-              'seating_orientation': 'aligned',
-              'requires_placements': switch (raw['id']) {
-                'cpu' || 'ram' => ['motherboard'],
-                'cooling_fan' => ['cpu'],
-                _ => <String>[],
-              }
-            }
-        ];
-        const categories = {
-          'motherboard_area': 'board',
-          'cpu_socket': 'socketed',
-          'ram_slot': 'slotted',
-          'drive_bay': 'drive',
-          'fan_area': 'cooling',
-          'psu_bay': 'power'
-        };
-        p['destinations'] = [
-          for (final raw in p['destinations'] as List)
-            {
-              ...Map<String, dynamic>.from(raw as Map),
-              'socket_categories': [categories[raw['id']]]
-            }
-        ];
-      }
-      if (number == 3) {
-        sequence({
-          'isolate': 'Isolate power and prepare ESD controls',
-          'board': 'Fit board and processor',
-          'cooling': 'Secure cooling and memory',
-          'power': 'Connect power and storage data'
-        });
-        equipment['connection'] = _internalCablePanel;
-        equipment['completion'] = [
-          for (final pair in _internalCablePairs) _eq('link.$pair', true)
-        ];
-      }
-      if (number == 4) {
-        test([
-          _reading(
-              'assembly',
-              'POST component inventory',
-              [for (final part in objects.keys) _present('placed.$part')],
-              'CPU, memory, storage, cooling, and power assemblies seated.',
-              'An installed component is missing from the inventory.'),
-          _reading(
-              'power_data',
-              'Power and storage path',
-              [for (final pair in _internalCablePairs) _eq('link.$pair', true)],
-              'Power rails and storage data path available.',
-              'Power or storage connection is incomplete.'),
-          _reading(
-              'sequence',
-              'Assembly safety record',
-              [_eq('sequence.coc1_m2_p3', true)],
-              'Isolation, assembly, cooling, and wiring chronology recorded.',
-              'Assembly chronology violates a safety prerequisite.'),
-        ], finalCheck: true);
-      }
+      _assemblyBenchPhase(number, p, equipment, objects);
       break;
     case 'coc1_m3':
       if (number == 1) {
@@ -1148,6 +1085,7 @@ _PhaseSpec _equipmentPhase(String missionId, int number, _PhaseSpec original,
   if (number == 1 &&
       !missionId.startsWith('coc4') &&
       missionId != 'coc1_m1' &&
+      missionId != 'coc1_m2' &&
       missionId != 'coc2_m3' &&
       missionId != 'coc3_m1') {
     final placement = _practiceWorkspacePanel(missionId);
@@ -1388,7 +1326,7 @@ _PhaseSpec _equipmentPhase(String missionId, int number, _PhaseSpec original,
       if (resolved == InteractionFamily.sequence) _eq('sequence.$id', true),
     ];
   }
-  if (finalTest) {
+  if (finalTest && missionId != 'coc1_m2') {
     addOperation(_operation(
         'close_work_area',
         missionId.startsWith('coc4')
@@ -1415,7 +1353,10 @@ _PhaseSpec _equipmentPhase(String missionId, int number, _PhaseSpec original,
     ]);
   }
   if (missionId.startsWith('coc4')) p['allow_drag'] = false;
-  if (number == 1 && !missionId.startsWith('coc4') && missionId != 'coc1_m1') {
+  if (number == 1 &&
+      !missionId.startsWith('coc4') &&
+      missionId != 'coc1_m1' &&
+      missionId != 'coc1_m2') {
     instruction = '${MissionContentData.workspacePreparationHint} $instruction';
   }
 
@@ -1495,31 +1436,10 @@ List<Map<String, dynamic>> _networkChecks(String address) => [
           'Gateway is outside the intended segment or is not configured.'),
     ];
 
-const _internalCablePairs = ['atx>board_power', 'sata>storage_data'];
-const _internalCablePanel = {
-  'sources': [
-    {
-      'id': 'atx',
-      'label': '24-pin ATX power',
-      'interfaces': ['atx']
-    },
-    {
-      'id': 'sata',
-      'label': 'SATA data cable',
-      'interfaces': ['sata']
-    },
-  ],
-  'destinations': [
-    {
-      'id': 'board_power',
-      'label': 'Motherboard power header',
-      'interface': 'atx'
-    },
-    {'id': 'storage_data', 'label': 'Storage data port', 'interface': 'sata'},
-  ],
-};
-
 String _inspectionContent(String missionId, String objectId, String label) {
+  if (missionId == 'coc1_m2' && _assemblyInspection[objectId] != null) {
+    return _assemblyInspection[objectId]!;
+  }
   const details = {
     'motherboard':
         'ATX board. CPU socket, keyed DIMM slots, and 24-pin power header are visible. No swollen capacitors are visible.',

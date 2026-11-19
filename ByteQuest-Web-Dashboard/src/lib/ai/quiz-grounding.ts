@@ -1,7 +1,10 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { QuizGenerationGrounding } from "@/lib/ai/quiz-draft";
+import type {
+  QuizCurriculumGrounding,
+  QuizGenerationGrounding,
+} from "@/lib/ai/quiz-draft";
 import type { Database } from "@/types/database.generated";
 
 type ServerSupabaseClient = SupabaseClient<Database>;
@@ -223,5 +226,112 @@ export async function loadApprovedQuizGrounding(
       required: criterion.is_required,
       sourceTrace: criterion.source_trace,
     })),
+  };
+}
+
+interface CurriculumQuizRow {
+  coc_module_id: string | null;
+  focus: string | null;
+  quiz_type: string | null;
+  difficulty: string | null;
+  topic_id: string | null;
+}
+interface ModuleRow {
+  id: string;
+  code: string;
+  title: string;
+  sequence_order: number;
+}
+interface OutcomeRow {
+  id: string;
+  module_id: string;
+  code: string;
+  statement: string;
+  sequence_order: number;
+}
+
+const TOPIC_EXCERPT_LIMIT = 4000;
+
+/**
+ * Curriculum grounding for a curriculum-mapped quiz: its COC, modules, the
+ * selected performance criteria (or every criterion in scope), the latest
+ * published revision of its topic and the stated focus. Reads through the
+ * caller's client so RLS limits it to the instructor's own quiz.
+ */
+export async function loadCurriculumQuizGrounding(
+  client: ServerSupabaseClient,
+  quizId: string,
+): Promise<QuizCurriculumGrounding> {
+  const db = client as unknown as SupabaseClient;
+  const { data: quizRow } = await db
+    .from("quizzes")
+    .select("coc_module_id,focus,quiz_type,difficulty,topic_id")
+    .eq("id", quizId)
+    .maybeSingle();
+  const quiz = quizRow as CurriculumQuizRow | null;
+  if (!quiz?.coc_module_id || !quiz.focus) throw new QuizGroundingError("CONTEXT_NOT_FOUND");
+  const [{ data: coc }, { data: links }, { data: outcomeLinks }] = await Promise.all([
+    client.from("coc_modules").select("id,coc_code,title").eq("id", quiz.coc_module_id).maybeSingle(),
+    db.from("quiz_modules").select("module_id").eq("quiz_id", quizId),
+    db.from("quiz_learning_outcomes").select("outcome_id").eq("quiz_id", quizId),
+  ]);
+  if (!coc) throw new QuizGroundingError("CONTEXT_NOT_FOUND");
+  const linkedModules = ((links ?? []) as { module_id: string }[]).map((row) => row.module_id);
+  const { data: moduleRows } = await db
+    .from("curriculum_modules")
+    .select("id,code,title,sequence_order")
+    .eq("coc_module_id", quiz.coc_module_id)
+    .order("sequence_order");
+  const modules = ((moduleRows ?? []) as ModuleRow[]).filter(
+    (module) => !linkedModules.length || linkedModules.includes(module.id),
+  );
+  if (!modules.length) throw new QuizGroundingError("CONTEXT_INCOMPLETE");
+  const { data: outcomeRows } = await db
+    .from("learning_outcomes")
+    .select("id,module_id,code,statement,sequence_order")
+    .in("module_id", modules.map((module) => module.id))
+    .order("sequence_order");
+  const selectedOutcomes = ((outcomeLinks ?? []) as { outcome_id: string }[]).map((row) => row.outcome_id);
+  const moduleCode = new Map(modules.map((module) => [module.id, module.code]));
+  const outcomes = ((outcomeRows ?? []) as OutcomeRow[])
+    .filter((outcome) => !selectedOutcomes.length || selectedOutcomes.includes(outcome.id))
+    .sort(
+      (a, b) =>
+        modules.findIndex((module) => module.id === a.module_id) -
+          modules.findIndex((module) => module.id === b.module_id) ||
+        a.sequence_order - b.sequence_order,
+    );
+  let topic: QuizCurriculumGrounding["topic"] = null;
+  if (quiz.topic_id) {
+    const { data: revision } = await db
+      .from("curriculum_topic_revisions")
+      .select("title,summary,body_markdown")
+      .eq("topic_id", quiz.topic_id)
+      .eq("status", "published")
+      .order("revision_number", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const row = revision as { title: string; summary: string | null; body_markdown: string } | null;
+    if (row)
+      topic = {
+        id: quiz.topic_id,
+        title: row.title,
+        summary: row.summary,
+        excerpt: row.body_markdown.slice(0, TOPIC_EXCERPT_LIMIT),
+      };
+  }
+  return {
+    coc: { id: coc.id, code: coc.coc_code, title: coc.title },
+    modules: modules.map((module) => ({ id: module.id, code: module.code, title: module.title })),
+    outcomes: outcomes.map((outcome) => ({
+      id: outcome.id,
+      code: outcome.code,
+      module: moduleCode.get(outcome.module_id) ?? "",
+      statement: outcome.statement,
+    })),
+    topic,
+    focus: quiz.focus,
+    quizType: quiz.quiz_type,
+    difficulty: quiz.difficulty,
   };
 }

@@ -34,7 +34,7 @@ end $$;
 -- Instructor publication still requires review and persists separate quiz assignments.
 select set_config('request.jwt.claim.sub',(select teacher::text from activity_test),true);
 set local role authenticated;
-update activity_test set quiz=(public.create_instructor_quiz('Deadline rollback quiz','Networking')).id;
+update activity_test set quiz=(public.create_instructor_quiz('Deadline rollback quiz','Networking',p_coc_module_id=>(select id from public.coc_modules where coc_code='coc2'),p_focus=>'Identify network devices and their roles')).id;
 update activity_test set version=(select id from public.quiz_versions where quiz_id=activity_test.quiz);
 update activity_test set item=(public.upsert_quiz_item(version,'true_false','A router connects networks.','[]','"True"')).id;
 select public.review_quiz_item(item,'approved') from activity_test;
@@ -60,10 +60,12 @@ set local role authenticated;
 select pg_temp.denied(format('select public.start_learner_quiz(%L,gen_random_uuid())',assignment_a),'QUIZ_NOT_AVAILABLE') from activity_test;
 select set_config('request.jwt.claim.sub',(select learner_b::text from activity_test),true);
 select pg_temp.denied(format('select public.save_learner_quiz_answer(%L,%L,''False'')',attempt_b,item),'QUIZ_NOT_AVAILABLE') from activity_test;
-select pg_temp.denied(format('select public.submit_learner_quiz(%L,gen_random_uuid())',attempt_b),'QUIZ_NOT_AVAILABLE') from activity_test;
+-- Re-defense A3 (approved design WS4): expired unfinished attempts are now
+-- submitted automatically at the deadline with their saved answers.
+select pg_temp.assert(public.submit_learner_quiz(attempt_b,gen_random_uuid())->>'submission_kind'='auto_deadline','a submit after the deadline returns the automatic submission of the saved answers') from activity_test;
 select pg_temp.assert((select answer #>> '{}'='True' from public.quiz_answers where quiz_attempt_id=attempt_b),'deadline must preserve saved answers') from activity_test;
-select pg_temp.assert((select status='in_progress' from public.quiz_attempts where id=attempt_b),'expiration is availability state, never fabricated submission') from activity_test;
-select pg_temp.assert((select count(*)=0 from public.quiz_results where quiz_attempt_id=attempt_b),'expired unfinished attempt must not be graded') from activity_test;
+select pg_temp.assert((select status='completed' and submission_kind='auto_deadline' and submitted_at='2035-01-01 08:00:00+00' from public.quiz_attempts where id=attempt_b),'an expired unfinished attempt is auto-submitted at the deadline, not at the request time') from activity_test;
+select pg_temp.assert((select count(*)=1 and min(correct_count)=1 from public.quiz_results where quiz_attempt_id=attempt_b),'the saved answer is graded exactly once; nothing is invented') from activity_test;
 select pg_temp.assert((select payload->>'closed_reason'='deadline_passed' and payload->>'is_available'='false' from jsonb_array_elements(public.get_available_learner_quizzes()) payload where payload->>'quiz_id'=quiz::text),'closed quiz must stay discoverable') from activity_test;
 select set_config('request.jwt.claim.sub',(select learner_a::text from activity_test),true);
 select pg_temp.assert(public.get_learner_quiz_result(attempt_a)->>'correct_count'='1','completed result remains available after deadline') from activity_test;
@@ -77,7 +79,9 @@ select pg_temp.assert((select due_at='2035-01-01 08:00:00+00' from public.quiz_a
 reset role;
 select set_config('request.jwt.claim.sub',(select learner_b::text from activity_test),true);
 set local role authenticated;
-select pg_temp.assert(public.start_learner_quiz(assignment_a,gen_random_uuid())->>'attempt_id'=attempt_b::text,'reopen must resume same original attempt') from activity_test;
+-- Re-defense A3: reopening after the deadline does not revive an attempt that
+-- was auto-submitted under the old deadline (it stays the learner's one attempt).
+select pg_temp.denied(format('select public.start_learner_quiz(%L,gen_random_uuid())',assignment_a),'QUIZ_ATTEMPT_ALREADY_SUBMITTED') from activity_test;
 select set_config('request.jwt.claim.sub',(select learner_a::text from activity_test),true);
 select pg_temp.denied(format('select public.start_learner_quiz(%L,gen_random_uuid())',assignment_a),'QUIZ_ATTEMPT_ALREADY_SUBMITTED') from activity_test;
 select set_config('request.jwt.claim.sub',(select learner_c::text from activity_test),true);
@@ -117,10 +121,13 @@ select public.manage_homework(teacher,'publish',jsonb_build_object('assignment_i
 select public.manage_homework(learner_c,'submit',jsonb_build_object('assignment_id',no_deadline,'answer','No deadline report.','file_ids','[]'::jsonb)) from activity_test;
 select pg_temp.assert((select lateness_seconds=0 and effective_deadline_at is null from public.homework_submissions where assignment_id=no_deadline),'homework without deadline is never late') from activity_test;
 select pg_temp.denied(format('select public.manage_homework(%L,''submit'',jsonb_build_object(''assignment_id'',%L,''answer'',''Forbidden''))',outsider,homework),'HOMEWORK_SCOPE_DENIED') from activity_test;
+-- Objective 4: a grade becomes visible only after Finalize -> Release.
+select public.manage_homework(teacher,'finalize',jsonb_build_object('submission_ids',jsonb_build_array(submission_b))) from activity_test;
+select public.manage_homework(teacher,'release',jsonb_build_object('submission_ids',jsonb_build_array(submission_b))) from activity_test;
 reset role;
 select set_config('request.jwt.claim.sub',(select learner_b::text from activity_test),true);
 set local role authenticated;
-select pg_temp.assert((select status='graded' from public.homework_submissions where id=submission_b),'learner must see Graded after instructor review') from activity_test;
+select pg_temp.assert((select status='released' from public.homework_submissions where id=submission_b),'learner must see the released grade after instructor review') from activity_test;
 select pg_temp.assert((select count(*)=0 from public.homework_submissions where id=submission_a),'learner must not read another submission') from activity_test;
 select pg_temp.denied(format('update public.homework_submissions set status=''graded'' where id=%L',submission_b),'permission denied') from activity_test;
 reset role;

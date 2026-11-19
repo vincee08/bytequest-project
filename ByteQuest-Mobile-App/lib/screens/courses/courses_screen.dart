@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/soft_card.dart';
 import '../../core/widgets/learner_ui.dart';
+import '../../services/curriculum_service.dart';
 import '../../services/mission_database_service.dart';
+import '../../models/curriculum_model.dart';
 import '../../models/learner_learning_path_model.dart';
 import 'coc_details_screen.dart';
 import 'package:provider/provider.dart';
 import '../../services/mission_service.dart';
+import '../../data/learning_content_data.dart';
 import '../../data/mission_content_data.dart';
 import '../../widgets/practice_coc_session_panel.dart';
 
@@ -22,6 +25,10 @@ class _CoursesScreenState extends State<CoursesScreen> {
   bool _isLoading = true;
   String? _error;
 
+  /// COC access from the learner curriculum (as in Practice), so an
+  /// instructor bypass unlocks a COC here too.
+  CurriculumProjection? _curriculum;
+
   @override
   void initState() {
     super.initState();
@@ -34,6 +41,12 @@ class _CoursesScreenState extends State<CoursesScreen> {
       final cocModules = await dbService.getLearnerLearningPath();
       if (!mounted) return;
       await context.read<MissionService>().refreshPracticeProgress();
+      try {
+        _curriculum = await CurriculumService().getCurriculum();
+      } catch (_) {
+        // COC-level practice progress stays in use; the server still checks
+        // module access before a mission opens.
+      }
 
       if (mounted) {
         setState(() {
@@ -111,7 +124,8 @@ class _CoursesScreenState extends State<CoursesScreen> {
   }
 
   Widget _buildCOCCard(BuildContext context, LearnerCocProjection coc) {
-    final unlocked = context.watch<MissionService>().isCocUnlocked(coc.code);
+    final unlocked = _curriculum?.coc(coc.code)?.unlocked ??
+        context.watch<MissionService>().isCocUnlocked(coc.code);
     final cocNumber = coc.code.replaceAll('coc', '').replaceAll('COC', '');
     final releasedMissions = coc.releasedMissionCount;
     final totalMissions = coc.missions.length;
@@ -203,7 +217,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  '${MissionContentData.practiceMissionNumber(mission.number)} · ${mission.title}',
+                  '${LearningContentData.missionNumber(mission.number)} · ${mission.title}',
                   style: AppTheme.bodySmall,
                 ),
               ),

@@ -64,7 +64,7 @@ All 61 `SECURITY DEFINER` functions in `public` and `private` are owned by `post
 | `delete_learning_resource` | Soft-delete resource metadata | Owning Instructor or Admin; reason | KEEP |
 | `enroll_learner` | Enroll a learner UUID | Owning Instructor; active learner | KEEP |
 | `enroll_learner_by_email` | Enroll registered learner by email | Owning Instructor; active learner | KEEP |
-| `evaluate_submitted_attempt` | Deterministic criterion evaluation | Owning Learner submission or service role; approved captured rubric | KEEP |
+| `evaluate_submitted_attempt` | Deterministic criterion evaluation | Called by `submit_attempt` (definer) and the service role only; EXECUTE is revoked from `authenticated` by the re-defense SQL fix (2026-11-20, final review SQL-A I2), so a learner can no longer read an unreleased provisional result through it; approved captured rubric | KEEP |
 | `finalize_attempt` | Append adjustment/final revision | Owning Instructor; evaluated state; reason if changed | KEEP |
 | `get_bypassed_activities` | Return practice-only bypass content | Active enrolled Learner; active bypass | KEEP |
 | `grant_coc_bypass` | Grant scoped practice access | Owning Instructor; active enrollment/module; reason | KEEP |

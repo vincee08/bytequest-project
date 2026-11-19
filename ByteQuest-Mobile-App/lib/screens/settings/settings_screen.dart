@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/config/app_release.dart';
+import '../../data/account_content_data.dart';
 import '../../data/mission_content_data.dart';
 import '../../widgets/settings_tile.dart';
 import '../../services/auth_service.dart';
@@ -302,7 +304,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   SettingsTile(
                     icon: Icons.info_outline,
                     title: 'About ByteQuest',
-                    subtitle: 'Version 1.0.0',
+                    subtitle: AccountContentData.appVersionLabel(
+                        kAppVersion, kAppBuildNumber),
                     iconColor: AppTheme.accentOrange,
                     onTap: () {
                       _showAboutDialog(context);
@@ -443,7 +446,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Version 1.0.0',
+              AccountContentData.appVersionLabel(kAppVersion, kAppBuildNumber),
               style: AppTheme.bodyMedium,
             ),
             const SizedBox(height: 16),

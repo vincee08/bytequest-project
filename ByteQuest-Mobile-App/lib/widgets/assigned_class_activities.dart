@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../core/theme/app_theme.dart';
 import '../core/widgets/learner_ui.dart';
+import '../data/homework_content_data.dart';
 import '../data/mission_content_data.dart';
 import '../models/assigned_activity_model.dart';
 import '../models/home_activity_item.dart';
@@ -11,6 +12,7 @@ import '../services/homework_service.dart';
 import '../services/learner_quiz_service.dart';
 import '../services/learner_realtime_coordinator.dart';
 import '../screens/homework/homework_details_screen.dart';
+import '../screens/homework/homework_list_screen.dart';
 import '../screens/quizzes/quiz_details_screen.dart';
 import '../screens/quizzes/quiz_result_screen.dart';
 
@@ -263,6 +265,15 @@ class _AssignedClassActivitiesState extends State<AssignedClassActivities>
               (_filter < 2 || _filter == 5 || _filter == kind.index + 2)) ...[
             _heading(
                 '${_section(kind)} (${items.where((a) => a.kind == kind).length})'),
+            if (kind == HomeActivityKind.homework && _homework.isNotEmpty)
+              Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton.icon(
+                      style:
+                          TextButton.styleFrom(minimumSize: const Size(48, 48)),
+                      onPressed: _openHomeworkList,
+                      icon: const Icon(Icons.filter_list, size: 18),
+                      label: const Text(HomeworkContentData.listAction))),
             const SizedBox(height: 10),
             if (kind == HomeActivityKind.quiz && _quizError ||
                 kind == HomeActivityKind.homework && _homeworkError)
@@ -308,6 +319,17 @@ class _AssignedClassActivitiesState extends State<AssignedClassActivities>
 
   Widget _heading(String title) => Semantics(
       header: true, container: true, child: LearnerSectionHeader(title: title));
+  // Homework organised by COC and mission (filter chips).
+  Future<void> _openHomeworkList() async {
+    await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+            builder: (_) => HomeworkListScreen(
+                service: widget.homeworkService,
+                initial: _homework,
+                classId: widget.classId)));
+    if (mounted) await _load();
+  }
   String _section(HomeActivityKind kind) => switch (kind) {
         HomeActivityKind.quiz => MissionContentData.assignedQuizzes,
         HomeActivityKind.homework => MissionContentData.homeworkAssignments,

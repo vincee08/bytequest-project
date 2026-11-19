@@ -16,6 +16,8 @@ import '../../services/progress_resume_service.dart';
 import '../../services/practice_progress_service.dart';
 import '../../services/practice_coc_session_service.dart';
 import '../../widgets/practice_coc_session_panel.dart';
+import '../../data/mission_simulation_definitions.dart';
+import 'components/assembly/assembly_bench.dart';
 import 'components/equipment_operations.dart';
 import 'components/equipment_workspace.dart';
 import 'components/incorrect_placement_dialog.dart';
@@ -32,6 +34,15 @@ import 'runtime/mission_runtime_models.dart';
 import 'runtime/mission_equipment_simulator.dart';
 
 typedef MissionSubmitCallback = Future<void> Function();
+
+/// Practice verification failed: either ByteQuest could not be reached (the
+/// work was not judged; the evidence is saved) or the server refused the
+/// verification. A correct learner is never told the work is wrong because
+/// the network failed.
+String practiceVerifyFailureMessage(Object error) =>
+    error is PracticeServiceUnreachableException
+        ? MissionContentData.practiceVerifyUnreachable
+        : MissionContentData.practiceSubmitFailed;
 
 enum _MissionExitChoice { continueMission, saveAndExit, discardProgress }
 
@@ -109,6 +120,7 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
   bool _showGuidance = false;
   bool _expandedControls = false;
   bool _showHow = false;
+  bool _missionUpdatedNotice = false;
   String? _workspaceMode;
   String? _workspaceModePhaseId;
   OverlayEntry? _guideOutline;
@@ -154,11 +166,16 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
             ? MissionRuntimeMode.assessment
             : MissionRuntimeMode.practice,
         assessmentAttemptId: isAssessment ? activeSession!.attemptId : null,
+        definitionVersion:
+            MissionSimulationDefinitions.contractVersion(widget.definition.id),
       ).copyWith(currentPhaseId: firstPhaseId),
       store: const SharedPreferencesMissionRuntimeStore(),
       evidenceGateway: MissionEvidenceGateway(transport: evidenceTransport),
       restoreReducer: MissionRuntimeActionReducer(widget.definition),
       submissionPhaseIds: {widget.definition.phases.last.id},
+      unstampedDefinitionVersion:
+          MissionSimulationDefinitions.unstampedContractVersion(
+              widget.definition.id),
     );
   }
 
@@ -213,7 +230,22 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
     }
   }
 
+  /// A simulation assessment names the contract version it was published
+  /// from; an app with a different local definition must not run it.
+  bool get _assessmentVersionMismatch {
+    final published = widget.learnerPayload['definition_version'];
+    return widget.learnerPayload['mode'] == 'assessment' &&
+        published is String &&
+        published !=
+            MissionSimulationDefinitions.contractVersion(widget.definition.id);
+  }
+
   Future<void> _restore() async {
+    if (_assessmentVersionMismatch) {
+      _restoreFailure = MissionContentData.assessmentUpdateRequired;
+      if (mounted) setState(() => _restoring = false);
+      return;
+    }
     try {
       if (widget.controller == null &&
           _state.mode == MissionRuntimeMode.practice) {
@@ -221,6 +253,18 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
       }
       _accessVerified = true;
       await _controller.restore();
+      if (_controller.definitionChanged) {
+        // Progress saved for an earlier version of this mission: start the
+        // current version cleanly. The server keeps the earlier actions and
+        // any verified completion; only this run starts over.
+        try {
+          await _controller.startNewDefinitionVersion();
+        } catch (_) {
+          _restoreFailure = MissionContentData.missionUpdateFailed;
+          return;
+        }
+        _missionUpdatedNotice = true;
+      }
       if (_state.mode == MissionRuntimeMode.practice) {
         final userId = _tutorialUserId;
         if (userId != null) {
@@ -252,8 +296,31 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
               : MissionContentData.practiceProgressUnavailable;
     } finally {
       if (mounted) setState(() => _restoring = false);
+      if (mounted && _missionUpdatedNotice && _restoreFailure == null) {
+        _missionUpdatedNotice = false;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) unawaited(_showMissionUpdatedNotice());
+        });
+      }
     }
   }
+
+  Future<void> _showMissionUpdatedNotice() => showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          key: const ValueKey('mission-updated-notice'),
+          title: const Text(MissionContentData.missionUpdatedTitle),
+          content: const Text(MissionContentData.missionUpdatedNotice),
+          actions: [
+            FilledButton(
+              key: const ValueKey('mission-updated-dismiss'),
+              style: FilledButton.styleFrom(minimumSize: const Size(48, 48)),
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text(MissionContentData.missionUpdatedDismiss),
+            ),
+          ],
+        ),
+      );
 
   Future<void> _retryRestore() async {
     setState(() {
@@ -452,8 +519,13 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
                 widget.definition, _state) &&
             !_submitted);
     final step = guide.currentStep;
+    // Bench operations are hotspots on the bench and buttons in its tray,
+    // so they never need the task panel opened.
+    final benchOperation = step?.target == MissionGuideTarget.operations &&
+        MissionEquipmentSimulator.isAssemblyBench(widget.definition);
     if ((step?.target == MissionGuideTarget.controls ||
             step?.target == MissionGuideTarget.operations) &&
+        !benchOperation &&
         !_expandedControls) {
       setState(() => _expandedControls = true);
       await WidgetsBinding.instance.endOfFrame;
@@ -496,7 +568,10 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
         overlayBox is! RenderBox ||
         !box.hasSize ||
         !overlayBox.hasSize) return;
-    Rect rect = box.localToGlobal(Offset.zero, ancestor: overlayBox) & box.size;
+    // The full transform, so a target under a zoomed or panned camera is
+    // outlined at its on-screen size as well as its position.
+    Rect rect = MatrixUtils.transformRect(
+        box.getTransformTo(overlayBox), Offset.zero & box.size);
     final scrollable = Scrollable.maybeOf(target!);
     final scrollBox = scrollable?.context.findRenderObject();
     if (scrollBox is RenderBox && scrollBox.hasSize) {
@@ -619,48 +694,79 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
     final activeWorkspaceMode =
         _workspaceModePhaseId == phase.id ? _workspaceMode : null;
     final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.4;
-    final scene = EquipmentWorkspace(
-      key: _workspaceLayoutKey,
-      definition: widget.definition,
-      phase: phase,
-      state: _state,
-      onAction: (type, target, value) =>
-          _recordAction(phase, type, target, value),
-      onCameraChanged: (scale, offset) => unawaited(_controller
-          .updateCamera(scale, offset.dx, offset.dy)
-          .catchError((Object error) {
-        if (mounted)
-          setState(() => _technicalFeedback =
-              MissionContentData.saveProgressFailedMessage);
-      })),
-      hotspotStates: _equipmentHotspots(),
-      saving: _writing,
-      feedback: _workspaceFeedback,
-      highlightTarget: _showHow ? actionGuide.currentStep?.target : null,
-      highlightObjectId: _showHow &&
-              currentStep?.workspaceMode != null &&
-              activeWorkspaceMode == currentStep!.workspaceMode
-          ? currentStep.objectId
-          : null,
-      onModeChanged: (mode) {
-        if (_workspaceModePhaseId == phase.id && _workspaceMode == mode) return;
-        setState(() {
-          _workspaceModePhaseId = phase.id;
-          _workspaceMode = mode;
+    final assessment = _state.mode == MissionRuntimeMode.assessment;
+    void onCameraChanged(double scale, Offset offset) => unawaited(_controller
+            .updateCamera(scale, offset.dx, offset.dy)
+            .catchError((Object error) {
+          if (mounted)
+            setState(() => _technicalFeedback =
+                MissionContentData.saveProgressFailedMessage);
+        }));
+    void onModeChanged(String mode) {
+      if (_workspaceModePhaseId == phase.id && _workspaceMode == mode) return;
+      setState(() {
+        _workspaceModePhaseId = phase.id;
+        _workspaceMode = mode;
+      });
+      if (_showHow) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) unawaited(_locateCurrentAction());
         });
-        if (_showHow) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) unawaited(_locateCurrentAction());
-          });
-        }
-      },
-      enabled: !_writing &&
-          !_submitting &&
-          !_submitted &&
-          phase.primaryInteraction != InteractionFamily.review,
-    );
+      }
+    }
 
-    final guidanceBar = MissionGuidanceBar(
+    final workspaceEnabled = !_writing &&
+        !_submitting &&
+        !_submitted &&
+        phase.primaryInteraction != InteractionFamily.review;
+    final Widget scene = MissionEquipmentSimulator.isAssemblyBench(
+            widget.definition)
+        ? AssemblyBench(
+            key: _workspaceLayoutKey,
+            definition: widget.definition,
+            phase: phase,
+            state: _state,
+            onAction: (type, target, value) =>
+                _recordAction(phase, type, target, value),
+            onCameraChanged: onCameraChanged,
+            saving: _writing,
+            feedback: _workspaceFeedback,
+            highlightTarget: _showHow && !assessment
+                ? actionGuide.currentStep?.target ?? MissionGuideTarget.next
+                : null,
+            onModeChanged: onModeChanged,
+            enabled: workspaceEnabled,
+          )
+        : EquipmentWorkspace(
+            key: _workspaceLayoutKey,
+            definition: widget.definition,
+            phase: phase,
+            state: _state,
+            onAction: (type, target, value) =>
+                _recordAction(phase, type, target, value),
+            onCameraChanged: onCameraChanged,
+            hotspotStates: _equipmentHotspots(),
+            saving: _writing,
+            feedback: _workspaceFeedback,
+            highlightTarget:
+                _showHow && !assessment ? actionGuide.currentStep?.target : null,
+            highlightObjectId: _showHow &&
+                    !assessment &&
+                    currentStep?.workspaceMode != null &&
+                    activeWorkspaceMode == currentStep!.workspaceMode
+                ? currentStep.objectId
+                : null,
+            onModeChanged: onModeChanged,
+            enabled: workspaceEnabled,
+          );
+
+    final Widget guidanceBar = assessment
+        ? _AssessmentBar(
+            submitting: _submitting,
+            submitted: _submitted,
+            onSubmit: () => unawaited(_submitAssessment()),
+          )
+        : MissionGuidanceBar(
       guidance: guidance,
       actionGuide: actionGuide,
       expanded: _showGuidance,
@@ -859,9 +965,16 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
                             Border.all(color: AppTheme.primaryBlue, width: 2),
                         borderRadius: AppTheme.radiusSm)
                     : null,
-                child: MissionPhaseInteraction(
+                child: _benchOwnsInteraction(phase)
+                    ? Semantics(
+                        key: ValueKey('mission-interaction-${phase.id}'),
+                        liveRegion: true,
+                        child: Text(_displayPhase(phase).instruction,
+                            style: AppTheme.bodyMedium),
+                      )
+                    : MissionPhaseInteraction(
                   key: ValueKey('mission-interaction-${phase.id}'),
-                  phase: phase,
+                  phase: _displayPhase(phase),
                   state: _state,
                   enabled: !_writing && !_submitting && !_submitted,
                   onAction: (actionType, target, value) =>
@@ -897,25 +1010,28 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
                       unawaited(_retryPendingEvidence()),
                 ),
               ),
-              Container(
-                key: _operationsGuideKey,
-                decoration: _showHow &&
-                        MissionActionGuide.forPhase(phase, _state)
-                                .currentStep
-                                ?.target ==
-                            MissionGuideTarget.operations
-                    ? BoxDecoration(
-                        border:
-                            Border.all(color: AppTheme.primaryBlue, width: 2),
-                        borderRadius: AppTheme.radiusSm)
-                    : null,
-                child: EquipmentOperations(
-                    phase: phase,
-                    state: _state,
-                    enabled: !_writing && !_submitting && !_submitted,
-                    onAction: (type, target, value) =>
-                        _recordAction(phase, type, target, value)),
-              ),
+              // The assembly bench operates levers, latches and screws where
+              // they are, so its operations are not repeated as a list.
+              if (!MissionEquipmentSimulator.isAssemblyBench(widget.definition))
+                Container(
+                  key: _operationsGuideKey,
+                  decoration: _showHow &&
+                          MissionActionGuide.forPhase(phase, _state)
+                                  .currentStep
+                                  ?.target ==
+                              MissionGuideTarget.operations
+                      ? BoxDecoration(
+                          border:
+                              Border.all(color: AppTheme.primaryBlue, width: 2),
+                          borderRadius: AppTheme.radiusSm)
+                      : null,
+                  child: EquipmentOperations(
+                      phase: phase,
+                      state: _state,
+                      enabled: !_writing && !_submitting && !_submitted,
+                      onAction: (type, target, value) =>
+                          _recordAction(phase, type, target, value)),
+                ),
               if (_technicalFeedback case final feedback?) ...[
                 const SizedBox(height: 14),
                 Semantics(
@@ -959,6 +1075,16 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
         ));
   }
 
+  /// The assembly bench is the only control for its inspection, placement
+  /// and cabling phases; tests and review keep their standard panels.
+  bool _benchOwnsInteraction(MissionPhaseDefinition phase) =>
+      MissionEquipmentSimulator.isAssemblyBench(widget.definition) &&
+      const {
+        InteractionFamily.inspect,
+        InteractionFamily.place,
+        InteractionFamily.connect,
+      }.contains(phase.resolvedInteraction);
+
   Widget _buildActionBar(MissionPhaseDefinition phase, int phaseIndex) {
     final guide = MissionActionGuide.forPhase(phase, _state,
         reviewReady: _controller.canSubmit &&
@@ -989,6 +1115,23 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
       );
     }
     final ready = MissionPhaseCompletionPolicy.canAdvance(phase, _state);
+    if (_state.mode == MissionRuntimeMode.assessment) {
+      // Assessment never reveals the next required step.
+      return MissionActionBar(
+        progressLabel: '${phaseIndex + 1}/${widget.definition.phases.length}',
+        status: ready
+            ? MissionContentData.readyToContinueLabel
+            : MissionContentData.assessmentContinueStatus,
+        saving: _writing,
+        highlighted: false,
+        label: phaseIndex == widget.definition.phases.length - 2
+            ? MissionContentData.reviewEvidenceLabel
+            : MissionContentData.continueLabel,
+        onContinue: ready && !_submitting && !_submitted
+            ? () => unawaited(_advance(phaseIndex))
+            : null,
+      );
+    }
     final status = ready
         ? MissionContentData.readyToContinueLabel
         : _lastActionRejected
@@ -1014,6 +1157,29 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
           ? () => unawaited(_advance(phaseIndex))
           : null,
     );
+  }
+
+  final _displayPhases = <String, MissionPhaseDefinition>{};
+
+  /// The phase as the learner reads it. Assessment shows goal-level task text
+  /// that never names a slot, header, cable or step; practice keeps the
+  /// technical instruction. Actions are always recorded against [phase].
+  MissionPhaseDefinition _displayPhase(MissionPhaseDefinition phase) {
+    if (_state.mode != MissionRuntimeMode.assessment) return phase;
+    final instruction = MissionContentData.assessmentInstruction(phase.id);
+    if (instruction == null) return phase;
+    return _displayPhases.putIfAbsent(
+        phase.id,
+        () => MissionPhaseDefinition(
+              id: phase.id,
+              title: phase.title,
+              instruction: instruction,
+              primaryInteraction: phase.primaryInteraction,
+              supportingInteractions: phase.supportingInteractions,
+              availableObjectIds: phase.availableObjectIds,
+              feedbackIds: phase.feedbackIds,
+              presentation: phase.presentation,
+            ));
   }
 
   Map<String, HotspotVisualState> _equipmentHotspots() {
@@ -1085,14 +1251,19 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
                     MissionContentData.incompatiblePlacementFeedback) ||
             (actionValue['simulation_valid'] == null &&
                 actionValue['compatible'] == false));
+    // An assessment order is an answer, not a physical action: whether it is
+    // right is never shown, so moves and confirmations look the same.
+    final hiddenAnswer = _state.mode == MissionRuntimeMode.assessment &&
+        emittedActionType == 'sequence_reordered';
     setState(() {
       _writing = true;
       _lastActionRejected = actionValue['simulation_valid'] == false ||
           actionValue['compatible'] == false;
-      _workspaceFeedback =
-          !wrongSlot && actionValue['simulation_valid'] == false
-              ? actionValue['simulation_feedback'] as String?
-              : null;
+      _workspaceFeedback = !wrongSlot &&
+              !hiddenAnswer &&
+              actionValue['simulation_valid'] == false
+          ? actionValue['simulation_feedback'] as String?
+          : null;
       if (wrongSlot) _technicalFeedback = null;
     });
     if (wrongSlot) {
@@ -1145,6 +1316,8 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
         _technicalFeedback = null;
       } else if (actionValue['simulation_feedback'] is String) {
         _technicalFeedback = actionValue['simulation_feedback'] as String;
+      } else if (_state.mode == MissionRuntimeMode.assessment) {
+        _technicalFeedback = MissionContentData.assessmentNeutralRecorded;
       } else if (phase.feedbackIds.isNotEmpty) {
         _technicalFeedback =
             widget.definition.feedbackCatalog[phase.feedbackIds.first];
@@ -1295,10 +1468,10 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
       _technicalFeedback = _state.mode == MissionRuntimeMode.practice
           ? MissionContentData.practiceSavedMessage
           : 'Evidence submitted for authoritative evaluation and review.';
-    } catch (_) {
+    } catch (error) {
       _showActionError(
           _state.mode == MissionRuntimeMode.practice
-              ? MissionContentData.practiceSubmitFailed
+              ? practiceVerifyFailureMessage(error)
               : MissionContentData.assessmentSubmitFailed,
           onRetry: () => unawaited(_confirmSubmission()));
     } finally {
@@ -1355,6 +1528,57 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
           _technicalFeedback = feedback;
         });
       }
+    }
+  }
+
+  /// Assessment learners may submit from any phase after confirming; the
+  /// server evaluates unfinished steps as not satisfied.
+  Future<void> _submitAssessment() async {
+    if (_state.mode != MissionRuntimeMode.assessment ||
+        _submitting ||
+        _submitted ||
+        _writing) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text(MissionContentData.assessmentSubmitTitle),
+        content: const Text(MissionContentData.assessmentSubmitMessage),
+        actions: [
+          TextButton(
+            key: const ValueKey('assessment-submit-cancel'),
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text(MissionContentData.cancelExitLabel),
+          ),
+          FilledButton(
+            key: const ValueKey('assessment-submit-confirm'),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text(MissionContentData.assessmentSubmitConfirm),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _submitting = true);
+    try {
+      await _controller.flushPending();
+      if (_state.pendingEvidence.isNotEmpty ||
+          _controller.failedPendingEvidence.isNotEmpty) {
+        throw StateError('Assessment evidence is still pending.');
+      }
+      if (widget.onSubmit case final callback?) {
+        await callback();
+      } else {
+        await _submitAuthoritatively();
+      }
+      _submitted = true;
+      _technicalFeedback = MissionContentData.assessmentSubmittedMessage;
+    } catch (_) {
+      _showActionError(MissionContentData.assessmentSubmitFailed,
+          onRetry: () => unawaited(_submitAssessment()));
+    } finally {
+      if (mounted) setState(() => _submitting = false);
     }
   }
 
@@ -1442,10 +1666,10 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
         return;
       }
       try {
-        await _practiceEvidenceService?.markProgressDiscarded(
-          phaseId: _state.currentPhaseId ?? widget.definition.phases.first.id,
-        );
-        await _controller.reset(_initialState);
+        // The marker goes through the controller's own evidence gateway, so a
+        // class-practice attempt records it too, not only the practice
+        // transport; the next open then starts a clean run.
+        await _controller.discardProgress(_initialState);
       } catch (_) {
         if (mounted) {
           setState(() {
@@ -1753,6 +1977,68 @@ class TechnicalUnavailableState extends StatelessWidget {
             ],
           ),
         ),
+      );
+}
+
+/// Replaces the practice guide in assessment mode: no hints, tutorials or
+/// step guidance, and a submit control available in every phase.
+class _AssessmentBar extends StatelessWidget {
+  const _AssessmentBar({
+    required this.submitting,
+    required this.submitted,
+    required this.onSubmit,
+  });
+
+  final bool submitting;
+  final bool submitted;
+  final VoidCallback onSubmit;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        key: const ValueKey('assessment-bar'),
+        padding: const EdgeInsets.fromLTRB(12, 6, 8, 6),
+        decoration: const BoxDecoration(
+          color: AppTheme.backgroundPaleBlue,
+          border: Border(bottom: BorderSide(color: AppTheme.borderLight)),
+        ),
+        child: Row(children: [
+          const Icon(Icons.assignment_outlined, color: AppTheme.deepBlue),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Semantics(
+              container: true,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(MissionContentData.assessmentModeLabel,
+                      style: AppTheme.labelLarge),
+                  Text(MissionContentData.assessmentModeHint,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTheme.caption),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            child: FilledButton(
+              key: const ValueKey('assessment-submit'),
+              style: FilledButton.styleFrom(
+                  minimumSize: const Size(48, 48),
+                  padding: const EdgeInsets.symmetric(horizontal: 14)),
+              onPressed: submitting || submitted ? null : onSubmit,
+              child: Text(
+                submitted
+                    ? MissionContentData.assessmentSubmittedLabel
+                    : MissionContentData.assessmentSubmitLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ),
+        ]),
       );
 }
 

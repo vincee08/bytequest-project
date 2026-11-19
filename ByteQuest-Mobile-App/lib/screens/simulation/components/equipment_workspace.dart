@@ -16,7 +16,9 @@ enum _WorkspaceMode { place, connect, inspect }
 
 /// Equipment interaction layer for the shared zoomable scene engine.
 /// Actions use the existing evidence gateway and physical compatibility model.
-/// Assessment and COC4 callers retain the inspection scene without drag controls.
+/// Practice and assessment place and connect equipment the same way; only
+/// practice highlights compatible destinations. COC4 keeps the inspection
+/// scene without drag controls.
 class EquipmentWorkspace extends StatefulWidget {
   const EquipmentWorkspace({
     super.key,
@@ -113,8 +115,8 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
 
   @override
   Widget build(BuildContext context) {
-    final interactive = widget.state.mode == MissionRuntimeMode.practice &&
-        !widget.definition.cocId.startsWith('coc4') &&
+    final practice = widget.state.mode == MissionRuntimeMode.practice;
+    final interactive = !widget.definition.cocId.startsWith('coc4') &&
         widget.phase.resolvedInteraction != InteractionFamily.review;
     final modes = [
       if (interactive && _panel(_WorkspaceMode.place).isNotEmpty)
@@ -282,7 +284,8 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                             _selected!: HotspotVisualState.selected,
                           if (_dragging != null)
                             _dragging!: HotspotVisualState.selected,
-                          if (mode != _WorkspaceMode.inspect &&
+                          if (practice &&
+                              mode != _WorkspaceMode.inspect &&
                               (_dragging ?? _selected) != null)
                             for (final destination in destinations)
                               if (_canUseDestination(mode,
@@ -396,13 +399,15 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                                         border: candidates.isEmpty
                                             ? null
                                             : Border.all(
-                                                color: _canUseDestination(
-                                                        mode,
-                                                        candidates.first,
-                                                        MissionEquipmentSimulator
-                                                            .item(destinations,
-                                                                equipmentId),
-                                                        sources)
+                                                color: !practice ||
+                                                        _canUseDestination(
+                                                            mode,
+                                                            candidates.first,
+                                                            MissionEquipmentSimulator
+                                                                .item(
+                                                                    destinations,
+                                                                    equipmentId),
+                                                            sources)
                                                     ? AppTheme.primaryBlue
                                                     : AppTheme.errorRed,
                                                 width: 3),

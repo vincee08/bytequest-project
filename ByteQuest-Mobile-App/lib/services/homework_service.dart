@@ -5,6 +5,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:crypto/crypto.dart';
 
+import '../core/config/app_release.dart';
 import '../core/config/supabase_config.dart';
 import '../models/homework_model.dart';
 
@@ -49,7 +50,10 @@ class HomeworkService {
       session = (await client.auth.refreshSession()).session;
     }
     if (session == null) throw StateError('AUTHENTICATION_REQUIRED');
-    return {'Authorization': 'Bearer ${session.accessToken}'};
+    return {
+      ...kAppVersionHeaders,
+      'Authorization': 'Bearer ${session.accessToken}',
+    };
   }
 
   Map<String, dynamic> _decode(http.Response response) {

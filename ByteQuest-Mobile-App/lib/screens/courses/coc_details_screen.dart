@@ -4,22 +4,70 @@ import '../../core/theme/app_theme.dart';
 import '../../core/widgets/soft_card.dart';
 import '../../services/mission_service.dart';
 import '../../models/mission_model.dart';
+import '../../models/curriculum_model.dart';
 import '../../models/learner_learning_path_model.dart';
-import '../simulation/mission_launcher.dart';
-import '../../widgets/practice_progress_panel.dart';
+import '../../services/curriculum_service.dart';
+import '../practice/practice_launch.dart';
 import '../../widgets/practice_coc_session_panel.dart';
 import '../../data/mission_content_data.dart';
 
-/// COC Details Screen - Shows missions for a specific COC
-class COCDetailsScreen extends StatelessWidget {
+/// COC Details Screen - Shows missions for a specific COC. Access comes from
+/// the learner curriculum, the same module-level projection as Practice, so a
+/// module-locked mission is not tappable and an instructor bypass unlocks.
+class COCDetailsScreen extends StatefulWidget {
   final LearnerCocProjection projection;
+  final Future<CurriculumProjection> Function()? loadCurriculum;
 
   const COCDetailsScreen({
     super.key,
     required this.projection,
+    this.loadCurriculum,
   });
 
+  @override
+  State<COCDetailsScreen> createState() => _COCDetailsScreenState();
+}
+
+/// Whether [missionCode] can be practised: the module-level flag of the
+/// learner curriculum, or the COC-level practice progress before it loads.
+bool curriculumMissionUnlocked(
+    CurriculumProjection? curriculum, Mission mission) {
+  if (curriculum == null) return mission.isUnlocked == true;
+  for (final coc in curriculum.cocs) {
+    for (final module in coc.modules) {
+      for (final item in module.missions) {
+        if (item.missionCode == mission.id) return item.unlocked;
+      }
+    }
+  }
+  return false;
+}
+
+class _COCDetailsScreenState extends State<COCDetailsScreen> {
+  CurriculumProjection? _curriculum;
+
+  LearnerCocProjection get projection => widget.projection;
   String get cocId => projection.code;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCurriculum();
+  }
+
+  Future<void> _loadCurriculum() async {
+    try {
+      final curriculum = await (widget.loadCurriculum ??
+          () => CurriculumService().getCurriculum())();
+      if (mounted) setState(() => _curriculum = curriculum);
+    } catch (_) {
+      // The COC-level practice progress stays in use; the server still
+      // checks module access before a mission opens.
+    }
+  }
+
+  bool _cocUnlocked(MissionService missionService) =>
+      _curriculum?.coc(cocId)?.unlocked ?? missionService.isCocUnlocked(cocId);
 
   String _getCOCTitle(String cocId) {
     switch (cocId) {
@@ -62,11 +110,11 @@ class COCDetailsScreen extends StatelessWidget {
 
             return ListView(
               children: [
-                if (!missionService.isCocUnlocked(cocId))
+                if (!_cocUnlocked(missionService))
                   const Padding(
                       padding: EdgeInsets.all(24),
                       child: Text(MissionContentData.practiceLockedMessage)),
-                if (missionService.isCocUnlocked(cocId)) ...[
+                if (_cocUnlocked(missionService)) ...[
                   // COC Header
                   Container(
                     width: double.infinity,
@@ -107,9 +155,9 @@ class COCDetailsScreen extends StatelessWidget {
                     ),
                   ),
 
-                  Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: PracticeProgressPanel(coc: cocId)),
+                  // Module progress and the COC quiz now live in Learn and
+                  // Practice (one projection); this view shows the assessment
+                  // lifecycle per mission.
                   Padding(
                     padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
                     child: PracticeCocSessionPanel(cocId: cocId),
@@ -162,12 +210,16 @@ class COCDetailsScreen extends StatelessWidget {
 
     return SoftCard(
       margin: const EdgeInsets.only(bottom: 16),
-      onTap: mission.isUnlocked != true
+      // The server decides module access before the mission opens.
+      onTap: !curriculumMissionUnlocked(_curriculum, mission)
           ? null
           : () async {
-              await MissionLauncher.launch(context, mission);
-              if (context.mounted)
+              final launched =
+                  await PracticeMissionLauncher.open(context, mission.id);
+              if (launched && context.mounted) {
                 await context.read<MissionService>().refreshPracticeProgress();
+                await _loadCurriculum();
+              }
             },
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

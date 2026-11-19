@@ -2,10 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import type { Json } from '@/types/database.generated';
-import { practiceServerClient } from '@/lib/practice/database';
+import { practiceServerClient, practiceVerificationPort } from '@/lib/practice/database';
+import { verifyPracticeMission } from '@/lib/practice/verification';
 import { selectPracticeQuestions } from '@/lib/practice/question-bank';
 import { generatePracticeQuestions } from '@/lib/practice/free-quiz';
 import { practiceQuizView } from '@/lib/practice/quiz-view';
+import { activityHeaders } from '@/lib/activities/server';
 
 export const runtime='nodejs';
 export const maxDuration=60;
@@ -17,7 +19,11 @@ const requestSchema=z.discriminatedUnion('action',[
   z.object({action:z.literal('save'),id:z.string().uuid(),answers}).strict(),
   z.object({action:z.literal('submit'),id:z.string().uuid(),answers}).strict(),
 ]);
-function reply(body:unknown,status=200) { return NextResponse.json(body,{status,headers:{'Cache-Control':'no-store'}}); }
+// The Flutter web preview calls this route cross-origin: every reply carries
+// the shared CORS headers (explicit local preview origins only) and
+// Cache-Control: private, no-store.
+function replier(request:Request) { return (body:unknown,status=200)=>NextResponse.json(body,{status,headers:activityHeaders(request)}); }
+export async function OPTIONS(request:Request) { return new NextResponse(null,{status:204,headers:activityHeaders(request)}); }
 async function actor(request:Request) {
   const token=request.headers.get('authorization')?.match(/^Bearer (\S+)$/)?.[1];
   if (!token) return null;
@@ -28,6 +34,7 @@ async function actor(request:Request) {
   return !profileError && profile?.role==='learner' && profile.status==='active' ? {client,id:data.user.id}:null;
 }
 export async function GET(request:Request) {
+  const reply=replier(request);
   try {
     const user=await actor(request); if (!user) return reply({error:'Active Learner access is required.'},401);
     const id=new URL(request.url).searchParams.get('attempt');
@@ -38,6 +45,7 @@ export async function GET(request:Request) {
   } catch { return reply({error:'Practice service temporarily unavailable.'},503); }
 }
 export async function POST(request:Request) {
+  const reply=replier(request);
   try {
     const user=await actor(request); if (!user) return reply({error:'Active Learner access is required.'},401);
     if(Number(request.headers.get('content-length')??0)>8192) return reply({error:'Request too large.'},413);
@@ -47,8 +55,10 @@ export async function POST(request:Request) {
     const parsed=requestSchema.safeParse(body); if(!parsed.success) return reply({error:'Invalid practice request.'},400);
     const input=parsed.data;
     if(input.action==='verify') {
-      const {error}=await user.client.rpc('practice_verify_mission',{p_learner:user.id,p_mission:input.mission});
-      return error ? reply({error:'Complete and verify each work phase before submitting practice evidence.'},error.code==='42501'?403:422) : reply({verified:true});
+      // Verified and failed verifications are summarised by the database as
+      // practice runs; the reply carries those server-computed metrics.
+      const outcome=await verifyPracticeMission(practiceVerificationPort(user.client),user.id,input.mission);
+      return reply(outcome.body,outcome.status);
     }
     if(input.action==='begin') {
       const id=randomUUID();

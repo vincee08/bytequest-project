@@ -8,12 +8,15 @@ import 'package:bytequest/screens/simulation/runtime/mission_phase_completion_po
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/equipment_practice_driver.dart';
+
 void main() {
   test('every production phase has contextual instructions and progress', () {
     final missions = MissionSimulationDefinitions.all;
     final phases = missions.expand((mission) => mission.phases).toList();
     expect(missions.length, 20);
-    expect(phases.length, 115);
+    // 116: COC1 M2 gained a sixth phase on the assembly bench.
+    expect(phases.length, 116);
     expect(phases.map((phase) => phase.resolvedInteraction).toSet().length, 13);
     for (final mission in missions) {
       for (final phase in mission.phases) {
@@ -73,7 +76,8 @@ void main() {
   test('placement, configuration, diagnostics, and review use their controls',
       () {
     final checks = <String, String>{
-      'coc1_m2_p2': 'Drag it toward a compatible slot',
+      // The assembly bench: parts are dragged from its tray onto the bench.
+      'coc1_m2_p2': 'Drag the part onto its place on the bench',
       'coc2_m4_p2': 'Apply configuration',
       'coc3_m3_p3': 'diagnostic action',
       'coc4_m5_p6': 'Confirm evidence',
@@ -177,10 +181,20 @@ void main() {
     for (final phase in phases) {
       final guide = MissionActionGuide.forPhase(
           phase, MissionRuntimeState.initial(phase.id.substring(0, 7)));
-      final control = phase.resolvedInteraction == InteractionFamily.place &&
-              phase.id.startsWith('coc4')
-          ? 'Components and devices'
-          : expected[phase.resolvedInteraction];
+      // The assembly bench renders its parts, cables and inspections in the
+      // tray below the bench; its test and review keep the standard panels.
+      final bench = phase.presentation['bench_steps'] is List &&
+          const {
+            InteractionFamily.inspect,
+            InteractionFamily.place,
+            InteractionFamily.connect,
+          }.contains(phase.resolvedInteraction);
+      final control = bench
+          ? 'tray below the bench'
+          : phase.resolvedInteraction == InteractionFamily.place &&
+                  phase.id.startsWith('coc4')
+              ? 'Components and devices'
+              : expected[phase.resolvedInteraction];
       expect(guide.steps.first.text, contains(control), reason: phase.id);
     }
   });
@@ -200,7 +214,7 @@ void main() {
     expect(generic, isEmpty);
   });
 
-  test('all 115 production phases resolve to rendered control identities', () {
+  test('all 116 production phases resolve to rendered control identities', () {
     var count = 0;
     for (final mission in MissionSimulationDefinitions.all) {
       for (final phase in mission.phases) {
@@ -302,7 +316,56 @@ void main() {
         }
       }
     }
-    expect(count, 115);
+    expect(count, 116);
+  });
+
+  // Polish round P5: the bench has hotspots and a tray, not card panels.
+  test('assembly bench guidance names the bench controls, not card panels',
+      () {
+    const panels = [
+      'Operate the equipment',
+      'Equipment operations',
+      'Place equipment',
+      'Components and devices',
+      'Install selected component',
+      'Connect ports',
+      'Inspection targets',
+      'Tap Objects',
+    ];
+    final mission = MissionSimulationDefinitions.byId('coc1_m2');
+    var benchPhases = 0;
+    for (final phase in mission.phases) {
+      if (phase.presentation['bench_steps'] is! List) continue;
+      benchPhases++;
+      final state =
+          MissionRuntimeState.initial(mission.id).copyWith(currentPhaseId: phase.id);
+      final texts = [
+        ...MissionPhaseGuidance.forPhase(phase, state).steps,
+        ...MissionActionGuide.forPhase(phase, state).steps.map((s) => s.text),
+      ];
+      for (final text in texts) {
+        for (final panel in panels) {
+          expect(text, isNot(contains(panel)), reason: '${phase.id}: $text');
+        }
+      }
+      expect(texts.join(' '), contains('bench'), reason: phase.id);
+    }
+    expect(benchPhases, 5);
+
+    // After the inspections, the next action is the wrist strap: a hotspot
+    // on the bench or its button in the tray.
+    final inspect = mission.phases.first;
+    final inspected = MissionRuntimeState.initial(mission.id).copyWith(
+      currentPhaseId: inspect.id,
+      interactionCompletedPhaseIds: {inspect.id},
+      hotspotStates: {
+        for (final object in MissionEquipmentSimulator.maps(
+            inspect.presentation['objects']))
+          object['id'] as String: HotspotVisualState.completed,
+      },
+    );
+    expect(MissionActionGuide.forPhase(inspect, inspected).currentStep?.text,
+        MissionContentData.guideBenchOperation('Wear the anti-static wrist strap'));
   });
 
   test('graded decisions do not name the required correction button', () {
@@ -381,7 +444,8 @@ void main() {
       ));
       expect(find.text(MissionContentData.guideNextHeading), findsOneWidget);
       expect(find.byKey(const ValueKey('mission-show-me-how')), findsOneWidget);
-      expect(find.textContaining('Install selected component'), findsWidgets);
+      // COC1 M2 runs on the assembly bench: its tray, not a card panel.
+      expect(find.textContaining('tray below the bench'), findsWidgets);
       expect(tester.takeException(), isNull);
     });
   }
@@ -412,5 +476,75 @@ void main() {
     expect(highlights, 1);
     expect(toggles, 0);
     expect(tester.takeException(), isNull);
+  });
+
+  // QA Q3: on the bench the guidance bar names the bench step the header
+  // shows, never "All required actions completed" while a step is pending.
+  group('bench guidance bar follows the bench steps', () {
+    final mission = MissionSimulationDefinitions.byId('coc1_m2');
+    final p2 = mission.phases[1];
+
+    MissionRuntimeState beforeLatches() {
+      final driver = EquipmentPracticeDriver(mission)..complete(mission.phases[0]);
+      final script = practiceScripts[p2.id]!;
+      for (final step in script.take(script.length - 1)) {
+        driver.act(p2, step.$1, step.$2, step.$3);
+      }
+      return driver.state.copyWith(currentPhaseId: p2.id);
+    }
+
+    test('practice names the pending bench step; assessment none', () {
+      final initial =
+          MissionRuntimeState.initial(mission.id).copyWith(currentPhaseId: p2.id);
+      expect(MissionPhaseGuidance.forPhase(p2, initial).benchStep,
+          'Open the CPU socket load lever');
+      final state = beforeLatches();
+      expect(MissionPhaseGuidance.forPhase(p2, state).benchStep,
+          'Press each module down until the latches lock');
+      final assessment = MissionRuntimeState.fromJson({
+        ...state.toJson(),
+        'mode': 'assessment',
+        'assessmentAttemptId': 'attempt-q3',
+      });
+      expect(MissionPhaseGuidance.forPhase(p2, assessment).benchStep, isNull);
+      final other = MissionSimulationDefinitions.byId('coc1_m1');
+      expect(
+          MissionPhaseGuidance.forPhase(
+                  other.phases.first,
+                  MissionRuntimeState.initial(other.id)
+                      .copyWith(currentPhaseId: other.phases.first.id))
+              .benchStep,
+          isNull,
+          reason: 'only the assembly bench has bench steps');
+    });
+
+    testWidgets('the bar shows the latch step, not Continue', (tester) async {
+      final state = beforeLatches();
+      expect(MissionPhaseCompletionPolicy.canAdvance(p2, state), isTrue,
+          reason: 'the required parts are placed');
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: MissionGuidanceBar(
+            guidance: MissionPhaseGuidance.forPhase(p2, state),
+            actionGuide: MissionActionGuide.forPhase(p2, state),
+            expanded: false,
+            onToggle: () {},
+            showHow: false,
+            onShowHow: () {},
+          ),
+        ),
+      ));
+      expect(find.text('Press each module down until the latches lock'),
+          findsOneWidget);
+      expect(find.text(MissionContentData.guideReadyToContinue), findsNothing);
+    });
+  });
+
+  // QA Q4: the Run test hint fits both layouts (below the workspace in
+  // portrait, in the side panel in landscape).
+  test('the run-test guidance is layout neutral', () {
+    expect(MissionContentData.guideTest, contains('Run test'));
+    expect(MissionContentData.guideTest.toLowerCase(), isNot(contains('below')));
+    expect(MissionContentData.guideTest.toLowerCase(), isNot(contains('scroll')));
   });
 }

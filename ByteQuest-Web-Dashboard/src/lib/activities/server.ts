@@ -5,6 +5,18 @@ import { createAdminSupabaseClient } from '@/lib/supabase/admin';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { activitiesClient } from './types';
 
+/**
+ * The learner app (1.2.0+) identifies itself with x-bytequest-app-version on
+ * every request. PostgREST calls made as the learner forward it, so the
+ * server's version check sees the real client; a missing or malformed value
+ * is not forwarded (the server then treats the caller as an unsupported app).
+ */
+export const APP_VERSION_HEADER = 'x-bytequest-app-version';
+export function appVersionHeader(request: Request): Record<string, string> {
+  const value = request.headers.get(APP_VERSION_HEADER)?.trim();
+  return value && /^[0-9A-Za-z.+-]{1,32}$/.test(value) ? { [APP_VERSION_HEADER]: value } : {};
+}
+
 /** Cookie-based instructor UI and bearer-based Flutter use the same identity checks. */
 export async function activityActor(request: Request) {
   const header = request.headers.get('authorization');
@@ -20,7 +32,7 @@ export async function activityActor(request: Request) {
     if (!profile || profile.status !== 'active') return null;
     id = data.user.id; role = profile.role;
     const client = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-      global: { headers: { Authorization: `Bearer ${token}` } }, auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { Authorization: `Bearer ${token}`, ...appVersionHeader(request) } }, auth: { persistSession: false, autoRefreshToken: false },
     });
     return { id, role, client: activitiesClient(client), service: activitiesClient(service) };
   }
@@ -38,18 +50,30 @@ export function activityHeaders(request: Request) {
   // allowed here; bearer auth is still mandatory for cross-origin requests.
   if (localOrigins.has(origin)) {
     headers['Access-Control-Allow-Origin'] = origin;
-    headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type';
+    // x-bytequest-app-version: the learner app's version marker (1.2.0+).
+    headers['Access-Control-Allow-Headers'] = 'Authorization, Content-Type, x-bytequest-app-version';
     headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS';
   }
   return headers;
 }
+const loopbackHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
 export function activityWriteOriginAllowed(request: Request) {
   const origin = request.headers.get('origin');
   if (!origin) return true;
   if (request.headers.has('authorization') && localOrigins.has(origin)) return true;
   const target = new URL(request.url);
-  // localhost and 127.0.0.1 are equivalent only for the local dashboard port.
-  return origin === target.origin || (target.port === '3008' && ['http://localhost:3008','http://127.0.0.1:3008'].includes(origin));
+  if (origin === target.origin) return true;
+  // Locally `next start` reports the request URL as localhost even when the
+  // browser opened 127.0.0.1 (or the reverse), so loopback names count as the
+  // same origin, but only for the same scheme and port. Production hosts are
+  // never loopback names, so they keep the exact comparison above.
+  try {
+    const source = new URL(origin);
+    return loopbackHosts.has(source.hostname) && loopbackHosts.has(target.hostname)
+      && source.protocol === target.protocol && source.port === target.port;
+  } catch {
+    return false;
+  }
 }
 export function activityError(error: { code?: string; message?: string }) {
   if (error.code === '42501') return { error: 'This action is not allowed for your account or class.', status: 403 };

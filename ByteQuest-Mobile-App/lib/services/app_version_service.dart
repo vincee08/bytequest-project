@@ -1,0 +1,142 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../core/config/app_release.dart';
+import '../core/config/supabase_config.dart';
+
+export '../core/config/app_release.dart';
+
+/// True when the server refused an action because this app version is below
+/// the supported minimum (`APP_UPDATE_REQUIRED: ...`, SQLSTATE P0001). It
+/// should not happen for this build; the mapping stays for older minimums.
+bool isAppUpdateRequiredError(Object error) {
+  final text = error is PostgrestException
+      ? '${error.message} ${error.details ?? ''} ${error.hint ?? ''}'
+      : error.toString();
+  return text.contains(kAppUpdateRequiredCode);
+}
+
+/// Key of the minimum supported version in `public.app_release_config`.
+const String kMinimumAppVersionKey = 'min_supported_app_version';
+
+enum AppVersionStatus { supported, updateRequired, unknown }
+
+class AppVersionCheck {
+  const AppVersionCheck({
+    required this.status,
+    required this.currentVersion,
+    this.minimumVersion,
+  });
+
+  final AppVersionStatus status;
+  final String currentVersion;
+  final String? minimumVersion;
+}
+
+typedef AppVersionChecker = Future<AppVersionCheck> Function();
+
+/// Parses `major.minor.patch` (build metadata and pre-release tags ignored).
+/// Returns null for anything that is not a dotted list of numbers.
+List<int>? parseAppVersion(String? value) {
+  final core = (value ?? '').trim().split('+').first.split('-').first;
+  if (core.isEmpty) return null;
+  final parts = core.split('.');
+  if (parts.length > 4) return null;
+  final numbers = <int>[];
+  for (final part in parts) {
+    final number = int.tryParse(part);
+    if (number == null || number < 0) return null;
+    numbers.add(number);
+  }
+  return numbers;
+}
+
+/// Negative when [a] is older than [b], zero when equal, positive when newer.
+/// Missing segments count as zero (1.2 == 1.2.0).
+int compareAppVersions(List<int> a, List<int> b) {
+  final length = a.length > b.length ? a.length : b.length;
+  for (var index = 0; index < length; index++) {
+    final left = index < a.length ? a[index] : 0;
+    final right = index < b.length ? b[index] : 0;
+    if (left != right) return left - right;
+  }
+  return 0;
+}
+
+/// Only a valid minimum that is newer than the running app blocks it. A
+/// missing or malformed minimum never blocks learners (fail open).
+AppVersionCheck evaluateAppVersion({
+  required String current,
+  required String? minimum,
+}) {
+  final currentParts = parseAppVersion(current);
+  final minimumParts = parseAppVersion(minimum);
+  if (currentParts == null || minimumParts == null) {
+    if (minimum != null && minimumParts == null) {
+      debugPrint('Ignoring malformed $kMinimumAppVersionKey value: $minimum');
+    }
+    return AppVersionCheck(
+      status: AppVersionStatus.supported,
+      currentVersion: current,
+      minimumVersion: minimum,
+    );
+  }
+  return AppVersionCheck(
+    status: compareAppVersions(currentParts, minimumParts) < 0
+        ? AppVersionStatus.updateRequired
+        : AppVersionStatus.supported,
+    currentVersion: current,
+    minimumVersion: minimum,
+  );
+}
+
+/// PostgREST/PostgreSQL codes meaning "the release config table is not there"
+/// (a backend without the migration): no minimum is configured.
+const _missingConfigCodes = {'PGRST205', '42P01'};
+
+Future<String?> _fetchMinimumFromSupabase() async {
+  final row = await SupabaseConfig.client
+      .from('app_release_config')
+      .select('value')
+      .eq('key', kMinimumAppVersionKey)
+      .maybeSingle();
+  return row?['value'] as String?;
+}
+
+/// Reads the server's minimum supported learner app version. The value is
+/// public release configuration, readable before sign-in.
+class AppVersionService {
+  AppVersionService({
+    this.timeout = const Duration(seconds: 8),
+    Future<String?> Function()? fetchMinimum,
+  }) : _fetchMinimum = fetchMinimum ?? _fetchMinimumFromSupabase;
+
+  final Duration timeout;
+  final Future<String?> Function() _fetchMinimum;
+
+  Future<AppVersionCheck> check() async {
+    try {
+      final minimum = await _fetchMinimum().timeout(timeout);
+      return evaluateAppVersion(current: kAppVersion, minimum: minimum);
+    } on PostgrestException catch (error) {
+      if (_missingConfigCodes.contains(error.code)) {
+        // The server answered but has no release configuration yet.
+        return evaluateAppVersion(current: kAppVersion, minimum: null);
+      }
+      debugPrint('Minimum app version check failed: ${error.message}');
+      return const AppVersionCheck(
+        status: AppVersionStatus.unknown,
+        currentVersion: kAppVersion,
+      );
+    } catch (error) {
+      // Offline, timed out or not initialised: fail open with a retry.
+      debugPrint('Minimum app version check failed: $error');
+      return const AppVersionCheck(
+        status: AppVersionStatus.unknown,
+        currentVersion: kAppVersion,
+      );
+    }
+  }
+}

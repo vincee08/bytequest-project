@@ -31,17 +31,36 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createClient } from "@/lib/supabase/client";
 import {
+  difficultyLabels,
   itemTypeLabels,
   publicationReadiness,
   quizErrorMessage,
-  quizSchema,
+  quizTypeLabels,
+  toRpcRubric,
   type QuestionInput,
   type QuizItem,
 } from "@/lib/quizzes/authoring";
+import { scopeSummary, type CurriculumCatalog } from "@/lib/quizzes/curriculum";
+import {
+  formFromQuiz,
+  parseQuizForm,
+  quizSettingsRpcArgs,
+  scopeError,
+  type QuizFormState,
+} from "@/lib/quizzes/form";
+import {
+  quizDb,
+  type QuizDifficulty,
+  type QuizType,
+  type ResultReleaseMode,
+} from "@/lib/quizzes/types";
 import { QuestionEditor } from "./QuestionEditor";
 import { QuizPreview } from "./QuizPreview";
-import { QuizDeadlineControls } from './QuizDeadlineControls';
-import { manilaInputToUtc } from '@/lib/activities/dates';
+import { QuizDeadlineControls } from "./QuizDeadlineControls";
+import { QuizCurriculumFields } from "./QuizCurriculumFields";
+import { QuizResultsPanel, type ResultAttempt } from "./QuizResultsPanel";
+import { manilaInputToUtc } from "@/lib/activities/dates";
+import { formatDateTime } from "@/lib/analytics/format";
 import { AiQuizPanel, type QuizGroundingCatalog } from "./AiQuizPanel";
 
 interface Version {
@@ -51,6 +70,8 @@ interface Version {
   instructions: string | null;
   changeSummary?: string | null;
   publishedAt?: string | null;
+  timeLimitMinutes?: number | null;
+  resultReleaseMode?: ResultReleaseMode;
 }
 interface Assignment {
   id: string;
@@ -60,8 +81,17 @@ interface Assignment {
   classTitle: string;
   dueAt?: string | null;
 }
+export interface QuizCurriculum {
+  focus: string | null;
+  quizType: QuizType | null;
+  difficulty: QuizDifficulty | null;
+  topicId: string | null;
+  moduleIds: string[];
+  outcomeIds: string[];
+}
 export interface QuizWorkspaceProps {
   initialTab?: string;
+  initialAttemptId?: string;
   serverNow?: string;
   quiz: {
     id: string;
@@ -71,45 +101,44 @@ export interface QuizWorkspaceProps {
     cocModuleId: string | null;
     archivedAt: string | null;
   };
+  curriculum: QuizCurriculum;
+  catalog: CurriculumCatalog;
   version: Version | null;
   items: QuizItem[];
   hasDraft: boolean;
-  modules: { id: string; code: string; title: string }[];
   classes: { id: string; title: string; code: string | null }[];
   grounding: QuizGroundingCatalog | null;
   versions: Version[];
   assignments: Assignment[];
-  results: {
-    id: string;
-    learner: string;
-    classTitle: string;
-    status: string;
-    versionNumber: number;
-    completedAt: string | null;
-    correctCount: number | null;
-    questionCount: number | null;
-  }[];
+  results: ResultAttempt[];
+  enrolled: number;
 }
 const panel = "rounded-xl border border-border bg-card p-4 sm:p-5";
 const content = "mt-4 data-[state=inactive]:hidden";
+const tabs = ["questions", "settings", "publishing", "ai", "history", "results"] as const;
 
 export function QuizAuthoringWorkspace({
   quiz,
+  curriculum,
+  catalog,
   version,
   items,
   hasDraft,
-  modules,
   classes,
   grounding,
   versions,
   assignments,
   results,
+  enrolled,
   initialTab,
+  initialAttemptId,
   serverNow,
 }: QuizWorkspaceProps) {
   const router = useRouter();
-  const [tab, setTab] = useState(initialTab === 'publishing' ? 'publishing' : "questions");
-  const [quizDeadline, setQuizDeadline] = useState('');
+  const [tab, setTab] = useState<string>(
+    tabs.includes(initialTab as (typeof tabs)[number]) ? (initialTab as string) : "questions",
+  );
+  const [quizDeadline, setQuizDeadline] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const busyRef = useRef(false);
   const [feedback, setFeedback] = useState<{
@@ -130,32 +159,35 @@ export function QuizAuthoringWorkspace({
   const [assignmentInstructions, setAssignmentInstructions] = useState("");
   const [versionSummary, setVersionSummary] = useState("");
   const [archiveReason, setArchiveReason] = useState("");
-  const [quizTitle, setQuizTitle] = useState(quiz.title);
-  const [quizTopic, setQuizTopic] = useState(quiz.topic);
-  const [quizDescription, setQuizDescription] = useState(
-    quiz.description ?? "",
-  );
-  const [quizCocModuleId, setQuizCocModuleId] = useState(
-    quiz.cocModuleId ?? "",
-  );
+  const draftVersion = versions.find((item) => item.status === "draft") ?? null;
+  // Settings edits apply to the draft; without one they must match the latest version.
+  const latestVersion = [...versions].sort((a, b) => b.versionNumber - a.versionNumber)[0];
+  const settingsVersion = draftVersion ?? latestVersion ?? version;
+  const initialForm = formFromQuiz({
+    title: quiz.title,
+    description: quiz.description,
+    cocModuleId: quiz.cocModuleId,
+    moduleIds: curriculum.moduleIds,
+    topicId: curriculum.topicId,
+    outcomeIds: curriculum.outcomeIds,
+    focus: curriculum.focus,
+    quizType: curriculum.quizType,
+    difficulty: curriculum.difficulty,
+    instructions: settingsVersion?.instructions ?? null,
+    timeLimitMinutes: settingsVersion?.timeLimitMinutes ?? null,
+    resultReleaseMode: settingsVersion?.resultReleaseMode ?? "immediate",
+  });
+  const [form, setForm] = useState<QuizFormState>(initialForm);
+  const [savedForm, setSavedForm] = useState(JSON.stringify(initialForm));
   const [settingsErrors, setSettingsErrors] = useState<
     Record<string, string[] | undefined>
   >({});
-  const [savedSettings, setSavedSettings] = useState(
-    JSON.stringify([
-      quiz.title,
-      quiz.topic,
-      quiz.description ?? "",
-      quiz.cocModuleId ?? "",
-    ]),
-  );
-  const settingsDirty =
-    savedSettings !==
-    JSON.stringify([quizTitle, quizTopic, quizDescription, quizCocModuleId]);
+  const settingsDirty = savedForm !== JSON.stringify(form);
   const dirty = settingsDirty || questionDirty;
   const activeItems = [...items].sort((a, b) => a.orderIndex - b.orderIndex);
   const readiness = publicationReadiness(activeItems);
   const isDraft = version?.status === "draft" && !quiz.archivedAt;
+  const mapped = !!quiz.cocModuleId && !!curriculum.focus;
   const canPublish =
     !!version &&
     !quiz.archivedAt &&
@@ -175,10 +207,16 @@ export function QuizAuthoringWorkspace({
     (item) =>
       selectedClasses.includes(item.id) && !assignedClasses.has(item.id),
   );
-  const relatedModule = modules.find((item) => item.id === quiz.cocModuleId);
   function openEditor(item: QuizItem | null) {
     toast.dismiss();
     setEditor({ item });
+  }
+  function changeTab(value: string) {
+    setTab(value);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", value);
+    if (value !== "results") url.searchParams.delete("attempt");
+    window.history.replaceState(window.history.state, "", url);
   }
 
   useEffect(() => {
@@ -236,32 +274,36 @@ export function QuizAuthoringWorkspace({
   }
   async function saveQuestion(input: QuestionInput, id?: string) {
     if (!version || !isDraft) return false;
+    const essay = input.itemType === "scenario_essay";
     return run(
       "question",
       () =>
-        createClient().rpc("upsert_quiz_item", {
+        quizDb(createClient()).rpc("upsert_quiz_item", {
           p_quiz_version_id: version.id,
           p_item_type: input.itemType,
           p_prompt: input.prompt,
           p_options: input.options,
           p_correct_answer: input.correctAnswer,
-          p_explanation: input.explanation || undefined,
-          p_item_id: id,
+          p_explanation: input.explanation || null,
+          p_item_id: id ?? null,
+          p_points: essay ? null : input.points,
+          p_rubric: essay ? toRpcRubric(input.rubric) : null,
+          p_scenario: essay ? input.scenario : null,
+          p_min_words: essay ? input.minWords : null,
+          p_max_words: essay ? input.maxWords : null,
         }),
       "Question saved as a draft. Review it before publishing.",
     );
   }
-  async function saveMetadata(event: React.FormEvent) {
+  async function saveSettings(event: React.FormEvent) {
     event.preventDefault();
-    const parsed = quizSchema.safeParse({
-      title: quizTitle,
-      topic: quizTopic,
-      description: quizDescription,
-      cocModuleId: quizCocModuleId,
-      instructions: "",
-    });
-    if (!parsed.success) {
-      setSettingsErrors(parsed.error.flatten().fieldErrors);
+    const parsed = parseQuizForm(form);
+    const scope = scopeError(form);
+    if (!parsed.success || scope) {
+      setSettingsErrors({
+        ...(parsed.success ? {} : parsed.error.flatten().fieldErrors),
+        ...(scope ? { moduleIds: [scope] } : {}),
+      });
       return;
     }
     setSettingsErrors({});
@@ -269,24 +311,14 @@ export function QuizAuthoringWorkspace({
       await run(
         "settings",
         () =>
-          createClient().rpc("update_instructor_quiz", {
+          quizDb(createClient()).rpc("update_instructor_quiz", {
             p_quiz_id: quiz.id,
-            p_title: parsed.data.title,
-            p_topic: parsed.data.topic,
-            p_description: parsed.data.description,
-            p_coc_module_id: parsed.data.cocModuleId || undefined,
+            ...quizSettingsRpcArgs(parsed.data, catalog),
           }),
-        "Quiz settings saved.",
+        "Quiz curriculum and settings saved.",
       )
     )
-      setSavedSettings(
-        JSON.stringify([
-          quizTitle,
-          quizTopic,
-          quizDescription,
-          quizCocModuleId,
-        ]),
-      );
+      setSavedForm(JSON.stringify(form));
   }
   async function moveQuestion(index: number, direction: number) {
     if (!version) return;
@@ -351,6 +383,11 @@ export function QuizAuthoringWorkspace({
       setSelectedClasses([]);
     }
   }
+  const releaseLabel =
+    (settingsVersion?.resultReleaseMode ?? "immediate") === "instructor_release" ||
+    readiness.essays > 0
+      ? "Instructor release"
+      : "Immediate results";
   return (
     <div className="space-y-4">
       <Link
@@ -373,12 +410,22 @@ export function QuizAuthoringWorkspace({
             >
               {quiz.archivedAt ? "Archived" : (version?.status ?? "Draft")}
             </Badge>
+            {!mapped ? <Badge variant="outline">Not mapped to a module</Badge> : null}
           </div>
           <p className="mt-2 text-sm text-muted-foreground">
-            {relatedModule?.code.toUpperCase() ?? "General supplementary quiz"}{" "}
-            · {activeItems.length} questions · Version{" "}
+            {scopeSummary(catalog, quiz.cocModuleId, curriculum.moduleIds)} ·{" "}
+            {activeItems.length} questions · Version{" "}
             {version?.versionNumber ?? 1}
+            {curriculum.quizType ? ` · ${quizTypeLabels[curriculum.quizType]}` : ""}
+            {curriculum.difficulty ? ` · ${difficultyLabels[curriculum.difficulty]}` : ""}
+            {settingsVersion?.timeLimitMinutes ? ` · ${settingsVersion.timeLimitMinutes}-minute limit` : ""}
+            {` · ${releaseLabel}`}
           </p>
+          {curriculum.focus ? (
+            <p className="mt-1 break-words text-sm">
+              <span className="font-medium">Focus:</span> {curriculum.focus}
+            </p>
+          ) : null}
           <p className="mt-1 text-xs text-muted-foreground" role="status">
             {busy
               ? "Saving changes…"
@@ -403,7 +450,7 @@ export function QuizAuthoringWorkspace({
           {!quiz.archivedAt ? (
             <Button
               className="min-h-11"
-              onClick={() => setTab("publishing")}
+              onClick={() => changeTab("publishing")}
               disabled={busy !== null || version?.status === "retired"}
             >
               <Send className="mr-2 h-4 w-4" aria-hidden="true" />
@@ -414,8 +461,15 @@ export function QuizAuthoringWorkspace({
       </header>
       <p className="text-xs leading-relaxed text-muted-foreground">
         Supplementary learning quiz · separate from accredited TESDA competency
-        assessment · one attempt per learner.
+        assessment · one attempt per learner · saved answers are submitted
+        automatically at the deadline or time limit.
       </p>
+      {!mapped && !quiz.archivedAt ? (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+          This quiz was created before curriculum mapping. Open Settings to
+          choose its COC, modules, learning outcomes and focus.
+        </p>
+      ) : null}
       {feedback ? (
         <p
           role={feedback.error ? "alert" : "status"}
@@ -428,7 +482,8 @@ export function QuizAuthoringWorkspace({
         <section className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3 sm:flex-row sm:items-center">
           <div className="min-w-0 flex-1">
             <p className="text-sm text-muted-foreground">
-              Create a new draft to change published questions.
+              Create a new draft to change published questions, instructions,
+              the time limit or the release mode.
             </p>
           </div>
           <Button
@@ -458,7 +513,7 @@ export function QuizAuthoringWorkspace({
           </Button>
         </section>
       ) : null}
-      <Tabs value={tab} onValueChange={setTab}>
+      <Tabs value={tab} onValueChange={changeTab}>
         <TabsList
           aria-label="Quiz management"
           className="grid h-auto w-full grid-cols-3 gap-1 sm:flex sm:flex-wrap"
@@ -469,7 +524,7 @@ export function QuizAuthoringWorkspace({
             ["publishing", "Publishing"],
             ["ai", "AI assistant"],
             ["history", "History"],
-            ["results", "Results"],
+            ["results", `Results (${results.filter((item) => item.status === "completed").length})`],
           ].map(([value, label]) => (
             <TabsTrigger key={value} value={value} className="min-h-10">
               {label}
@@ -483,6 +538,9 @@ export function QuizAuthoringWorkspace({
                 <h2 className="font-semibold">Questions</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {readiness.approved} of {readiness.total} approved
+                  {readiness.essays
+                    ? ` · ${readiness.essays} scenario essay${readiness.essays === 1 ? "" : "s"} (instructor release)`
+                    : ""}
                   {isDraft
                     ? " · review every question before publishing"
                     : " · published content is read-only"}
@@ -511,6 +569,9 @@ export function QuizAuthoringWorkspace({
                         <Badge variant="outline">
                           {itemTypeLabels[item.itemType]}
                         </Badge>
+                        <Badge variant="outline">
+                          {item.points ?? 1} pt{(item.points ?? 1) === 1 ? "" : "s"}
+                        </Badge>
                         <Badge
                           variant={
                             item.reviewStatus === "approved"
@@ -530,22 +591,55 @@ export function QuizAuthoringWorkspace({
                           <Badge variant="outline">AI draft</Badge>
                         ) : null}
                       </div>
+                      {item.scenario ? (
+                        <p className="whitespace-pre-wrap break-words rounded-md bg-muted/35 p-3 text-sm">
+                          <span className="font-medium">Scenario:</span>{" "}
+                          {item.scenario}
+                        </p>
+                      ) : null}
                       <h3 className="whitespace-pre-wrap break-words text-sm font-medium leading-relaxed">
                         {item.prompt}
                       </h3>
                       <details className="text-sm">
                         <summary className="min-h-10 cursor-pointer py-2 text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring">
-                          View options, answer and explanation
+                          {item.itemType === "scenario_essay"
+                            ? "View rubric and scoring guide"
+                            : "View options, answer and explanation"}
                         </summary>
                         <div className="mt-2 space-y-2 rounded-lg bg-muted/35 p-3">
-                          {item.options.map((option, position) => (
-                            <p key={position} className="break-words">
-                              {String.fromCharCode(65 + position)}. {option}
-                            </p>
-                          ))}
-                          <p className="break-words">
-                            <strong>Answer:</strong> {item.correctAnswer}
-                          </p>
+                          {item.itemType === "scenario_essay" ? (
+                            <>
+                              <ul className="space-y-1">
+                                {(item.rubric ?? []).map((row) => (
+                                  <li key={row.id} className="break-words">
+                                    <strong>{row.criterion}</strong> ({row.maxPoints} pts)
+                                    {row.description ? ` — ${row.description}` : ""}
+                                  </li>
+                                ))}
+                              </ul>
+                              {item.minWords || item.maxWords ? (
+                                <p className="text-muted-foreground">
+                                  Word guidance: {item.minWords ?? "—"} to {item.maxWords ?? "—"} words
+                                </p>
+                              ) : null}
+                              {item.correctAnswer ? (
+                                <p className="break-words">
+                                  <strong>Scoring guide:</strong> {item.correctAnswer}
+                                </p>
+                              ) : null}
+                            </>
+                          ) : (
+                            <>
+                              {item.options.map((option, position) => (
+                                <p key={position} className="break-words">
+                                  {String.fromCharCode(65 + position)}. {option}
+                                </p>
+                              ))}
+                              <p className="break-words">
+                                <strong>Answer:</strong> {item.correctAnswer}
+                              </p>
+                            </>
+                          )}
                           {item.explanation ? (
                             <p className="whitespace-pre-wrap break-words text-muted-foreground">
                               {item.explanation}
@@ -657,7 +751,7 @@ export function QuizAuthoringWorkspace({
                 All questions approved. Choose the classes that will receive
                 this version.
               </p>
-              <Button onClick={() => setTab("publishing")}>
+              <Button onClick={() => changeTab("publishing")}>
                 Select classes
               </Button>
             </div>
@@ -665,81 +759,26 @@ export function QuizAuthoringWorkspace({
         </TabsContent>
         <TabsContent forceMount value="settings" className={content}>
           <section className={panel}>
-            <h2 className="font-semibold">Quiz settings</h2>
+            <h2 className="font-semibold">Curriculum and settings</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Metadata is shared across versions. Published questions and
-              instructions remain unchanged.
+              Curriculum placement and focus are shared across versions.
+              Instructions, time limit and release mode belong to the draft
+              version; published versions keep theirs.
             </p>
-            <form onSubmit={saveMetadata} className="mt-5 max-w-3xl space-y-4">
-              <fieldset
+            <form onSubmit={saveSettings} className="mt-5 max-w-3xl space-y-4" noValidate>
+              <QuizCurriculumFields
+                idPrefix="quiz-settings"
+                catalog={catalog}
+                value={form}
+                onChange={setForm}
+                errors={settingsErrors}
                 disabled={busy !== null || !!quiz.archivedAt}
-                className="grid gap-4 sm:grid-cols-2"
-              >
-                <div className="space-y-2">
-                  <Label htmlFor="metadata-title">Title</Label>
-                  <Input
-                    id="metadata-title"
-                    required
-                    minLength={3}
-                    maxLength={200}
-                    value={quizTitle}
-                    onChange={(event) => setQuizTitle(event.target.value)}
-                    aria-invalid={!!settingsErrors.title}
-                  />
-                  {settingsErrors.title ? (
-                    <p role="alert" className="text-sm text-destructive">
-                      {settingsErrors.title.join(" ")}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="metadata-topic">Topic</Label>
-                  <Input
-                    id="metadata-topic"
-                    required
-                    minLength={2}
-                    maxLength={240}
-                    value={quizTopic}
-                    onChange={(event) => setQuizTopic(event.target.value)}
-                    aria-invalid={!!settingsErrors.topic}
-                  />
-                  {settingsErrors.topic ? (
-                    <p role="alert" className="text-sm text-destructive">
-                      {settingsErrors.topic.join(" ")}
-                    </p>
-                  ) : null}
-                </div>
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="metadata-coc">Related COC (optional)</Label>
-                  <select
-                    id="metadata-coc"
-                    className="min-h-11 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring"
-                    value={quizCocModuleId}
-                    onChange={(event) => setQuizCocModuleId(event.target.value)}
-                  >
-                    <option value="">General supplementary quiz</option>
-                    {modules.map((item) => (
-                      <option key={item.id} value={item.id}>
-                        {item.code.toUpperCase()} — {item.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="metadata-description">
-                    Description (optional)
-                  </Label>
-                  <Textarea
-                    id="metadata-description"
-                    maxLength={2000}
-                    rows={3}
-                    value={quizDescription}
-                    onChange={(event) => setQuizDescription(event.target.value)}
-                  />
-                </div>
-              </fieldset>
+                settingsLocked={!draftVersion}
+                hasEssays={readiness.essays > 0}
+              />
               <Button
                 type="submit"
+                className="min-h-11"
                 disabled={busy !== null || !settingsDirty || !!quiz.archivedAt}
               >
                 {busy === "settings" ? (
@@ -754,7 +793,20 @@ export function QuizAuthoringWorkspace({
           </section>
         </TabsContent>
         <TabsContent forceMount value="publishing" className={content}>
-          <section className={`${panel} mb-4 space-y-4`}><h2 className="font-semibold">Class deadlines and reopening</h2><QuizDeadlineControls quizTitle={quiz.title} serverNow={serverNow ?? new Date().toISOString()} assignments={assignments.filter(a => a.status === 'active' && versions.find(v => v.id === a.versionId)?.status === 'published').map(a => ({ id: a.id, classTitle: a.classTitle, dueAt: a.dueAt ?? null }))} /></section>
+          <section className={`${panel} mb-4 space-y-4`}>
+            <h2 className="font-semibold">Class deadlines, closing and reopening</h2>
+            <QuizDeadlineControls
+              quizTitle={quiz.title}
+              serverNow={serverNow ?? new Date().toISOString()}
+              assignments={assignments
+                .filter(
+                  (a) =>
+                    a.status === "active" &&
+                    versions.find((v) => v.id === a.versionId)?.status === "published",
+                )
+                .map((a) => ({ id: a.id, classTitle: a.classTitle, dueAt: a.dueAt ?? null }))}
+            />
+          </section>
           <section className={panel}>
             <h2 className="font-semibold">
               {isDraft ? "Publish to classes" : "Class assignments"}
@@ -829,7 +881,24 @@ export function QuizAuthoringWorkspace({
                     disabled={!!quiz.archivedAt}
                   />
                 </div>
-                <div className="space-y-2"><Label htmlFor="publish-quiz-deadline">Deadline for new assignments (optional, Asia/Manila)</Label><Input id="publish-quiz-deadline" className="min-h-11" type="datetime-local" value={quizDeadline} onChange={event => setQuizDeadline(event.target.value)} disabled={busy !== null} /><p className="text-xs text-muted-foreground">At the deadline, answering and submission close. Set class-specific deadlines above after publication.</p></div>
+                <div className="space-y-2">
+                  <Label htmlFor="publish-quiz-deadline">
+                    Deadline for new assignments (optional, Asia/Manila)
+                  </Label>
+                  <Input
+                    id="publish-quiz-deadline"
+                    className="min-h-11"
+                    type="datetime-local"
+                    value={quizDeadline}
+                    onChange={(event) => setQuizDeadline(event.target.value)}
+                    disabled={busy !== null}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    At the deadline, answering closes and saved answers are
+                    submitted automatically. Set class-specific deadlines above
+                    after publication.
+                  </p>
+                </div>
               </div>
               <div className="space-y-3 rounded-lg bg-muted/30 p-4">
                 <h3 className="text-sm font-semibold">Publication readiness</h3>
@@ -843,6 +912,12 @@ export function QuizAuthoringWorkspace({
                 <p className="text-sm">
                   One attempt per learner, shared across classes and versions.
                 </p>
+                {readiness.essays ? (
+                  <p className="text-sm">
+                    Includes scenario essays: results are released by you after
+                    scoring and finalization.
+                  </p>
+                ) : null}
                 {!readiness.ready && isDraft ? (
                   <p className="text-sm text-destructive">
                     {items.length
@@ -905,6 +980,9 @@ export function QuizAuthoringWorkspace({
                 version={version}
                 grounding={grounding}
                 topic={quiz.topic}
+                focus={curriculum.focus}
+                mapped={mapped}
+                quizDifficulty={curriculum.difficulty}
                 items={activeItems}
               />
             ) : (
@@ -952,9 +1030,13 @@ export function QuizAuthoringWorkspace({
                     <p className="mt-1 break-words text-sm text-muted-foreground">
                       {item.changeSummary || "No change summary recorded"}
                     </p>
+                    <p className="text-xs text-muted-foreground">
+                      {item.timeLimitMinutes ? `${item.timeLimitMinutes}-minute limit · ` : "No time limit · "}
+                      {item.resultReleaseMode === "instructor_release" ? "Instructor release" : "Immediate results"}
+                    </p>
                     {item.publishedAt ? (
                       <p className="text-xs text-muted-foreground">
-                        Published {new Date(item.publishedAt).toLocaleString()}
+                        Published {formatDateTime(item.publishedAt)}
                       </p>
                     ) : null}
                   </div>
@@ -1011,47 +1093,16 @@ export function QuizAuthoringWorkspace({
           <section className={panel}>
             <h2 className="font-semibold">Learner results</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Supplementary scores across all versions. Historical results are
-              retained.
+              Supplementary scores across all versions. Averages use final
+              scores only; attempts awaiting evaluation are counted separately.
             </p>
-            {results.length ? (
-              <ul className="mt-4 divide-y divide-border">
-                {results.map((result) => (
-                  <li
-                    key={result.id}
-                    className="flex flex-wrap items-center justify-between gap-3 py-3"
-                  >
-                    <div className="min-w-0">
-                      <p className="break-words text-sm font-medium">
-                        {result.learner}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {result.classTitle} · v{result.versionNumber}
-                      </p>
-                    </div>
-                    <div className="text-sm">
-                      <p>
-                        {result.correctCount !== null
-                          ? `${result.correctCount}/${result.questionCount} · Submitted — Attempt used`
-                          : result.status === "in_progress"
-                            ? "In progress — Continue attempt"
-                            : "Submitted — Attempt used"}
-                      </p>
-                      {result.completedAt ? (
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(result.completedAt).toLocaleString()}
-                        </p>
-                      ) : null}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="mt-5 text-sm text-muted-foreground">
-                No learner attempts yet. Published assignments appear in
-                enrolled learners’ quizzes.
-              </p>
-            )}
+            <div className="mt-4">
+              <QuizResultsPanel
+                attempts={results}
+                enrolled={enrolled}
+                initialAttemptId={initialAttemptId}
+              />
+            </div>
           </section>
         </TabsContent>
       </Tabs>
@@ -1092,17 +1143,35 @@ export function QuizAuthoringWorkspace({
           </DialogHeader>
           {review ? (
             <>
+              {review.item.scenario ? (
+                <p className="whitespace-pre-wrap break-words text-sm">
+                  <strong>Scenario:</strong> {review.item.scenario}
+                </p>
+              ) : null}
               <p className="whitespace-pre-wrap break-words text-sm font-medium">
                 {review.item.prompt}
               </p>
-              {review.item.options.map((option, index) => (
-                <p key={index} className="break-words text-sm">
-                  {String.fromCharCode(65 + index)}. {option}
-                </p>
-              ))}
-              <p className="break-words text-sm">
-                <strong>Answer:</strong> {review.item.correctAnswer}
-              </p>
+              {review.item.itemType === "scenario_essay" ? (
+                <ul className="space-y-1 text-sm">
+                  {(review.item.rubric ?? []).map((row) => (
+                    <li key={row.id} className="break-words">
+                      <strong>{row.criterion}</strong> ({row.maxPoints} pts)
+                      {row.description ? ` — ${row.description}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <>
+                  {review.item.options.map((option, index) => (
+                    <p key={index} className="break-words text-sm">
+                      {String.fromCharCode(65 + index)}. {option}
+                    </p>
+                  ))}
+                  <p className="break-words text-sm">
+                    <strong>Answer:</strong> {review.item.correctAnswer}
+                  </p>
+                </>
+              )}
               {review.item.explanation ? (
                 <p className="break-words text-sm text-muted-foreground">
                   {review.item.explanation}
@@ -1197,6 +1266,9 @@ export function QuizAuthoringWorkspace({
           <p className="text-sm text-muted-foreground">
             Each learner has one attempt for this quiz. Republishing or
             assigning another class does not grant another attempt.
+            {readiness.essays
+              ? " Essays force instructor release: learners see “Awaiting instructor evaluation” until you release results."
+              : ""}
           </p>
           <div className="flex justify-end gap-2">
             <Button

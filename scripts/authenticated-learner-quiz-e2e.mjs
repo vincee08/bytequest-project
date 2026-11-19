@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
+import { appClientHeaders } from "./lib/app-client-version.mjs";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const publicKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -85,7 +86,7 @@ async function createAccount(key, role) {
   users.set(key, data.user.id);
   const configured = await service.from("profiles").update({ role, status: "active" }).eq("user_id", data.user.id);
   if (configured.error) throw new Error(`Could not configure ${key}: ${configured.error.message}`);
-  const client = createClient(url, publicKey, { auth: { autoRefreshToken: false, persistSession: false } });
+  const client = createClient(url, publicKey, { auth: { autoRefreshToken: false, persistSession: false }, global: { headers: appClientHeaders() } });
   const session = await client.auth.signInWithPassword({ email, password });
   if (session.error || session.data.user?.id !== data.user.id) throw new Error(`Could not authenticate ${key}`);
   await client.realtime.setAuth(session.data.session.access_token);

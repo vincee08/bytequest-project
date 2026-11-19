@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:bytequest/core/theme/app_theme.dart';
+import 'package:bytequest/data/homework_content_data.dart';
 import 'package:bytequest/data/mission_content_data.dart';
 import 'package:bytequest/models/homework_model.dart';
 import 'package:bytequest/models/learner_quiz_model.dart';
@@ -103,7 +104,7 @@ void main() {
     expect(
         homework(submission: submitted(status: 'graded', late: 195300))
             .statusLabel,
-        MissionContentData.homeworkGraded);
+        HomeworkContentData.statusReleased);
     expect(submitted(status: 'graded').score, isNull);
   });
   testWidgets(
@@ -141,6 +142,8 @@ void main() {
             assignment: service.value, service: service)));
     await tester.pumpAndSettle();
     expect(find.text(MissionContentData.homeworkLateAllowed), findsOneWidget);
+    await tester.scrollUntilVisible(find.byType(TextField), 200,
+        scrollable: find.byType(Scrollable).first);
     await tester.enterText(find.byType(TextField), 'My network report.');
     tester.testTextInput.hide();
     await tester.scrollUntilVisible(
@@ -172,6 +175,8 @@ void main() {
         home: HomeworkDetailsScreen(
             assignment: service.value, service: service)));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.byType(TextField), 200,
+        scrollable: find.byType(Scrollable).first);
     await tester.enterText(
         find.byType(TextField), 'Preserve this written report.');
     tester.testTextInput.hide();
@@ -212,7 +217,7 @@ void main() {
         home: HomeworkDetailsScreen(
             assignment: service.value, service: service)));
     await tester.pumpAndSettle();
-    expect(find.text(MissionContentData.homeworkGraded), findsOneWidget);
+    expect(find.text(HomeworkContentData.statusReleased), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
     await tester.scrollUntilVisible(find.text('Inspection reviewed.'), 200,
         scrollable: find.byType(Scrollable).first);

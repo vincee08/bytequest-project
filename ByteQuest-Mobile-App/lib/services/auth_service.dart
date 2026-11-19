@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../core/config/app_release.dart';
 import '../core/config/supabase_config.dart';
 import '../models/profile_model.dart';
 import 'profile_service.dart';
@@ -156,7 +157,7 @@ class AuthService {
     final endpoint = Uri.parse(SupabaseConfig.recoveryUrl);
     final response = await http
         .post(endpoint,
-            headers: {'Content-Type': 'application/json'},
+            headers: {...kAppVersionHeaders, 'Content-Type': 'application/json'},
             body: jsonEncode({'action': 'request', 'email': email.trim()}))
         .timeout(const Duration(seconds: 30));
     if (response.statusCode < 200 || response.statusCode >= 300) {
