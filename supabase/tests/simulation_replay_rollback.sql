@@ -15,7 +15,7 @@
 --   cd ByteQuest-Mobile-App
 --   dart run tool/export_practice_contracts.dart --replay-fixtures <file>
 begin;
-select plan(109);
+select plan(112);
 
 -- ---------------------------------------------------------------------------
 -- Reference: the verifier loop exactly as published in 20261009090000
@@ -623,6 +623,7 @@ select is(
 select is(
   (select r - 'invalid' - 'corrections' - 'phase_invalid' - 'action_count' - 'invalid_count'
       - 'correction_count' - 'first_at' - 'last_at' - 'failed_checks' - 'phase_failed_checks' - 'failed_check_count'
+      - 'repair_corrections' - 'repair_count' - 'sequence_answers'
    from private.simulation_replay(c.definition, pg_temp.fixture_actions(c.mission_id)) r),
   pg_temp.legacy_replay(c.definition, pg_temp.fixture_actions(c.mission_id)),
   c.mission_id || ' replay reproduces the legacy done set and state')
@@ -802,6 +803,9 @@ select is((select jsonb_build_object('invalid', result->'invalid', 'done', resul
     'sequence', result->'state'->'sequence.coc1_m3_p2') from sequence_result),
   '{"invalid": {"phase:coc1_m3_p2": 1}, "done": true, "sequence": true}'::jsonb,
   'orders in progress are not counted; a confirmed wrong order is, and the confirmed right order completes the step');
+select is((select result->'sequence_answers' from sequence_result),
+  '{"coc1_m3_p2": true}'::jsonb,
+  'the replay records the latest confirmed order as the sequencing answer');
 
 -- Failing test checks that name a step target ("counts") charge that target
 -- on every completed test, even when the mistake is fixed afterwards
@@ -850,6 +854,47 @@ select is((select jsonb_build_object('invalid', result->'invalid', 'done', resul
     from post_result),
   '{"invalid": {"phase:q_p1": 1}, "done": {"q_p1": true}}'::jsonb,
   'a test completed on the wrong target is invalid, charges no check, and the passing retest completes the phase');
+
+-- Fix round 2: a run charges each step once, and reseating the parts its
+-- failing checks examine is the repair, not another correction.
+create temp table repair_bench(definition jsonb) on commit drop;
+insert into repair_bench values ('{
+  "phases": [
+    {"id": "r_p1", "primaryInteraction": "testRun", "presentation": {
+      "target": "post",
+      "equipment": {
+        "operations": [{"id": "lock", "effects": {"locked": true}, "requires": []}],
+        "placement": {
+          "items": [{"id": "ram_1", "category": "dimm"}, {"id": "ram_2", "category": "dimm"}],
+          "destinations": [{"id": "a1", "socket_categories": ["dimm"]}, {"id": "a2", "socket_categories": ["dimm"]},
+            {"id": "b1", "socket_categories": ["dimm"]}, {"id": "b2", "socket_categories": ["dimm"]}]},
+        "checks": [
+          {"id": "latches", "requires": [{"path": "setting.locked", "value": true}], "counts": "step:memory"},
+          {"id": "pair", "requires": [
+            {"path": "placed.ram_1", "operator": "one_of", "value": ["a2", "b2"]},
+            {"path": "placed.ram_2", "operator": "one_of", "value": ["a2", "b2"]}], "counts": "step:memory"}
+        ]}}}
+  ]}');
+create temp table repair_result on commit drop as select private.simulation_replay((select definition from repair_bench), '[
+  {"action_type":"placement_attempted","phase_id":"r_p1","target":"a1","value":{"item_id":"ram_1","destination_id":"a1"}},
+  {"action_type":"placement_attempted","phase_id":"r_p1","target":"b1","value":{"item_id":"ram_2","destination_id":"b1"}},
+  {"action_type":"test_started","phase_id":"r_p1","target":"post","value":{}},
+  {"action_type":"test_completed","phase_id":"r_p1","target":"post","value":{}},
+  {"action_type":"placement_removed","phase_id":"r_p1","target":"ram_1","value":{"item_id":"ram_1"}},
+  {"action_type":"placement_attempted","phase_id":"r_p1","target":"b1","value":{"item_id":"ram_2","destination_id":"b2"}},
+  {"action_type":"placement_attempted","phase_id":"r_p1","target":"a2","value":{"item_id":"ram_1","destination_id":"a2"}},
+  {"action_type":"equipment_operation","phase_id":"r_p1","target":"lock","value":{}},
+  {"action_type":"test_started","phase_id":"r_p1","target":"post","value":{}},
+  {"action_type":"test_completed","phase_id":"r_p1","target":"post","value":{}},
+  {"action_type":"placement_removed","phase_id":"r_p1","target":"ram_1","value":{"item_id":"ram_1"}}]'::jsonb) result;
+select is((select jsonb_build_object('failed', result->'failed_checks', 'total', result->'failed_check_count')
+    from repair_result),
+  '{"failed": {"step:memory": 1}, "total": 1}'::jsonb,
+  'two failing checks of one step in one run charge that step once');
+select is((select jsonb_build_object('repairs', result->'repair_corrections', 'corrections', result->'corrections')
+    from repair_result),
+  '{"repairs": {"item:ram_1": 1, "item:ram_2": 1}, "corrections": {"item:ram_1": 1}}'::jsonb,
+  'reseating flagged parts before the next test is a repair; after a passing test it is a correction again');
 
 -- ---------------------------------------------------------------------------
 -- 3. Verification guards and practice run metrics.

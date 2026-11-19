@@ -333,10 +333,15 @@ void main() {
     await runPost();
     expect(find.textContaining('Dual-channel mode'), findsOneWidget);
     expect(find.textContaining('single-channel mode'), findsNothing);
-    expect(
-        (harness.controller.state.equipmentState['counts']
-            as Map)['corrections'],
-        2);
+    // Fix round 2: the failed POST charged the memory step once; reseating
+    // the modules it flagged is the repair, not two more corrections.
+    final counts =
+        harness.controller.state.equipmentState['counts'] as Map;
+    expect(counts['faults'], 1);
+    expect(counts['repairs'], 2);
+    expect(counts['corrections'], isNull);
+    expect(find.byKey(const ValueKey('assembly-bench-fault-count')),
+        findsOneWidget);
   });
 
   testWidgets('assessment hides guidance and highlights and submits on confirm',

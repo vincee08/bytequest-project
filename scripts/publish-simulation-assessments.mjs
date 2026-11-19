@@ -48,7 +48,8 @@ const present = (path) => ({ path, operator: "present" });
  * COC1 M2 assembly bench: eleven step criteria (re-defense brief, owner
  * decision 7). Safety-critical steps (ESD, CPU orientation) allow no
  * incorrect attempt. BIOS configuration is not performed, so C11 traces PC
- * 1.4 only.
+ * 1.4 only. Each "step:" key is the charge a failed power-on test adds to
+ * that step (the "counts" of its POST checks, once per run).
  */
 export const COC1_M2_CRITERIA = [
   {
@@ -64,12 +65,12 @@ export const COC1_M2_CRITERIA = [
   {
     code: "COC1_M2_C3", title: "CPU seated in the correct orientation with the lever closed", phases: ["coc1_m2_p2"],
     conditions: [eq("placed.cpu", "cpu_socket"), eq("setting.cpu_lever", "closed")],
-    counted: ["item:cpu", "operation:open_cpu_lever", "operation:close_cpu_lever"], max: 0, pcs: ["1.4"], safety: true,
+    counted: ["item:cpu", "operation:open_cpu_lever", "operation:close_cpu_lever", "step:cpu"], max: 0, pcs: ["1.4"], safety: true,
   },
   {
     code: "COC1_M2_C4", title: "Thermal compound, cooler and CPU_FAN connected", phases: ["coc1_m2_p2"],
     conditions: [eq("setting.thermal_compound", true), eq("placed.cooler", "cooler_mount"), eq("link.cooler_fan>cpu_fan_header", true)],
-    counted: ["operation:apply_thermal_compound", "item:cooler", "connection:cooler_fan"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.4"],
+    counted: ["operation:apply_thermal_compound", "item:cooler", "connection:cooler_fan", "step:cooling"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.4"],
   },
   {
     code: "COC1_M2_C5", title: "Memory in DIMM_A2 and DIMM_B2 with latches locked", phases: ["coc1_m2_p2"],
@@ -78,32 +79,32 @@ export const COC1_M2_CRITERIA = [
       { path: "placed.ram_2", operator: "one_of", value: ["dimm_a2", "dimm_b2"] },
       eq("setting.dimm_latches", "closed"),
     ],
-    counted: ["item:ram_1", "item:ram_2", "operation:open_dimm_latches", "operation:close_dimm_latches"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.4"],
+    counted: ["item:ram_1", "item:ram_2", "operation:open_dimm_latches", "operation:close_dimm_latches", "step:memory"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.4"],
   },
   {
     code: "COC1_M2_C6", title: "Power supply installed and fastened", phases: ["coc1_m2_p3"],
     conditions: [eq("placed.psu", "psu_bay"), eq("setting.psu_fastened", true)],
-    counted: ["item:psu", "operation:fasten_psu"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.4"],
+    counted: ["item:psu", "operation:fasten_psu", "step:psu"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.4"],
   },
   {
     code: "COC1_M2_C7", title: "Motherboard on standoffs, fastened, with the I/O shield fitted", phases: ["coc1_m2_p3"],
     conditions: [eq("placed.motherboard", "board_standoffs"), eq("setting.board_fastened", true), eq("placed.io_shield", "io_cutout")],
-    counted: ["item:motherboard", "item:io_shield", "operation:fasten_motherboard"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.4"],
+    counted: ["item:motherboard", "item:io_shield", "operation:fasten_motherboard", "step:board"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.4"],
   },
   {
     code: "COC1_M2_C8", title: "Storage drive installed and fastened", phases: ["coc1_m2_p3"],
     conditions: [eq("placed.storage", "drive_bay"), eq("setting.drive_fastened", true)],
-    counted: ["item:storage", "operation:fasten_drive"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.4"],
+    counted: ["item:storage", "operation:fasten_drive", "step:drive"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.4"],
   },
   {
     code: "COC1_M2_C9", title: "Power cables connected (24-pin ATX, 8-pin EPS, SATA power)", phases: ["coc1_m2_p4"],
     conditions: [eq("link.atx_24pin>board_atx24", true), eq("link.eps_8pin>board_eps8", true), eq("link.sata_power>drive_power", true)],
-    counted: ["connection:atx_24pin", "connection:eps_8pin", "connection:sata_power"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.4"],
+    counted: ["connection:atx_24pin", "connection:eps_8pin", "connection:sata_power", "step:power_cables"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.4"],
   },
   {
     code: "COC1_M2_C10", title: "SATA data and front-panel cables connected", phases: ["coc1_m2_p4"],
     conditions: [eq("link.sata_data>drive_data", true), eq("link.front_panel>board_front_panel", true)],
-    counted: ["connection:sata_data", "connection:front_panel"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.4"],
+    counted: ["connection:sata_data", "connection:front_panel", "step:data_cables"], max: DEFAULT_MAX_INCORRECT, pcs: ["1.4"],
   },
   {
     code: "COC1_M2_C11", title: "Power-on self-test passed and result interpreted", phases: ["coc1_m2_p5"],

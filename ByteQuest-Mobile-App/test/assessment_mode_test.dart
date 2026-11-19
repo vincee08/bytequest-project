@@ -7,6 +7,7 @@ import 'package:bytequest/models/mission_model.dart';
 import 'package:bytequest/screens/simulation/components/assembly/assembly_bench.dart';
 import 'package:bytequest/screens/simulation/components/equipment_workspace.dart';
 import 'package:bytequest/screens/simulation/components/mission_guidance_panel.dart';
+import 'package:bytequest/screens/simulation/components/mission_task_status.dart';
 import 'package:bytequest/screens/simulation/components/simulation_scene.dart';
 import 'package:bytequest/screens/simulation/mission_simulation_screen.dart';
 import 'package:bytequest/screens/simulation/runtime/mission_equipment_simulator.dart';
@@ -110,6 +111,9 @@ class _RecordingTransport implements MissionEvidenceTransport {
       readAcknowledgedActions() async => [];
 }
 
+String _contractVersion(String missionId) =>
+    MissionSimulationDefinitions.contractVersion(missionId);
+
 MissionRuntimeState _assessment(MissionRuntimeState state) =>
     MissionRuntimeState.fromJson({
       ...state.toJson(),
@@ -129,7 +133,10 @@ class _Harness {
   final String userId = 'assessment-qa-${_harnessCount++}';
   late final controller = MissionRuntimeController(
     userId: userId,
-    initialState: _assessment(MissionRuntimeState.initial(definition.id)
+    // Stamped like the production controller, so recorded evidence carries
+    // the contract version.
+    initialState: _assessment(MissionRuntimeState.initial(definition.id,
+            definitionVersion: _contractVersion(definition.id))
         .copyWith(currentPhaseId: phaseId ?? definition.phases.first.id)),
     store: const SharedPreferencesMissionRuntimeStore(),
     evidenceGateway: MissionEvidenceGateway(transport: transport),
@@ -352,6 +359,13 @@ void main() {
                 'exported ${jsonEncode(wanted)}');
       }
       expect(harness.controller.state.pendingEvidence, isEmpty);
+      expect(
+          harness.transport.actions
+              .every((action) =>
+                  action.value['definition_version'] ==
+                  _contractVersion(definition.id)),
+          isTrue,
+          reason: 'production evidence carries the contract version');
     });
   }
 
@@ -454,17 +468,213 @@ void main() {
                 reason: '${phase.id}/${check['id']}');
             expect(text, isNot(check['nominal']),
                 reason: '${phase.id}/${check['id']}');
-            if (mission.id != 'coc1_m2') {
-              expect(text, reading['operating'] == true
-                  ? MissionContentData.assessmentReadingNominal
-                  : MissionContentData.assessmentReadingFault,
-                  reason: '${phase.id}/${check['id']}');
-            }
+            final symptom = MissionContentData
+                .assessmentReadingSymptoms['${phase.id}.${check['id']}'];
+            expect(
+                text,
+                symptom != null
+                    ? reading['operating'] == true
+                        ? symptom.nominal
+                        : symptom.fault
+                    : reading['operating'] == true
+                        ? MissionContentData.assessmentReadingNominal
+                        : MissionContentData.assessmentReadingFault,
+                reason: '${phase.id}/${check['id']}');
             checked++;
           }
         }
       }
       expect(checked, greaterThan(50));
     });
+
+    test('tool readings in assessment state the observation only', () {
+      expect(MissionContentData.assessmentToolObservations.keys.toSet(),
+          MissionContentData.toolObservations.keys.toSet());
+      const hints = [
+        'Open its inventory',
+        'Inspect individual',
+        'Connect both endpoints',
+        'Run the wire-map',
+        'verification is still required',
+        'has not yet been verified',
+        'does not verify',
+        'before ',
+      ];
+      for (final text in [
+        ...MissionContentData.assessmentToolObservations.values,
+        MissionContentData.assessmentToolContact,
+        MissionContentData.assessmentDisconnectedToolReading,
+        MissionContentData.assessmentConnectedToolReading,
+      ]) {
+        for (final hint in hints) {
+          expect(text.contains(hint), isFalse, reason: '$text: $hint');
+        }
+      }
+      // The simulator shows the neutral reading in assessment.
+      var checked = 0;
+      for (final mission in MissionSimulationDefinitions.all) {
+        for (final phase in mission.phases) {
+          final equipment =
+              MissionEquipmentSimulator.map(phase.presentation['equipment']);
+          final tools = MissionEquipmentSimulator.maps(
+              equipment['tools'] ?? phase.presentation['tools']);
+          final targets = MissionEquipmentSimulator.maps(
+              equipment['targets'] ?? phase.presentation['targets']);
+          if (tools.isEmpty || targets.isEmpty) continue;
+          for (final tool in tools) {
+            final target = targets.firstWhere(
+                (item) =>
+                    MissionEquipmentSimulator.strings(
+                            tool['compatible_categories'])
+                        .isEmpty ||
+                    MissionEquipmentSimulator.strings(
+                            tool['compatible_categories'])
+                        .contains(item['category']),
+                orElse: () => const {});
+            if (target.isEmpty) continue;
+            final value = MissionEquipmentSimulator.describeAction(
+              definition: mission,
+              phase: phase,
+              state: _assessment(MissionRuntimeState.initial(mission.id)
+                  .copyWith(currentPhaseId: phase.id)),
+              actionType: 'tool_attempted',
+              target: target['id'] as String,
+              value: {'tool_id': tool['id']},
+            );
+            final observation = MissionEquipmentSimulator.map(
+                value['measured_tool_result'])['observation'] as String?;
+            if (observation == null) continue;
+            expect(
+                observation,
+                tool['id'] == 'lan_cable_tester'
+                    ? anyOf(
+                        MissionContentData.assessmentDisconnectedToolReading,
+                        MissionContentData.assessmentConnectedToolReading)
+                    : MissionContentData
+                            .assessmentToolObservations[tool['id']] ??
+                        MissionContentData.assessmentToolContact,
+                reason: '${phase.id}/${tool['id']}');
+            checked++;
+          }
+        }
+      }
+      expect(checked, greaterThan(0));
+    });
+
+    test('the COC4 M3 route trace reads the finding, not a status', () {
+      final mission = MissionSimulationDefinitions.byId('coc4_m3');
+      final phase = mission.phases.firstWhere((item) => item.id == 'coc4_m3_p4');
+      for (final applicationLogRead in [false, true]) {
+        final state = _assessment(MissionRuntimeState.initial('coc4_m3')
+            .copyWith(
+                currentPhaseId: phase.id,
+                revealedFactIds: {
+                  if (applicationLogRead) 'application_log_fact',
+                }));
+        final value = MissionEquipmentSimulator.describeAction(
+          definition: mission,
+          phase: phase,
+          state: state,
+          actionType: 'test_completed',
+          target: phase.presentation['target'] as String,
+          value: const {},
+        );
+        final reading = MissionEquipmentSimulator.maps(
+            MissionEquipmentSimulator.map(
+                value['measured_result'])['readings']).single;
+        expect(reading['label'], 'Route trace');
+        expect(reading['reading'],
+            isNot(MissionContentData.assessmentReadingNominal));
+        expect(reading['reading'],
+            isNot(MissionContentData.assessmentReadingFault));
+        expect((reading['reading'] as String).contains('Inspect'), isFalse);
+        expect((reading['reading'] as String).contains('correlate'), isFalse);
+      }
+    });
+  });
+
+  // Re-review N1: in assessment the boot order is an answer. Continue and
+  // Confirm never depend on whether the order shown is right; Continue opens
+  // only after an order is confirmed, right or wrong.
+  testWidgets('assessment sequencing controls do not change with correctness',
+      (tester) async {
+    final definition = MissionSimulationDefinitions.byId('coc1_m3');
+    final phase = definition.phases.firstWhere((item) => item.id == 'coc1_m3_p2');
+    final harness = await _pump(tester, _Harness(definition, phaseId: phase.id));
+    final items = MissionEquipmentSimulator.maps(phase.presentation['items']);
+    String label(String id) =>
+        items.firstWhere((item) => item['id'] == id)['label'] as String;
+    bool continueEnabled() => tester
+            .widget<FilledButton>(find.byKey(const ValueKey('mission-next')))
+            .onPressed !=
+        null;
+    bool confirmEnabled() => tester
+            .widget<ButtonStyleButton>(
+                find.byKey(ValueKey('sequence-confirm-${phase.id}')))
+            .onPressed !=
+        null;
+    List<String> order() => List<String>.from(
+        harness.controller.state.sequenceOrder.isEmpty
+            ? items.map((item) => item['id'] as String)
+            : harness.controller.state.sequenceOrder);
+    Future<void> moveUp(String id) async {
+      await tapEquipmentControl(
+          tester, find.byTooltip(MissionContentData.moveStep(label(id), 'up')));
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> arrange(List<String> wanted) async {
+      for (var position = 0; position < wanted.length; position++) {
+        while (order().indexOf(wanted[position]) > position) {
+          await moveUp(wanted[position]);
+        }
+      }
+    }
+
+    Future<void> confirm() async {
+      await tapEquipmentControl(
+          tester, find.byKey(ValueKey('sequence-confirm-${phase.id}')));
+      await tester.pumpAndSettle();
+    }
+
+    String status() => tester
+        .widgetList<Text>(find.descendant(
+            of: find.byType(MissionActionBar), matching: find.byType(Text)))
+        .map((text) => text.data ?? '')
+        .join('|');
+
+    const right = ['boot_media', 'select_disk', 'copy_files', 'configure_device'];
+    const wrong = ['select_disk', 'boot_media', 'copy_files', 'configure_device'];
+
+    expect(continueEnabled(), isFalse);
+    expect(confirmEnabled(), isTrue);
+    await arrange(wrong);
+    final wrongState = (continueEnabled(), confirmEnabled(), status());
+    await arrange(right);
+    final rightState = (continueEnabled(), confirmEnabled(), status());
+    expect(rightState, wrongState,
+        reason: 'an unconfirmed right order looks like a wrong one');
+    expect(rightState.$1, isFalse,
+        reason: 'Continue needs a confirmed order');
+    expect(find.text(MissionContentData.sequenceConstraintFeedback),
+        findsNothing);
+
+    await confirm();
+    final confirmedRight = (continueEnabled(), status());
+    await arrange(wrong);
+    expect(continueEnabled(), isFalse,
+        reason: 'moving the list again withdraws the confirmed answer');
+    await confirm();
+    final confirmedWrong = (continueEnabled(), status());
+    expect(confirmedWrong, confirmedRight,
+        reason: 'a confirmed wrong order looks like a confirmed right one');
+    expect(confirmedWrong.$1, isTrue);
+
+    final confirmed = harness.transport.actions
+        .where((action) => action.value['confirmed'] == true)
+        .map((action) => action.value['order'])
+        .toList();
+    expect(confirmed, [right, wrong]);
+    expect(tester.takeException(), isNull);
   });
 }

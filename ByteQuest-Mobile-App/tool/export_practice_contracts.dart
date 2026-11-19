@@ -26,7 +26,7 @@ const assemblyMigrationFileName =
 /// definition changes this digest: publish a new contract migration (never
 /// edit an applied one) and update the digest together.
 const assemblyMigrationSha256 =
-    '8829b7ed191188f9f0fce2100831949c708eac5c28b0ae89f20e2f4d018df2c3';
+    '4a8a6ede89d583c383a67fdd2e429937421509528ef7db5aff8a022b150909a6';
 
 String _contractJson(MissionSimulationDefinition definition) =>
     jsonEncode(definition.toJson()).replaceAll("'", "''");

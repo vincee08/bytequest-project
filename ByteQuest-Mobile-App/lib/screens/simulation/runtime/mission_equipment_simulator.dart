@@ -31,7 +31,7 @@ abstract final class MissionEquipmentSimulator {
         ? MissionContentData.assessmentNeutralRecorded
         : MissionContentData.equipmentRecordedFeedback;
     var correction = false;
-    // POST checks failing on a completed test that charge a step target
+    // Steps a completed test charges: one per step with a failing check
     // (mirrors failed_checks in private.simulation_replay).
     var faults = 0;
     final recorded = Map<String, dynamic>.from(value);
@@ -80,12 +80,21 @@ abstract final class MissionEquipmentSimulator {
                 !categories.contains(destination['category']))) {
           reject(MissionContentData.incompatibleToolFeedback);
         } else {
+          // Assessment shows what the tool reads, never the next step.
           feedback = value['tool_id'] == 'lan_cable_tester'
               ? state.connectedNodePairs.isEmpty
-                  ? MissionContentData.disconnectedToolReading
-                  : MissionContentData.connectedToolReading
-              : MissionContentData.toolObservations[value['tool_id']] ??
-                  MissionContentData.toolContactFeedback;
+                  ? assessment
+                      ? MissionContentData.assessmentDisconnectedToolReading
+                      : MissionContentData.disconnectedToolReading
+                  : assessment
+                      ? MissionContentData.assessmentConnectedToolReading
+                      : MissionContentData.connectedToolReading
+              : assessment
+                  ? MissionContentData
+                          .assessmentToolObservations[value['tool_id']] ??
+                      MissionContentData.assessmentToolContact
+                  : MissionContentData.toolObservations[value['tool_id']] ??
+                      MissionContentData.toolContactFeedback;
           recorded['measured_tool_result'] = {
             'tool_id': tool['id'],
             'target': target,
@@ -243,9 +252,25 @@ abstract final class MissionEquipmentSimulator {
       case 'test_completed':
         final checks = maps(spec['checks']);
         final readings = <Map<String, dynamic>>[];
+        // Mirrors private.simulation_replay: each step ("counts") with a
+        // failing check is charged once per run, and the parts and cables
+        // those checks examine are under repair until the next run.
+        final chargedSteps = <String>{};
+        final repairing = <String>{};
         for (final check in checks) {
           final operating = conditionsMet(check['requires'], state);
-          if (!operating && check['counts'] is String) faults++;
+          if (!operating && check['counts'] is String) {
+            chargedSteps.add(check['counts'] as String);
+            for (final condition in maps(check['requires'])) {
+              final path = condition['path'];
+              if (path is! String) continue;
+              if (path.startsWith('placed.')) {
+                repairing.add('item:${path.substring(7)}');
+              } else if (path.startsWith('link.')) {
+                repairing.add('connection:${path.substring(5).split('>').first}');
+              }
+            }
+          }
           readings.add({
             'id': check['id'],
             'label': assessment
@@ -277,6 +302,8 @@ abstract final class MissionEquipmentSimulator {
         final results = map(next['results']);
         results[target!] = result;
         next['results'] = results;
+        faults = chargedSteps.length;
+        next['repairing'] = repairing.toList();
         recorded['measured_result'] = result;
         if (phase.presentation['test_reveals_fact_id'] is String) {
           recorded['reveals_fact_id'] =
@@ -312,10 +339,18 @@ abstract final class MissionEquipmentSimulator {
       // invalid actions and corrections for runs and assessments.
       next['started_at'] ??= (now ?? DateTime.now()).toUtc().toIso8601String();
       final counts = map(next['counts']);
+      final correctionTarget = actionType == 'connection_created'
+          ? 'connection:${value['source_id']}'
+          : 'item:${value['item_id']}';
       final key = !valid
           ? 'invalid'
           : correction
-              ? 'corrections'
+              ? strings(state.equipmentState['repairing'])
+                      .contains(correctionTarget)
+                  // Reseating what a failed run flagged is the repair the
+                  // run already charged, not another correction.
+                  ? 'repairs'
+                  : 'corrections'
               : 'valid';
       counts[key] = (counts[key] as num? ?? 0).toInt() + 1;
       if (faults > 0) {

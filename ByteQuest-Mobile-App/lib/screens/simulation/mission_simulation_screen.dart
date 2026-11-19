@@ -1234,14 +1234,19 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
                     MissionContentData.incompatiblePlacementFeedback) ||
             (actionValue['simulation_valid'] == null &&
                 actionValue['compatible'] == false));
+    // An assessment order is an answer, not a physical action: whether it is
+    // right is never shown, so moves and confirmations look the same.
+    final hiddenAnswer = _state.mode == MissionRuntimeMode.assessment &&
+        emittedActionType == 'sequence_reordered';
     setState(() {
       _writing = true;
       _lastActionRejected = actionValue['simulation_valid'] == false ||
           actionValue['compatible'] == false;
-      _workspaceFeedback =
-          !wrongSlot && actionValue['simulation_valid'] == false
-              ? actionValue['simulation_feedback'] as String?
-              : null;
+      _workspaceFeedback = !wrongSlot &&
+              !hiddenAnswer &&
+              actionValue['simulation_valid'] == false
+          ? actionValue['simulation_feedback'] as String?
+          : null;
       if (wrongSlot) _technicalFeedback = null;
     });
     if (wrongSlot) {
