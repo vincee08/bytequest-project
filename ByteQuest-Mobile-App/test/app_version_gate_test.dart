@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:bytequest/core/theme/app_theme.dart';
 import 'package:bytequest/core/widgets/app_button.dart';
 import 'package:bytequest/data/account_content_data.dart';
@@ -5,6 +7,7 @@ import 'package:bytequest/screens/splash/splash_screen.dart';
 import 'package:bytequest/services/app_version_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 Widget _app(AppVersionChecker checker, {double textScale = 1}) => MaterialApp(
       theme: AppTheme.lightTheme,
@@ -53,6 +56,34 @@ void main() {
         AppVersionStatus.supported);
     expect(evaluateAppVersion(current: '1.2.0', minimum: 'latest').status,
         AppVersionStatus.supported);
+  });
+
+  test('the service classifies server answers, missing config and offline',
+      () async {
+    Future<AppVersionStatus> statusFor(Future<String?> Function() fetch) async =>
+        (await AppVersionService(
+                    fetchMinimum: fetch,
+                    timeout: const Duration(milliseconds: 50))
+                .check())
+            .status;
+
+    expect(await statusFor(() async => '9.9.9'), AppVersionStatus.updateRequired);
+    expect(await statusFor(() async => kAppVersion), AppVersionStatus.supported);
+    expect(await statusFor(() async => null), AppVersionStatus.supported);
+    expect(
+        await statusFor(() async => throw const PostgrestException(
+            message: 'Could not find the table', code: 'PGRST205')),
+        AppVersionStatus.supported);
+    expect(
+        await statusFor(() async =>
+            throw const PostgrestException(message: 'JWT expired', code: '401')),
+        AppVersionStatus.unknown);
+    expect(await statusFor(() async => throw TimeoutException('offline')),
+        AppVersionStatus.unknown);
+    expect(
+        await statusFor(() =>
+            Future<String?>.delayed(const Duration(seconds: 1), () => '9.9.9')),
+        AppVersionStatus.unknown);
   });
 
   testWidgets('a version below the minimum shows a blocking update screen',

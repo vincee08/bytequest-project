@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/config/supabase_config.dart';
 
@@ -82,26 +83,46 @@ AppVersionCheck evaluateAppVersion({
   );
 }
 
+/// PostgREST/PostgreSQL codes meaning "the release config table is not there"
+/// (a backend without the migration): no minimum is configured.
+const _missingConfigCodes = {'PGRST205', '42P01'};
+
+Future<String?> _fetchMinimumFromSupabase() async {
+  final row = await SupabaseConfig.client
+      .from('app_release_config')
+      .select('value')
+      .eq('key', kMinimumAppVersionKey)
+      .maybeSingle();
+  return row?['value'] as String?;
+}
+
 /// Reads the server's minimum supported learner app version. The value is
 /// public release configuration, readable before sign-in.
 class AppVersionService {
-  AppVersionService({this.timeout = const Duration(seconds: 8)});
+  AppVersionService({
+    this.timeout = const Duration(seconds: 8),
+    Future<String?> Function()? fetchMinimum,
+  }) : _fetchMinimum = fetchMinimum ?? _fetchMinimumFromSupabase;
 
   final Duration timeout;
+  final Future<String?> Function() _fetchMinimum;
 
   Future<AppVersionCheck> check() async {
     try {
-      final row = await SupabaseConfig.client
-          .from('app_release_config')
-          .select('value')
-          .eq('key', kMinimumAppVersionKey)
-          .maybeSingle()
-          .timeout(timeout);
-      return evaluateAppVersion(
-        current: kAppVersion,
-        minimum: row?['value'] as String?,
+      final minimum = await _fetchMinimum().timeout(timeout);
+      return evaluateAppVersion(current: kAppVersion, minimum: minimum);
+    } on PostgrestException catch (error) {
+      if (_missingConfigCodes.contains(error.code)) {
+        // The server answered but has no release configuration yet.
+        return evaluateAppVersion(current: kAppVersion, minimum: null);
+      }
+      debugPrint('Minimum app version check failed: ${error.message}');
+      return const AppVersionCheck(
+        status: AppVersionStatus.unknown,
+        currentVersion: kAppVersion,
       );
     } catch (error) {
+      // Offline, timed out or not initialised: fail open with a retry.
       debugPrint('Minimum app version check failed: $error');
       return const AppVersionCheck(
         status: AppVersionStatus.unknown,
