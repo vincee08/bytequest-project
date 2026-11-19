@@ -375,6 +375,31 @@ class MissionsData {
     }
   }
 
+  /// The installed mission an assigned activity runs on this device.
+  ///
+  /// The database identifies a mission by a UUID, never by a local mission
+  /// id, so an assignment resolves through the published payload's
+  /// `local_mission_code`, else the catalog mission code (`coc1_m2`), compared
+  /// without case or punctuation against each installed mission's code and
+  /// id. Every launcher of assigned work uses this one lookup.
+  static Mission? resolveAssigned(
+      {required Map<String, dynamic> learnerPayload,
+      required String missionCode}) {
+    String normalize(String value) =>
+        value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+    final payloadCode = learnerPayload['local_mission_code'];
+    final target =
+        normalize(payloadCode is String ? payloadCode : missionCode);
+    if (target.isEmpty) return null;
+    for (final mission in getAllMissions()) {
+      if (normalize(mission.missionCode) == target ||
+          normalize(mission.id) == target) {
+        return mission;
+      }
+    }
+    return null;
+  }
+
   /// Check if mission is unlocked
   static bool isMissionUnlocked(
       String missionId, List<String> completedMissions) {
