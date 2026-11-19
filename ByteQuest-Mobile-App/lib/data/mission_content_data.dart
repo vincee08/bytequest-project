@@ -764,6 +764,88 @@ class MissionContentData {
   static const benchDropOnTarget =
       'Release the part over a slot, bay or header on the bench.';
 
+  // Orientation markers on keyed parts. The name states where the marker is
+  // now, in quarter turns clockwise from 0°; it never says whether that
+  // orientation fits.
+  static const benchMarkerTriangle = 'Triangle';
+  static const benchMarkerNotch = 'Notch';
+  static const benchMarkerFan = 'Fan';
+  static const benchMarkerCorners = [
+    'bottom-left',
+    'top-left',
+    'top-right',
+    'bottom-right',
+  ];
+  static const benchMarkerEdges = [
+    'left edge',
+    'top edge',
+    'right edge',
+    'bottom edge',
+  ];
+  static const benchMarkerFacings = [
+    'facing down',
+    'facing left',
+    'facing up',
+    'facing right',
+  ];
+  static String benchMarkerDescription(
+          String marker, String position, int degrees) =>
+      '$marker: $position · $degrees°';
+  static String benchPreviewSemantics(String part, String description) =>
+      '$part in hand. $description.';
+
+  // Physical spots on the anti-static mat. They name the object, never the
+  // step to take.
+  static const Map<String, String> benchHotspotLabels = {
+    'wear_wrist_strap': 'Wrist strap',
+    'ground_wrist_strap': 'Mat ground point',
+  };
+
+  // Practice confirmation after a bench operation: what physically changed.
+  static const Map<String, String> benchOperationFeedback = {
+    'wear_wrist_strap': 'Wrist strap fastened on your wrist.',
+    'ground_wrist_strap': 'Strap lead clipped to the mat ground point.',
+    'open_cpu_lever': 'Load lever opened.',
+    'close_cpu_lever': 'Load lever closed under its retention tab.',
+    'apply_thermal_compound': 'Thermal compound applied to the processor.',
+    'open_dimm_latches': 'DIMM latches opened.',
+    'close_dimm_latches': 'DIMM latches locked.',
+    'pick_screwdriver': 'Phillips screwdriver in hand.',
+    'fasten_psu': 'Power-supply screws fastened.',
+    'fasten_motherboard': 'Motherboard screws fastened.',
+    'fasten_drive': 'Drive screws fastened.',
+  };
+  static const benchOperationRetest = 'Run the test to check the change.';
+
+  // Practice guidance for the bench: it names the bench and its tray, not the
+  // panels of the card workspace.
+  static String guideBenchInspect(String label) =>
+      'Tap $label on the bench, or its name in the tray below the bench, and read its condition.';
+  static String guideBenchOperation(String label) =>
+      '$label: tap its yellow ring on the bench, or its button in the tray below the bench.';
+  static String guideBenchPlace(String label) =>
+      'Tap $label in the tray below the bench. If it shows a gold marker, tap Rotate until the marker matches the mark on the bench. Then drag it onto its place, or tap the place or its name in the tray.';
+  static String guideBenchConnect(String label) =>
+      'Tap $label in the tray below the bench, then tap the header it plugs into on the bench or its name in the tray. You can also drag the connector onto the header.';
+  static const guideBenchConnectPorts =
+      'Tap a cable in the tray below the bench, then tap the header it plugs into on the bench or its name in the tray.';
+  static const benchGuidanceInspect =
+      'Tap each part on the bench, or its name in the tray below the bench, to inspect it.';
+  static const benchGuidanceSelectPart =
+      'Tap a part in the tray below the bench to pick it up.';
+  static const benchGuidanceRotatePart =
+      'If the part shows a gold marker, tap Rotate until the marker matches the mark on the board or case.';
+  static const benchGuidanceDropPart =
+      'Drag the part onto its place on the bench, or tap the place or its name in the tray.';
+  static const benchGuidanceSelectCable =
+      'Tap a cable in the tray below the bench, then tap the header it plugs into.';
+  static const benchGuidanceDragCable =
+      'You can also drag a connector from the tray onto its header on the bench.';
+  static const benchGuidanceOperate =
+      'Work the strap, levers, latches and screws on the bench: tap the yellow ring where you work, or its button in the tray below the bench.';
+  static const benchGuidanceFixFaults =
+      'Correct each reported fault on the bench: reseat a part, reconnect a cable, or work a lever, latch or screw. Then run the test again.';
+
   // Assessment mode chrome.
   static const assessmentModeLabel = 'Assessment';
   static const assessmentModeHint =

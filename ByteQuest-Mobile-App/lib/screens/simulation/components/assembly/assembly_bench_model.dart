@@ -11,6 +11,7 @@ final class BenchPart {
     required this.orientations,
     required this.initialOrientation,
     required this.placedAt,
+    this.seatingOrientation,
   });
 
   final String id;
@@ -19,6 +20,10 @@ final class BenchPart {
   final List<String> orientations;
   final String initialOrientation;
   final String? placedAt;
+
+  /// The only orientation the equipment rules seat a keyed part in, so an
+  /// installed part is shown that way round (after a restart too).
+  final String? seatingOrientation;
 
   bool get rotatable => orientations.isNotEmpty;
   bool get placed => placedAt != null;
@@ -147,6 +152,7 @@ final class AssemblyBenchModel {
                 MissionEquipmentSimulator.strings(item['orientations']),
             initialOrientation: item['initial_orientation'] as String? ?? '0',
             placedAt: state.placements[item['id']],
+            seatingOrientation: item['seating_orientation'] as String?,
           ),
       ],
       slots: [
