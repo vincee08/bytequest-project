@@ -4,6 +4,7 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/config/app_release.dart';
 import '../core/config/supabase_config.dart';
 import '../models/curriculum_model.dart';
 
@@ -75,6 +76,7 @@ class CurriculumService {
     }
     final uri = base.resolve('/api/learner/curriculum');
     final headers = {
+      ...kAppVersionHeaders,
       'Authorization': 'Bearer ${session.accessToken}',
       'Content-Type': 'application/json',
     };
