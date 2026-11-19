@@ -2,6 +2,61 @@
 
 > Read this file with `AGENTS.md`, `README.md`, and `bytequest.md` before changing the repository.
 
+## Current continuation - 2026-11-20 RE-DEFENSE QA AUDIT (local stack)
+
+A full end-to-end QA audit ran against the local stack only: local Supabase `127.0.0.1:57321`, the dashboard on `127.0.0.1:3001`, and the learner app on the `padala_pixel7` emulator plus the Flutter web build. Production, Vercel and the APK release were not touched.
+
+The full report is `docs/REDEFENSE_QA_AUDIT_2026-11-20.md`, with screenshots in `docs/qa-audit-2026-11-20/`.
+
+**Result:** 35 PASS, 3 PARTIAL, 0 FAIL, 0 BLOCKED across the 38 panel items.
+- R3.3: AI generation was not run.
+- R3.5: live auto-submit at expiry was not exercised.
+- R11.2: the review-queue limit could not be exercised.
+
+Realtime refresh was demonstrated on both the dashboard and the learner Progress tab. The opt-in leaderboard was verified.
+
+**COC1 M2 assembly** was completed as a learner by touch and by mouse:
+- touch practice run, server-verified;
+- mouse assessment, auto-evaluated 11/11;
+- touch assessment on the fixed build: 35 actions, 0 refused, auto-evaluated 11/11.
+
+**Fixed in this session, with tests:**
+1. Dead lever, compound and screw rings under the slot targets. A ring tap with a part in hand was scored as an incorrect placement.
+2. Silent missed drop.
+3. Silent blocked mat ground stud.
+4. Invisible thermal paste and lingering idle rings.
+5. "Run test again" below the POST readout.
+6. Dashboard learner refusal used a global sign-out, which revoked the learner's mobile session. Refusals now use `scope: 'local'`.
+7. Assigned simulations could not open from the class space: the UUID was looked up as a mission code. Fixed with `MissionsData.resolveAssigned`.
+8. Screen-reader slot taps could work an overlapping ring. This was a regression from fix 1, caught by a new test.
+9. Progress-screen `ListTile` ink assertion.
+
+**Gates after the fixes:**
+- Flutter full suite in Docker: 720 passed, 1 skipped.
+- `flutter analyze`: 0 errors and 0 warnings; 210 infos, all pre-existing.
+- Dashboard: tsc, lint, 222 tests and build all pass.
+
+**Open, not fixed:**
+- No learner notification on assessment or quiz result release. The trigger has no case for `result.released` or `quiz_result.released`; fixing it needs a migration.
+- The homework screen does not refresh itself on release.
+- A retry starts with no confirmation.
+- Realism and copy gaps; see report §3.4 and §8.4.
+
+**Local testing note:**
+- The emulator build that uses `10.0.2.2` cannot upload homework files. The dashboard signs URLs for `127.0.0.1`, and the app's origin guard rejects them.
+- For phone or emulator demos, use the `local-web-defines.json` build together with `adb reverse tcp:57321 tcp:57321` and `adb reverse tcp:3001 tcp:3001`.
+
+**Local QA data** (local DB only):
+- class *QA Audit 2026-11-20 (test class)*;
+- learner `qa.assembly.a@bytequest.invalid`, whose credentials are in the gitignored `.tmp/qa-audit-accounts.json`;
+- one quiz, one homework and one technical assessment;
+- a second, touch assessment attempt `5e4743fd…`, released;
+- one archived temporary curriculum topic.
+
+**Still pending:**
+- Vercel promotion of `main`, which must now include the LoginForm fix.
+- 1.2.0 APK signing and release.
+
 ## Current continuation - 2026-11-20 PRODUCTION DATABASE MIGRATED (re-defense release)
 
 The owner approved and the migration ran on hosted ByteQuest `rslmteqipxqfifwftugk`. The project ID was verified in the dashboard and the CLI, and re-checked before each batch.
