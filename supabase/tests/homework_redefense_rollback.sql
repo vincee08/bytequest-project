@@ -3,7 +3,7 @@
 -- grade only after release; pre-workflow graded rows are migrated as released.
 -- Rollback-only.
 begin;
-select plan(53);
+select plan(57);
 
 create temporary table hw as select
   gen_random_uuid() teacher, gen_random_uuid() other_teacher,
@@ -140,7 +140,16 @@ insert into hw_results select 'grade-b',public.manage_homework(teacher,'grade',j
   'criterion_scores',jsonb_build_object('safety',10,'order',10),'feedback','Review the ESD steps.')) from hw;
 select public.manage_homework(teacher,'grade',jsonb_build_object('assignment_id',criteria_hw,'submission_id',sub_b,
   'criterion_scores',jsonb_build_object('safety',12,'order',10),'feedback','Review the ESD steps again.')) from hw;
+-- A learner's idempotent submit retry must never carry an unreleased grade.
+insert into hw_results select 'replay-graded',public.manage_homework(learner_a,'submit',jsonb_build_object('assignment_id',criteria_hw,
+  'answer','Retry after grading','file_ids','[]'::jsonb)) from hw;
 reset role;
+select is((select payload->>'id' from hw_results where label='replay-graded'),(select sub_a::text from hw),
+  'a submit retry returns the existing submission');
+select ok((select payload->'score'='null'::jsonb and payload->'feedback'='null'::jsonb and payload->'criterion_scores'='null'::jsonb
+    and payload->'graded_by'='null'::jsonb and payload->'graded_at'='null'::jsonb and payload->>'answer'='Safety report A'
+  from hw_results where label='replay-graded'),
+  'a submit retry after grading returns no score, feedback, criterion scores or grader');
 select ok((select status='graded' and score=40 and criterion_scores=jsonb_build_object('safety',25,'order',15) and graded_by=(select teacher from hw)
   from public.homework_submissions where id=(select sub_a from hw)),'the total is computed from the criterion scores');
 select ok((select score=22 and feedback='Review the ESD steps again.' from public.homework_submissions where id=(select sub_b from hw)),
@@ -176,6 +185,8 @@ select throws_ok(format('select public.manage_homework(%L,''grade'',%L)',(select
   'criterion_scores',jsonb_build_object('safety',30,'order',20))),
   '55000','HOMEWORK_GRADE_LOCKED','a finalized grade can no longer be edited');
 insert into hw_results select 'release-early',public.manage_homework(teacher,'release',jsonb_build_object('submission_ids',jsonb_build_array(sub_b))) from hw;
+insert into hw_results select 'replay-finalized',public.manage_homework(learner_a,'submit',jsonb_build_object('assignment_id',criteria_hw,
+  'answer','Retry after finalization','file_ids','[]'::jsonb)) from hw;
 select throws_ok(format('select public.manage_homework(%L,''release'',%L)',(select learner_a from hw),jsonb_build_object('submission_ids',jsonb_build_array((select sub_a from hw)))),
   '42501','INSTRUCTOR_CLASS_SCOPE_REQUIRED','a learner cannot release grades');
 select throws_ok(format('select public.manage_homework(%L,''release'',%L)',(select teacher from hw),
@@ -187,13 +198,20 @@ select throws_ok(format('select public.manage_homework(%L,''release'',%L)',(sele
 reset role;
 select is((select payload->'results'->0->>'error' from hw_results where label='release-early'),'HOMEWORK_FINALIZE_REQUIRED',
   'a graded submission cannot be released before finalization');
+select ok((select payload->>'status'='finalized' and payload->'score'='null'::jsonb and payload->'feedback'='null'::jsonb
+    and payload->'criterion_scores'='null'::jsonb and payload->'finalized_by'='null'::jsonb
+  from hw_results where label='replay-finalized'),'a submit retry after finalization still returns no grade');
 
 -- Release: finalized -> released, notification on release, bulk idempotent.
 set local role service_role;
 select public.manage_homework(teacher,'finalize',jsonb_build_object('submission_ids',jsonb_build_array(sub_b))) from hw;
 insert into hw_results select 'release',public.manage_homework(teacher,'release',jsonb_build_object('submission_ids',jsonb_build_array(sub_a,sub_b))) from hw;
 insert into hw_results select 'release-again',public.manage_homework(teacher,'release',jsonb_build_object('submission_ids',jsonb_build_array(sub_a,sub_b))) from hw;
+insert into hw_results select 'replay-released',public.manage_homework(learner_a,'submit',jsonb_build_object('assignment_id',criteria_hw,
+  'answer','Retry after release','file_ids','[]'::jsonb)) from hw;
 reset role;
+select ok((select (payload->>'score')::numeric=40 and payload->>'feedback'='Clear safety checks.' and payload->>'status'='released'
+  from hw_results where label='replay-released'),'once released, a submit retry carries the released result');
 select is((select (payload->>'succeeded')::integer from hw_results where label='release'),2,'finalized submissions are released in bulk');
 select ok((select bool_and(status='released' and released_by=(select teacher from hw) and released_at is not null)
   from public.homework_submissions where id in ((select sub_a from hw),(select sub_b from hw))),'released submissions record who released them and when');

@@ -136,6 +136,19 @@ export function learnerSubmissionView(row: HomeworkSubmissionRecord) {
   };
 }
 
+const isSubmissionRow = (record: unknown): record is HomeworkSubmissionRecord =>
+  Boolean(record) && typeof record === 'object' && !Array.isArray(record)
+  && ['assignment_id', 'learner_id', 'submitted_at', 'status'].every((key) => key in (record as Record<string, unknown>));
+
+/**
+ * Every learner-facing homework action reply passes through this view: a
+ * submission row is redacted by learnerSubmissionView; other records (for
+ * example file metadata) carry no grade and pass through unchanged.
+ */
+export function learnerRecordView(record: unknown) {
+  return isSubmissionRow(record) ? learnerSubmissionView(record) : record;
+}
+
 const messages: Record<string, { error: string; status: number }> = {
   HOMEWORK_SCORE_EXCEEDS_MAX: { error: "The score is above this assignment's maximum score.", status: 422 },
   HOMEWORK_SCORE_INVALID: { error: 'A score cannot be negative.', status: 422 },

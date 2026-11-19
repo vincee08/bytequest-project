@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { activityActor, activityError, activityHeaders, activityWriteOriginAllowed } from '@/lib/activities/server';
-import { homeworkActionSchema, homeworkErrorMessage, learnerSubmissionView, staffSubmissionView } from '@/lib/evaluations/homework';
+import { homeworkActionSchema, homeworkErrorMessage, learnerRecordView, learnerSubmissionView, staffSubmissionView } from '@/lib/evaluations/homework';
 import { evaluationsClient } from '@/lib/evaluations/types';
 import type { Json } from '@/types/database.generated';
 
@@ -78,6 +78,8 @@ export async function POST(request: Request) {
     const { action, ...payload } = parsed.data;
     const { data, error } = await actor.service.rpc('manage_homework', { p_actor: actor.id, p_action: action, p_payload: payload as Json });
     if (error) { const result = homeworkErrorMessage(error) ?? activityError(error); return reply({ error: result.error }, result.status); }
-    return reply({ record: data });
+    // Learner replies (submit and its idempotent retries) never carry an
+    // unreleased grade, whatever the RPC returns.
+    return reply({ record: actor.role === 'learner' ? learnerRecordView(data) : data });
   } catch { return reply({ error: 'Homework could not be saved. Refresh to check before retrying.' }, 503); }
 }
