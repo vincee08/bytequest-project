@@ -117,10 +117,13 @@ select public.manage_homework(teacher,'publish',jsonb_build_object('assignment_i
 select public.manage_homework(learner_c,'submit',jsonb_build_object('assignment_id',no_deadline,'answer','No deadline report.','file_ids','[]'::jsonb)) from activity_test;
 select pg_temp.assert((select lateness_seconds=0 and effective_deadline_at is null from public.homework_submissions where assignment_id=no_deadline),'homework without deadline is never late') from activity_test;
 select pg_temp.denied(format('select public.manage_homework(%L,''submit'',jsonb_build_object(''assignment_id'',%L,''answer'',''Forbidden''))',outsider,homework),'HOMEWORK_SCOPE_DENIED') from activity_test;
+-- Objective 4: a grade becomes visible only after Finalize -> Release.
+select public.manage_homework(teacher,'finalize',jsonb_build_object('submission_ids',jsonb_build_array(submission_b))) from activity_test;
+select public.manage_homework(teacher,'release',jsonb_build_object('submission_ids',jsonb_build_array(submission_b))) from activity_test;
 reset role;
 select set_config('request.jwt.claim.sub',(select learner_b::text from activity_test),true);
 set local role authenticated;
-select pg_temp.assert((select status='graded' from public.homework_submissions where id=submission_b),'learner must see Graded after instructor review') from activity_test;
+select pg_temp.assert((select status='released' from public.homework_submissions where id=submission_b),'learner must see the released grade after instructor review') from activity_test;
 select pg_temp.assert((select count(*)=0 from public.homework_submissions where id=submission_a),'learner must not read another submission') from activity_test;
 select pg_temp.denied(format('update public.homework_submissions set status=''graded'' where id=%L',submission_b),'permission denied') from activity_test;
 reset role;
