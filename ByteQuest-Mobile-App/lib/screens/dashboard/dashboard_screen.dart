@@ -16,8 +16,11 @@ import '../../services/learner_activity_navigation.dart';
 import '../../services/learner_realtime_coordinator.dart';
 import '../../widgets/app_top_bar.dart';
 import '../../widgets/assigned_class_activities.dart';
+import '../missions/missions_screen.dart';
 import '../notifications/notifications_screen.dart';
+import '../quizzes/learner_quizzes_screen.dart';
 import '../settings/settings_screen.dart';
+import 'home_class_work_links.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -142,6 +145,17 @@ class _DashboardScreenState extends State<DashboardScreen>
         : name.split(RegExp(r'\s+')).first;
   }
 
+  Future<void> _openClassWork(ClassWorkDestination destination) async {
+    final tab = destination.classWorkTab;
+    await Navigator.push(
+        context,
+        MaterialPageRoute<void>(
+            builder: (_) => tab == null
+                ? const LearnerQuizzesScreen()
+                : MissionsScreen(initialTab: tab)));
+    if (mounted) await _loadDashboard();
+  }
+
   Future<void> _openTechnical(AssignedActivity a) async {
     try {
       final page = await LearnerActivityNavigation.resolve(LearnerNotification(
@@ -212,6 +226,11 @@ class _DashboardScreenState extends State<DashboardScreen>
                                 padding:
                                     const EdgeInsets.symmetric(horizontal: 20),
                                 child: Text(_error!)),
+                          Padding(
+                              padding:
+                                  const EdgeInsets.fromLTRB(20, 0, 20, 16),
+                              child: HomeClassWorkLinks(
+                                  onOpen: _openClassWork)),
                           Padding(
                               padding:
                                   const EdgeInsets.symmetric(horizontal: 20),
