@@ -3,6 +3,29 @@ import 'package:flutter/painting.dart';
 /// The three physical views of the assembly bench.
 enum BenchView { mat, board, chassis }
 
+/// The physical key a learner lines up before seating a keyed part.
+enum BenchMarkerKind { triangle, notch, fan }
+
+/// Where a keyed part's marker sits on its photograph at 0°, the seating
+/// orientation. The marker is drawn inside the part's rotation, so it turns
+/// with the part in the tray, the preview, the drag ghost and the slot.
+final class BenchMarker {
+  const BenchMarker(this.kind, this.box, {this.baseTurns = 0});
+
+  final BenchMarkerKind kind;
+
+  /// Marker box as fractions of the square part image.
+  final Rect box;
+
+  /// Quarter turns applied to the photograph itself so that 0° shows the
+  /// seating orientation (the power-supply photo is taken fan-up).
+  final int baseTurns;
+
+  /// Fan circle of the power supply at 0°, as fractions of the image.
+  static const fanCentre = Offset(.5, .67);
+  static const fanRadius = .2;
+}
+
 /// Fixed geometry of the COC1 M2 bench in the shared 1200 × 720 logical
 /// canvas of the simulation scene. Positions are traced from the real part
 /// photographs (motherboard 500 × 500 px, open case 1086 × 1448 px), so a
@@ -167,6 +190,14 @@ abstract final class AssemblyBenchLayout {
     };
   }
 
+  /// Name plates beside the wrist strap (under it) and the mat ground stud
+  /// (right of it), clear of the parts on the mat.
+  static Rect? hotspotLabel(String id) => switch (id) {
+        'wear_wrist_strap' => const Rect.fromLTWH(880, 626, 250, 44),
+        'ground_wrist_strap' => const Rect.fromLTWH(136, 623, 290, 44),
+        _ => null,
+      };
+
   /// Parts laid out on the anti-static mat for inspection (mat view).
   static const matParts = {
     'system_case': Rect.fromLTWH(860, 40, 260, 346),
@@ -195,6 +226,24 @@ abstract final class AssemblyBenchLayout {
     'front_panel': 'assets/COC1/Mission 3/Front Panel.png',
     'cooler_fan': 'assets/COC1/Mission 2/cooling_fan.png',
   };
+
+  /// Orientation markers of the keyed parts, traced from their photographs:
+  /// the CPU's pin-1 triangle (bottom-left corner of the substrate), the
+  /// memory module's notch (on the contact edge) and the power-supply fan
+  /// (facing the intake vent in the bay floor).
+  static const markers = {
+    'cpu': BenchMarker(
+        BenchMarkerKind.triangle, Rect.fromLTWH(.124, .64, .24, .24)),
+    'ram_1':
+        BenchMarker(BenchMarkerKind.notch, Rect.fromLTWH(.2, .395, .19, .19)),
+    'ram_2':
+        BenchMarker(BenchMarkerKind.notch, Rect.fromLTWH(.2, .395, .19, .19)),
+    'psu': BenchMarker(BenchMarkerKind.fan, Rect.fromLTWH(.39, .9, .22, .1),
+        baseTurns: 2),
+  };
+
+  /// Height of the memory slot key (and the module notch) along the slot.
+  static const dimmKeyFraction = .49;
 
   /// The default view for a phase; [selection] can bring the close-up.
   static BenchView viewFor(String phaseId, {bool closeUp = false}) {

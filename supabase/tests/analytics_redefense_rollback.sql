@@ -6,11 +6,14 @@
 -- Fixtures follow the real rules: practice completions use accepted contract
 -- versions, a COC practice quiz is passed only after every COC module is
 -- complete (slice A2 gate), homework follows submitted -> graded -> finalized
--- -> released (slice A4).
+-- -> released (slice A4), instructor-release quizzes are scored from their
+-- released finalization (slice A3), simulation criteria use the
+-- simulation_condition operator and runs record step results (slice A1), and
+-- A6 awards points from the same records.
 -- Every function is called while impersonating the caller (RLS applies), the
 -- JSON result is captured, and assertions run after `reset role`.
 begin;
-select plan(220);
+select plan(257);
 
 -- Isolate the expected progress values from lessons published in the target
 -- database (rolled back with everything else).
@@ -39,6 +42,14 @@ create temporary table ax (
   h1 uuid default gen_random_uuid(), h2 uuid default gen_random_uuid(), h3 uuid default gen_random_uuid(),
   h4 uuid default gen_random_uuid(), h5 uuid default gen_random_uuid(),
   gate_lesson uuid default gen_random_uuid(),
+  q4 uuid default gen_random_uuid(), q4v uuid default gen_random_uuid(),
+  q4i1 uuid default gen_random_uuid(), q4i2 uuid default gen_random_uuid(), qa4_c1 uuid default gen_random_uuid(),
+  qt4_l1 uuid default gen_random_uuid(), qt4_l2 uuid default gen_random_uuid(),
+  q5 uuid default gen_random_uuid(), q5v uuid default gen_random_uuid(),
+  q5i1 uuid default gen_random_uuid(), q5i2 uuid default gen_random_uuid(), qa5_c1 uuid default gen_random_uuid(),
+  qt5_l1 uuid default gen_random_uuid(),
+  sim_av uuid, sim_rubric uuid, sim_crit uuid default gen_random_uuid(),
+  sim_asg uuid default gen_random_uuid(), sim_att uuid default gen_random_uuid(),
   coc1_id uuid
 );
 insert into ax default values;
@@ -309,6 +320,99 @@ select qt_l3,0,2,'[]'::jsonb,now()-interval '2 days' from ax union all
 select qt_l2_draft,1,1,'[]'::jsonb,now()-interval '20 days' from ax;
 
 -- ===================================================================
+-- A3 quizzes, submitted 45 days ago (outside the default 30-day period, so
+-- every expected value above is unchanged; asserted with a 60-day period).
+-- Q4: instructor_release, one objective item (1 point) and one scenario essay
+-- (rubric E1 Diagnosis 4 + E2 Safety 4 points), mapped to module LO1.1.
+--   L1: released, finalized 1 + 7 = 8 of 9 points (88.9 %). Current essay
+--       score: the latest evaluated_at, then the highest sequence (two rows
+--       share a timestamp; a later-inserted row carries an older time).
+--   L2: evaluated, not released: pending evaluation, never averaged.
+-- Q5: immediate, weighted items (1 and 3 points). L1 answered only the
+--   3-point item correctly: 3 of 4 points = 75 % (1 of 2 answers would be 50 %).
+-- ===================================================================
+insert into public.quizzes(id,instructor_id,coc_module_id,title,topic,created_by)
+select q4,t1,coc1_id,'Analytics Essay Quiz','Diagnosis',t1 from ax union all
+select q5,t1,coc1_id,'Analytics Weighted Quiz','Hardware',t1 from ax;
+insert into public.quiz_modules(quiz_id,module_id)
+select q4,(select m.id from public.curriculum_modules m where m.coc_code = 'coc1' and m.code = 'LO1.1') from ax;
+insert into public.quiz_versions(id,quiz_id,version_number,status,created_by,published_by,published_at,result_release_mode)
+select q4v,q4,1,'published'::public.content_version_status,t1,t1,now()-interval '50 days','instructor_release' from ax union all
+select q5v,q5,1,'published'::public.content_version_status,t1,t1,now()-interval '50 days','immediate' from ax;
+insert into public.quiz_items(id,quiz_version_id,item_code,item_type,prompt,options,correct_answer,review_status,reviewed_by,reviewed_at,order_index,created_by,points,scenario,rubric)
+select q4i1,q4v,'A7-ESSAY-OBJ','true_false'::public.quiz_item_type,'Analytics objective prompt','[]'::jsonb,'"True"'::jsonb,
+  'approved'::public.quiz_item_review_status,t1,now(),1,t1,1::numeric,null::text,null::jsonb from ax union all
+select q4i2,q4v,'A7-ESSAY','scenario_essay'::public.quiz_item_type,'Explain your diagnosis','[]'::jsonb,'"Reseat the memory"'::jsonb,
+  'approved'::public.quiz_item_review_status,t1,now(),2,t1,8::numeric,'A workstation does not power on after a memory upgrade.',
+  '[{"id":"E1","criterion":"Diagnosis","description":"","max_points":4},{"id":"E2","criterion":"Safety","description":"","max_points":4}]'::jsonb from ax union all
+select q5i1,q5v,'A7-WEIGHT-1','true_false'::public.quiz_item_type,'Weighted item one prompt','[]'::jsonb,'"True"'::jsonb,
+  'approved'::public.quiz_item_review_status,t1,now(),1,t1,1::numeric,null::text,null::jsonb from ax union all
+select q5i2,q5v,'A7-WEIGHT-3','true_false'::public.quiz_item_type,'Weighted item three prompt','[]'::jsonb,'"True"'::jsonb,
+  'approved'::public.quiz_item_review_status,t1,now(),2,t1,3::numeric,null::text,null::jsonb from ax;
+insert into public.quiz_assignments(id,class_id,quiz_version_id,assigned_by,created_at,due_at)
+select qa4_c1,c1,q4v,t1,now()-interval '50 days',now()-interval '40 days' from ax union all
+select qa5_c1,c1,q5v,t1,now()-interval '50 days',now()-interval '40 days' from ax;
+insert into public.quiz_attempts(id,learner_id,class_id,quiz_assignment_id,quiz_version_id,status,client_start_key,submission_key,started_at,submitted_at,completed_at,evaluation_status)
+select qt4_l1,l1,c1,qa4_c1,q4v,'completed'::public.quiz_attempt_status,gen_random_uuid(),gen_random_uuid(),now()-interval '45 days',now()-interval '45 days',now()-interval '45 days','released' from ax union all
+select qt4_l2,l2,c1,qa4_c1,q4v,'completed'::public.quiz_attempt_status,gen_random_uuid(),gen_random_uuid(),now()-interval '45 days',now()-interval '45 days',now()-interval '45 days','evaluated' from ax union all
+select qt5_l1,l1,c1,qa5_c1,q5v,'completed'::public.quiz_attempt_status,gen_random_uuid(),gen_random_uuid(),now()-interval '45 days',now()-interval '45 days',now()-interval '45 days','not_required' from ax;
+insert into public.quiz_answers(quiz_attempt_id,quiz_item_id,quiz_version_id,answer,is_correct)
+select qt4_l1,q4i1,q4v,'"True"'::jsonb,true from ax union all
+select qt4_l1,q4i2,q4v,'"The memory is not seated; power off and reseat it."'::jsonb,null::boolean from ax union all
+select qt4_l2,q4i1,q4v,'"False"'::jsonb,false from ax union all
+select qt4_l2,q4i2,q4v,'"Replace the power supply."'::jsonb,null::boolean from ax union all
+select qt5_l1,q5i1,q5v,'"False"'::jsonb,false from ax union all
+select qt5_l1,q5i2,q5v,'"True"'::jsonb,true from ax;
+insert into public.quiz_results(quiz_attempt_id,correct_count,question_count,item_results,evaluated_at,objective_points,max_points)
+select qt4_l1,1,2,'[]'::jsonb,now()-interval '45 days',1,9 from ax union all
+select qt4_l2,0,2,'[]'::jsonb,now()-interval '45 days',0,9 from ax union all
+select qt5_l1,1,2,'[]'::jsonb,now()-interval '45 days',3,4 from ax;
+insert into public.quiz_essay_scores(attempt_id,item_id,criterion_scores,total,evaluated_by,evaluated_at)
+select qt4_l1,q4i2,'{"E1":1,"E2":1}'::jsonb,2,t1,now()-interval '44 days' from ax;
+insert into public.quiz_essay_scores(attempt_id,item_id,criterion_scores,total,evaluated_by,evaluated_at)
+select qt4_l1,q4i2,'{"E1":2,"E2":2}'::jsonb,4,t1,now()-interval '43 days' from ax;
+insert into public.quiz_essay_scores(attempt_id,item_id,criterion_scores,total,evaluated_by,evaluated_at)
+select qt4_l1,q4i2,'{"E1":4,"E2":3}'::jsonb,7,t1,now()-interval '43 days' from ax;
+insert into public.quiz_essay_scores(attempt_id,item_id,criterion_scores,total,evaluated_by,evaluated_at)
+select qt4_l1,q4i2,'{"E1":0,"E2":0}'::jsonb,0,t1,now()-interval '44 days 12 hours' from ax;
+insert into public.quiz_essay_scores(attempt_id,item_id,criterion_scores,total,evaluated_by,evaluated_at)
+select qt4_l2,q4i2,'{"E1":1,"E2":0}'::jsonb,1,t1,now()-interval '44 days' from ax;
+insert into public.quiz_result_finalizations(attempt_id,objective_points,essay_points,total_points,max_points,percent,finalized_by,finalized_at,released_by,released_at)
+select qt4_l1,1,7,8,9,88.9,t1,now()-interval '42 days',t1,now()-interval '41 days' from ax;
+
+-- ===================================================================
+-- A1 simulation assessment: L3 (C2), released 45 days ago; one
+-- simulation_condition criterion on phase coc1_m2_p2, not satisfied.
+-- ===================================================================
+with av as (
+  insert into public.activity_versions(mission_id,module_version_id,version_number,title,delivery_mode,learner_payload,evaluator_config,status,created_by,published_by,published_at)
+  select (select id from public.missions where mission_code = 'coc1_m2'), module_version_id,
+    (select max(version_number) from public.activity_versions where mission_id = (select id from public.missions where mission_code = 'coc1_m2')) + 1,
+    'Analytics simulation assessment','assessment','{"mission_id":"coc1_m2","mode":"assessment"}','{"engine":"simulation_replay_v1"}',
+    'published',admin_id,admin_id,now()-interval '50 days' from ax
+  returning id)
+update ax set sim_av = av.id from av;
+with rv as (
+  insert into public.rubric_versions(activity_version_id,tesda_source_id,version_number,title,status,scoring_method,passing_rule,created_by,approved_by,approved_at)
+  select sim_av,source_id,1,'Analytics simulation rubric','approved','TEST_ONLY_POINTS','{"status":"APPROVED","method":"threshold","threshold":75}',admin_id,admin_id,now() from ax
+  returning id)
+update ax set sim_rubric = rv.id from rv;
+insert into public.rubric_criteria(id,rubric_version_id,criterion_code,title,source_trace,evidence_rule,scoring_rule,max_value,order_index)
+select sim_crit,sim_rubric,'A7-SIM-C3','CPU seated in the correct orientation with the lever closed','TEST_ONLY',
+  '{"operator":"simulation_condition","phase_ids":["coc1_m2_p2"],"conditions":[{"path":"placed.cpu","value":"cpu_socket"}],"counted_targets":["item:cpu"],"max_incorrect":0}'::jsonb,
+  '{"status":"APPROVED","method":"binary","satisfied_value":1,"not_satisfied_value":0}'::jsonb,1,1 from ax;
+insert into public.assignments(id,class_id,activity_version_id,rubric_version_id,assignment_type,title,assigned_by)
+select sim_asg,c2,sim_av,sim_rubric,'assessment'::public.assignment_type,'Analytics simulation assessment',t1 from ax;
+insert into public.attempts(id,learner_id,class_id,assignment_id,activity_version_id,rubric_version_id,tesda_source_id,status,client_start_key,submission_key,started_at,submitted_at,evaluated_at,finalized_at,released_at)
+select sim_att,l3,c2,sim_asg,sim_av,sim_rubric,source_id,'released'::public.attempt_status,gen_random_uuid(),gen_random_uuid(),
+  now()-interval '45 days',now()-interval '45 days',now()-interval '45 days',now()-interval '45 days',now()-interval '45 days' from ax;
+insert into public.score_revisions(attempt_id,revision_number,revision_type,actor_id,actor_role,tesda_source_id,rubric_version_id,total_value,max_value,percentage,outcome,criterion_values)
+select sim_att,1,'instructor_final'::public.score_revision_type,t1,'instructor'::public.user_role,source_id,sim_rubric,0,1,0,'not_yet_competent'::public.evaluation_outcome,
+  jsonb_build_array(jsonb_build_object('criterion_id',sim_crit,'observation','not_satisfied','score_value',0)) from ax;
+insert into public.result_releases(attempt_id,score_revision_id,release_number,released_by,released_at,is_current)
+select sim_att,(select sr.id from public.score_revisions sr where sr.attempt_id = ax.sim_att),1,t1,now()-interval '45 days',true from ax;
+
+-- ===================================================================
 -- Homework (A4 lifecycle). H1 (C1, COC1 / coc1_m2, max 50, two criteria):
 -- L1 released 40/50, L2 missing. H2 (C2): L3 released 60 late, L1 missing.
 -- H3 (C1, due in 3 days, max 20): L1 graded 18 (pending). H4 (C2, due in 3
@@ -343,15 +447,20 @@ select pg_temp.a7_complete(l1,'coc1_m2',now()-interval '5 days') from ax;
 select pg_temp.a7_complete(l1,'coc1_m3',now()-interval '40 days') from ax;
 select pg_temp.a7_complete(l3,'coc1_m1',now()-interval '6 days') from ax;
 select pg_temp.a7_complete(l3,'coc1_m5',now()-interval '5 days') from ax;
-insert into public.practice_mission_runs(learner_id,mission_id,contract_version,run_number,started_at,ended_at,duration_seconds,action_count,invalid_count,correction_count,outcome,created_at)
-select l1,'coc1_m1','v',1,now()-interval '7 days',now()-interval '7 days',90,8,3,1,'incomplete',now()-interval '7 days' from ax union all
-select l1,'coc1_m1','v',2,now()-interval '6 days',now()-interval '6 days',120,6,0,0,'verified',now()-interval '6 days' from ax union all
-select l1,'coc1_m2','v',1,now()-interval '5 days',now()-interval '5 days',200,9,0,0,'verified',now()-interval '5 days' from ax union all
-select l1,'coc1_m3','v',1,now()-interval '40 days',now()-interval '40 days',300,12,0,0,'verified',now()-interval '40 days' from ax union all
-select l3,'coc1_m4','v',1,now()-interval '3 days',now()-interval '3 days',60,5,2,0,'incomplete',now()-interval '3 days' from ax union all
-select l3,'coc1_m4','v',2,now()-interval '2 days',now()-interval '2 days',70,5,2,0,'incomplete',now()-interval '2 days' from ax union all
-select l3,'coc1_m4','v',3,now()-interval '1 day',now()-interval '1 day',80,5,2,0,'incomplete',now()-interval '1 day' from ax union all
-select l4,'coc1_m2','v',1,now()-interval '2 days',now()-interval '2 days',100,7,0,0,'verified',now()-interval '2 days' from ax;
+-- L3's coc1_m4 runs record step results (A1): step 2 is reached late or
+-- fixed (2, 1 and 1 incorrect attempts), steps 3 and 4 are never completed.
+insert into public.practice_mission_runs(learner_id,mission_id,contract_version,run_number,started_at,ended_at,duration_seconds,action_count,invalid_count,correction_count,outcome,created_at,step_results)
+select l1,'coc1_m1','v',1,now()-interval '7 days',now()-interval '7 days',90,8,3,1,'incomplete',now()-interval '7 days','{}'::jsonb from ax union all
+select l1,'coc1_m1','v',2,now()-interval '6 days',now()-interval '6 days',120,6,0,0,'verified',now()-interval '6 days','{}'::jsonb from ax union all
+select l1,'coc1_m2','v',1,now()-interval '5 days',now()-interval '5 days',200,9,0,0,'verified',now()-interval '5 days','{}'::jsonb from ax union all
+select l1,'coc1_m3','v',1,now()-interval '40 days',now()-interval '40 days',300,12,0,0,'verified',now()-interval '40 days','{}'::jsonb from ax union all
+select l3,'coc1_m4','v',1,now()-interval '3 days',now()-interval '3 days',60,5,2,0,'incomplete',now()-interval '3 days',
+  '{"coc1_m4_p1":{"done":true,"invalid":0,"failed_checks":0},"coc1_m4_p2":{"done":false,"invalid":2,"failed_checks":0},"coc1_m4_p3":{"done":false,"invalid":0,"failed_checks":0},"coc1_m4_p4":{"done":false,"invalid":0,"failed_checks":0}}'::jsonb from ax union all
+select l3,'coc1_m4','v',2,now()-interval '2 days',now()-interval '2 days',70,5,2,0,'incomplete',now()-interval '2 days',
+  '{"coc1_m4_p1":{"done":true,"invalid":0,"failed_checks":0},"coc1_m4_p2":{"done":true,"invalid":1,"failed_checks":0},"coc1_m4_p3":{"done":false,"invalid":0,"failed_checks":0},"coc1_m4_p4":{"done":false,"invalid":0,"failed_checks":0}}'::jsonb from ax union all
+select l3,'coc1_m4','v',3,now()-interval '1 day',now()-interval '1 day',80,5,2,0,'incomplete',now()-interval '1 day',
+  '{"coc1_m4_p1":{"done":true,"invalid":0,"failed_checks":0},"coc1_m4_p2":{"done":true,"invalid":0,"failed_checks":1},"coc1_m4_p3":{"done":false,"invalid":1,"failed_checks":0},"coc1_m4_p4":{"done":false,"invalid":0,"failed_checks":0}}'::jsonb from ax union all
+select l4,'coc1_m2','v',1,now()-interval '2 days',now()-interval '2 days',100,7,0,0,'verified',now()-interval '2 days','{}'::jsonb from ax;
 -- L4 (T2's learner) completes every COC1 module, then passes the COC1 practice
 -- quiz: the A2 gate (every module of the COC complete) is satisfied, not bypassed.
 -- A lesson published in LO1.4 beforehand keeps that module, and so the gate,
@@ -385,6 +494,10 @@ with pq as (
     '{"q1":0,"q2":0,"q3":0,"q4":0,"q5":0}'::jsonb,5,true,now()-interval '1 day' from ax returning id, learner_id)
 insert into public.practice_coc_progress(learner_id,coc_code,completed_at,quiz_attempt_id) select learner_id,'coc1',now()-interval '1 day',id from pq;
 update public.curriculum_topics set archived_at = now() where id = (select gate_lesson from ax);
+-- A6 awards points from the fixture records through its own triggers; one
+-- explicit award 45 days ago lies outside the default period.
+insert into public.learner_point_events(learner_id,event_type,source_id,points,detail,awarded_at)
+select l2,'topic_completed','a7-old-topic',10,'Rollback fixture',now()-interval '45 days' from ax;
 
 -- ===================================================================
 -- RLS: instructors read practice records of learners they teach only.
@@ -435,7 +548,16 @@ insert into ar values
   ('missions_m1', public.get_mission_analytics('{"mission_code":"coc1_m1"}'::jsonb)),
   ('criteria', public.get_criteria_analytics('{}'::jsonb)),
   ('profile_l1', public.get_learner_profile_analytics((select l1 from ax),'{}'::jsonb)),
-  ('options', public.get_analytics_filter_options());
+  ('options', public.get_analytics_filter_options()),
+  ('overview_q4_60', public.get_analytics_overview(jsonb_build_object('quiz_id',(select q4 from ax),'from',now()-interval '60 days'))),
+  ('overview_lo11_60', public.get_analytics_overview(jsonb_build_object('module_id',
+    (select m.id from public.curriculum_modules m where m.coc_code = 'coc1' and m.code = 'LO1.1'),'from',now()-interval '60 days'))),
+  ('overview_m4', public.get_analytics_overview('{"mission_code":"coc1_m4"}'::jsonb)),
+  ('quiz_q4_60', public.get_quiz_analytics((select q4 from ax),jsonb_build_object('from',now()-interval '60 days'))),
+  ('quiz_q5_60', public.get_quiz_analytics((select q5 from ax),jsonb_build_object('from',now()-interval '60 days'))),
+  ('learners_60', public.get_learner_performance(jsonb_build_object('from',now()-interval '60 days'))),
+  ('criteria_60', public.get_criteria_analytics(jsonb_build_object('from',now()-interval '60 days'))),
+  ('profile_l3_60', public.get_learner_profile_analytics((select l3 from ax),jsonb_build_object('from',now()-interval '60 days')));
 select set_config('request.jwt.claim.sub',(select t2::text from ax),true);
 insert into ar values
   ('overview_t2', public.get_analytics_overview('{}'::jsonb)),
@@ -617,7 +739,7 @@ select is((select a->>'status' from ar, jsonb_array_elements(v->'assignments') a
 select is((select a->>'status' from ar, jsonb_array_elements(v->'assignments') a where name='profile_l1' and a->>'title'='Analytics Homework Two'), 'missing', 'profile shows missing homework');
 select is((select (v->'status'->'assignments'->>'pending_evaluation')::int from ar where name='profile_l1'), 2, 'profile pending homework');
 select is((select (v->'status'->>'status') from ar where name='profile_l1'), 'on_track', 'profile status');
-select ok((select jsonb_array_length(v->'classes') = 2 and jsonb_array_length(v->'quizzes') = 1 from ar where name='options'), 'filter options list active owned classes and own published quizzes');
+select ok((select jsonb_array_length(v->'classes') = 2 and jsonb_array_length(v->'quizzes') = 3 from ar where name='options'), 'filter options list active owned classes and own published quizzes');
 
 -- Learner-facing performance (released results only; A2 progress methodology).
 select is((select (v->'progress'->>'overall_percent')::numeric from ar where name='me_l1'), 12.5, 'learner overall progress');
@@ -625,19 +747,131 @@ select is((select (c->>'percent')::numeric from ar, jsonb_array_elements(v->'pro
 select ok((select (c->>'modules_completed')::int = 1 and (c->>'modules_total')::int = 4 from ar, jsonb_array_elements(v->'progress'->'cocs') c where name='me_l1' and c->>'coc_code'='coc1'),
   'learner module counts follow learner_module_states (1 of 4 COC1 modules)');
 select is((select count(*)::int from ar, jsonb_array_elements(v->'competency') c where name='me_l1' and c->>'outcome'='satisfied' and c->>'criterion' like 'Analytics criterion%'), 2, 'competency per released criterion with its label');
-select is((select v->'scores'->'quizzes'->0->>'title' from ar where name='me_l1'), 'Analytics Quiz One', 'learner quiz score with title');
+select is((select jsonb_array_length(v->'scores'->'quizzes') from ar where name='me_l1'), 3, 'learner quiz scores: the immediate quizzes and the released essay quiz');
+select ok((select (q->>'percent')::numeric = 88.9 and (q->>'score')::numeric = 8 and (q->>'max_score')::numeric = 9 and (q->>'released')::boolean
+  from ar, jsonb_array_elements(v->'scores'->'quizzes') q where name='me_l1' and q->>'attempt_id' = (select qt4_l1::text from ax)),
+  'a released essay quiz shows its finalized points and percent to the learner');
+select is((select (q->>'percent')::numeric from ar, jsonb_array_elements(v->'scores'->'quizzes') q
+  where name='me_l1' and q->>'attempt_id' = (select qt5_l1::text from ax)), 75.0, 'an immediate quiz is scored by points (3 of 4)');
+select ok((select q->>'score' is null and q->>'max_score' is null and (q->>'correct_count')::int = 2 and (q->>'percent')::numeric = 100.0
+  from ar, jsonb_array_elements(v->'scores'->'quizzes') q where name='me_l1' and q->>'attempt_id' = (select qt_l1::text from ax)),
+  'a result recorded before points reports answers only, never answers as points');
+select ok((select bool_and(not (q ? 'title')) from ar, jsonb_array_elements(v->'scores'->'quizzes') q where name='me_l1'),
+  'no per-quiz title lookup in the learner view (review Minor 4)');
+select ok(to_regprocedure('private.analytics_learner_quiz_title(uuid)') is null, 'the quiz-title wrapper is removed (review Minor 4)');
+select ok((select jsonb_array_length(v->'scores'->'quizzes') = 2
+    and not exists (select 1 from jsonb_array_elements(v->'scores'->'quizzes') q where q->>'attempt_id' = (select qt4_l2::text from ax))
+  from ar where name='me_l2'), 'an evaluated, unreleased essay quiz is not shown to the learner');
 select ok((select (h->>'score')::numeric = 40 and (h->>'max_score')::numeric = 50 and (h->>'percent')::numeric = 80.0 and (h->>'released')::boolean
   from ar, jsonb_array_elements(v->'scores'->'homework') h where name='me_l1' and h->>'title'='Analytics Homework One'), 'released homework score and max_score');
 select is((select jsonb_array_length(v->'scores'->'homework') from ar where name='me_l1'), 2, 'graded and finalized homework stay hidden from the learner until release');
 select is((select (v->'summary'->>'homework_avg')::numeric from ar where name='me_l1'), 80.0, 'learner homework average uses released grades only');
 select ok((select (v->'summary'->>'criteria_achieved')::int = 2 and (v->'summary'->>'criteria_total')::int = 2
-  and (v->'summary'->>'assessments_competent')::int = 1 and (v->'summary'->>'quiz_avg')::numeric = 100 from ar where name='me_l1'), 'learner summary');
+  and (v->'summary'->>'assessments_competent')::int = 1 and (v->'summary'->>'quiz_avg')::numeric = 88.0 from ar where name='me_l1'),
+  'learner summary (quiz average of the visible results: 100, 88.9 and 75)');
 select is((select jsonb_array_length(v->'assessments') from ar where name='me_l1'), 2, 'released assessment results');
 select is((select (v->'practice'->>'runs')::int from ar where name='me_l1'), 4, 'learner practice runs');
 select is((select (v->'practice'->>'missions_verified')::int from ar where name='me_l1'), 3, 'learner verified missions (accepted versions)');
 select is((select (b->>'best_seconds')::int from ar, jsonb_array_elements(v->'practice'->'best_times') b where name='me_l1' and b->>'mission_code'='coc1_m1'), 120, 'best verified time');
 select is((select v->'assessments' from ar where name='me_l2'), '[]'::jsonb, 'unreleased results are not shown to the learner');
 select is((select v->'competency' from ar where name='me_l2'), '[]'::jsonb, 'no competency entries without a released result');
+
+-- A3 quizzes: instructor-release results count once released, from the
+-- finalization; pending, evaluated and finalized attempts are pending.
+select ok((select (v->'quizzes'->>'submitted')::int = 2 and (v->'quizzes'->>'scored')::int = 1 and (v->'quizzes'->>'pending')::int = 1
+  from ar where name='overview_q4_60'), 'essay quiz: two submissions, one released result, one pending evaluation');
+select is((select (v->'quizzes'->>'avg_percent')::numeric from ar where name='overview_q4_60'), 88.9, 'the quiz average uses the released finalization only');
+select is((select v->'evaluation'->'quiz' from ar where name='overview_q4_60'),
+  '{"evaluate":0,"finalize":1,"release":0,"released":1}'::jsonb, 'quiz attempts by Evaluate / Finalize / Release stage');
+select ok((select (v->>'participants')::int = 2 and (v->>'pending')::int = 1 and (v->>'average')::numeric = 88.9
+    and (v->>'highest')::numeric = 88.9 and (v->>'lowest')::numeric = 88.9 and v->'quiz'->>'release_mode' = 'instructor_release'
+  from ar where name='quiz_q4_60'), 'essay quiz analytics: average, highest and lowest from released results only');
+select ok((select sum((b->>'count')::int) = 1 and sum((b->>'count')::int) filter (where b->>'bucket' = '80-89') = 1
+  from ar, jsonb_array_elements(v->'distribution') b where name='quiz_q4_60'), 'the distribution holds only the released result');
+select ok((select (r->>'score')::numeric = 8 and (r->>'max_score')::numeric = 9 and (r->>'percent')::numeric = 88.9 and r->>'status' = 'scored'
+  from ar, jsonb_array_elements(v->'results') r where name='quiz_q4_60' and r->>'name' = 'Ana Analytics'), 'released result: finalized points of the maximum');
+select ok((select r->>'status' = 'pending' and r->>'percent' is null and r->>'score' is null and r->>'stage' = 'finalize'
+  from ar, jsonb_array_elements(v->'results') r where name='quiz_q4_60' and r->>'name' = 'Ben Analytics'), 'evaluated attempt: pending, no score');
+select ok((select (q->>'avg_points')::numeric = 7 and (q->>'avg_percent')::numeric = 87.5 and q->>'correct' is null and (q->>'points')::numeric = 8
+  from ar, jsonb_array_elements(v->'per_question') q where name='quiz_q4_60' and q->>'code' = 'A7-ESSAY'),
+  'essay item: current score (latest evaluated_at, then highest sequence), not an older or later-inserted row');
+select is((select (q->>'correct_rate')::numeric from ar, jsonb_array_elements(v->'per_question') q where name='quiz_q4_60' and q->>'code' = 'A7-ESSAY-OBJ'),
+  100.0, 'objective items count released attempts only');
+select ok((select (v->>'average')::numeric = 75.0 and (v->'results'->0->>'score')::numeric = 3 and (v->'results'->0->>'max_score')::numeric = 4
+  from ar where name='quiz_q5_60'), 'an immediate quiz keeps quiz_results, scored by points (3 of 4), not answers (1 of 2)');
+select ok((select (v->'quizzes'->>'applicable')::boolean and (v->'quizzes'->>'submitted')::int = 2 from ar where name='overview_lo11_60'),
+  'a module filter keeps quizzes mapped to that module (quiz_modules) and drops whole-COC quizzes');
+select ok((select not (v->'quizzes'->>'applicable')::boolean and v->'quizzes'->>'avg_percent' is null from ar where name='overview_m4'),
+  'quizzes are not positioned at missions');
+select is((select (l->>'quiz_avg')::numeric from ar, jsonb_array_elements(v->'learners') l where name='learners_60' and l->>'name' = 'Ana Analytics'),
+  88.0, 'learner quiz average over released and immediate results (100, 88.9, 75)');
+select is((select (l->>'quiz_avg')::numeric from ar, jsonb_array_elements(v->'learners') l where name='learners_60' and l->>'name' = 'Ben Analytics'),
+  50.0, 'a pending essay attempt is excluded from the learner quiz average');
+select ok((select c->>'source' = 'essay' and (c->>'avg')::numeric = 4 and (c->>'percent')::numeric = 100.0 and (c->>'evaluated_learners')::int = 1
+    and c->>'activity_title' = 'Analytics Essay Quiz · A7-ESSAY'
+  from ar, jsonb_array_elements(v->'criteria') c where name='criteria_60' and c->>'code' = 'E1'), 'essay rubric criterion E1 from the current essay score');
+select is((select (c->>'percent')::numeric from ar, jsonb_array_elements(v->'criteria') c where name='criteria_60' and c->>'code' = 'E2'),
+  75.0, 'essay rubric criterion E2 (3 of 4), released attempts only');
+
+-- A1 simulation: simulation_condition criteria with their step titles, and
+-- practice step results.
+select ok((select c->>'source' = 'simulation' and c->>'title' = 'CPU seated in the correct orientation with the lever closed'
+    and c->'steps' = '[{"id":"coc1_m2_p2","step":2,"title":"Prepare the motherboard"}]'::jsonb
+    and (c->>'percent')::numeric = 0.0 and (c->>'not_satisfied')::int = 1
+  from ar, jsonb_array_elements(v->'criteria') c where name='criteria_60' and c->>'code' = 'A7-SIM-C3'),
+  'simulation criteria appear as simulation steps with their step title');
+select ok((select (a->>'simulation')::boolean and a->'criteria'->0->'steps'->0->>'title' = 'Prepare the motherboard'
+  from ar, jsonb_array_elements(v->'assessments') a where name='profile_l3_60' and a->>'assignment_title' = 'Analytics simulation assessment'),
+  'the learner profile marks the simulation assessment and names each criterion''s step');
+select ok(has_column_privilege('authenticated', 'public.practice_mission_contracts', 'step_titles', 'SELECT')
+  and not has_column_privilege('authenticated', 'public.practice_mission_contracts', 'definition', 'SELECT'),
+  'step titles are readable; contract definitions (answer keys) are not');
+select is((select jsonb_array_length(m->'steps') from ar, jsonb_array_elements(v->'missions') m where name='missions' and m->>'mission_code'='coc1_m4'),
+  4, 'coc1_m4 lists its four recorded steps');
+select ok((select s->>'title' = 'Choose a tool' and (s->>'runs')::int = 3 and (s->>'missed')::int = 3 and (s->>'not_completed')::int = 1
+    and (s->>'avg_incorrect')::numeric = 1.33
+  from ar, jsonb_array_elements(v->'missions') m, jsonb_array_elements(m->'steps') s
+  where name='missions' and m->>'mission_code'='coc1_m4' and s->>'phase_id' = 'coc1_m4_p2'),
+  'step 2: missed in all three runs, 1.33 incorrect attempts per run (2 invalid, 1 invalid, 1 failed check)');
+select ok((select (s->>'missed')::int = 0 and (s->>'avg_incorrect')::numeric = 0
+  from ar, jsonb_array_elements(v->'missions') m, jsonb_array_elements(m->'steps') s
+  where name='missions' and m->>'mission_code'='coc1_m4' and s->>'phase_id' = 'coc1_m4_p1'), 'a clean step is never missed');
+select is((select jsonb_agg(x.value->>'title' order by x.o) from ar, jsonb_array_elements(v->'missions') m,
+    jsonb_array_elements(m->'most_missed') with ordinality x(value, o)
+  where name='missions' and m->>'mission_code'='coc1_m4'),
+  '["Choose a tool","Connect devices","Run and interpret device test"]'::jsonb, 'most-missed steps: by runs missed, then incorrect attempts');
+select is((select m->'steps' from ar, jsonb_array_elements(v->'missions') m where name='missions' and m->>'mission_code'='coc1_m1'),
+  '[]'::jsonb, 'runs without step results add no steps');
+select is((select jsonb_agg(x.value->>'phase_id' order by x.o) from ar, jsonb_array_elements(v->'missions') m, jsonb_array_elements(m->'recent_runs') r,
+    jsonb_array_elements(r->'missed_steps') with ordinality x(value, o)
+  where name='profile_l3_60' and m->>'mission_code'='coc1_m4' and (r->>'run_number')::int = 3),
+  '["coc1_m4_p2","coc1_m4_p3","coc1_m4_p4"]'::jsonb, 'the profile lists the steps each recent run missed');
+
+-- A6 engagement: points and level from A6, separate from scores.
+select is((select (l->'engagement'->>'points')::int from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ana Analytics'),
+  (select coalesce(sum(e.points), 0)::int from public.learner_point_events e where e.learner_id = (select l1 from ax) and e.awarded_at <= now()),
+  'learner list points = the learner''s A6 point events to the period end');
+select ok((select (l->'engagement'->>'points')::int > 0 from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ana Analytics'),
+  'the fixture''s own records award points to L1');
+select is((select l->'engagement'->>'level_title' from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ana Analytics'),
+  (select public.gamification_level_for_points((select coalesce(sum(e.points), 0)::int from public.learner_point_events e
+    where e.learner_id = (select l1 from ax))) ->> 'title'), 'level from public.gamification_level_for_points');
+select is((select (l->'engagement'->>'points')::int - (l->'engagement'->>'points_in_period')::int
+  from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ben Analytics'),
+  (select coalesce(sum(e.points), 0)::int from public.learner_point_events e
+    where e.learner_id = (select l2 from ax) and e.awarded_at < now() - interval '30 days'),
+  'points in the period exclude awards before the period (the 45-day-old award)');
+select ok((select (v->'engagement'->>'points')::int = (select (l->'engagement'->>'points')::int from ar a2, jsonb_array_elements(a2.v->'learners') l
+      where a2.name='learners' and l->>'name'='Ana Analytics')
+    and (v->'engagement'->>'achievements')::int = (select count(*)::int from public.learner_achievements la where la.learner_id = (select l1 from ax))
+    and jsonb_array_length(v->'engagement'->'recent_events') between 1 and 5
+    and (select bool_and(x->>'label' is not null) from jsonb_array_elements(v->'engagement'->'recent_events') x)
+  from ar where name='profile_l1'), 'the profile shows the same points, the achievements and labelled recent awards');
+select ok((select l->'engagement' ?& array['points','points_in_period','level','level_title'] and not (l ? 'points')
+    and (l->>'performance_score')::numeric = (select (l2->>'performance_score')::numeric from ar a2, jsonb_array_elements(a2.v->'learners') l2
+      where a2.name='learner_l2_only' and l2->>'name'='Ben Analytics')
+  from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ben Analytics'),
+  'engagement is reported apart from the performance score');
 
 select * from finish();
 rollback;

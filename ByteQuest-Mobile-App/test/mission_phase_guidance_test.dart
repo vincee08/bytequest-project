@@ -74,7 +74,8 @@ void main() {
   test('placement, configuration, diagnostics, and review use their controls',
       () {
     final checks = <String, String>{
-      'coc1_m2_p2': 'Drag it toward a compatible slot',
+      // The assembly bench: parts are dragged from its tray onto the bench.
+      'coc1_m2_p2': 'Drag the part onto its place on the bench',
       'coc2_m4_p2': 'Apply configuration',
       'coc3_m3_p3': 'diagnostic action',
       'coc4_m5_p6': 'Confirm evidence',
@@ -178,10 +179,20 @@ void main() {
     for (final phase in phases) {
       final guide = MissionActionGuide.forPhase(
           phase, MissionRuntimeState.initial(phase.id.substring(0, 7)));
-      final control = phase.resolvedInteraction == InteractionFamily.place &&
-              phase.id.startsWith('coc4')
-          ? 'Components and devices'
-          : expected[phase.resolvedInteraction];
+      // The assembly bench renders its parts, cables and inspections in the
+      // tray below the bench; its test and review keep the standard panels.
+      final bench = phase.presentation['bench_steps'] is List &&
+          const {
+            InteractionFamily.inspect,
+            InteractionFamily.place,
+            InteractionFamily.connect,
+          }.contains(phase.resolvedInteraction);
+      final control = bench
+          ? 'tray below the bench'
+          : phase.resolvedInteraction == InteractionFamily.place &&
+                  phase.id.startsWith('coc4')
+              ? 'Components and devices'
+              : expected[phase.resolvedInteraction];
       expect(guide.steps.first.text, contains(control), reason: phase.id);
     }
   });
@@ -306,6 +317,55 @@ void main() {
     expect(count, 116);
   });
 
+  // Polish round P5: the bench has hotspots and a tray, not card panels.
+  test('assembly bench guidance names the bench controls, not card panels',
+      () {
+    const panels = [
+      'Operate the equipment',
+      'Equipment operations',
+      'Place equipment',
+      'Components and devices',
+      'Install selected component',
+      'Connect ports',
+      'Inspection targets',
+      'Tap Objects',
+    ];
+    final mission = MissionSimulationDefinitions.byId('coc1_m2');
+    var benchPhases = 0;
+    for (final phase in mission.phases) {
+      if (phase.presentation['bench_steps'] is! List) continue;
+      benchPhases++;
+      final state =
+          MissionRuntimeState.initial(mission.id).copyWith(currentPhaseId: phase.id);
+      final texts = [
+        ...MissionPhaseGuidance.forPhase(phase, state).steps,
+        ...MissionActionGuide.forPhase(phase, state).steps.map((s) => s.text),
+      ];
+      for (final text in texts) {
+        for (final panel in panels) {
+          expect(text, isNot(contains(panel)), reason: '${phase.id}: $text');
+        }
+      }
+      expect(texts.join(' '), contains('bench'), reason: phase.id);
+    }
+    expect(benchPhases, 5);
+
+    // After the inspections, the next action is the wrist strap: a hotspot
+    // on the bench or its button in the tray.
+    final inspect = mission.phases.first;
+    final inspected = MissionRuntimeState.initial(mission.id).copyWith(
+      currentPhaseId: inspect.id,
+      interactionCompletedPhaseIds: {inspect.id},
+      hotspotStates: {
+        for (final object in MissionEquipmentSimulator.maps(
+            inspect.presentation['objects']))
+          object['id'] as String: HotspotVisualState.completed,
+      },
+    );
+    expect(MissionActionGuide.forPhase(inspect, inspected).currentStep?.text,
+        MissionContentData.guideBenchOperation('Wear the anti-static wrist strap'));
+  });
+
   test('graded decisions do not name the required correction button', () {
     var checked = 0;
     for (final mission in MissionSimulationDefinitions.all) {
@@ -382,7 +442,8 @@ void main() {
       ));
       expect(find.text(MissionContentData.guideNextHeading), findsOneWidget);
       expect(find.byKey(const ValueKey('mission-show-me-how')), findsOneWidget);
-      expect(find.textContaining('Install selected component'), findsWidgets);
+      // COC1 M2 runs on the assembly bench: its tray, not a card panel.
+      expect(find.textContaining('tray below the bench'), findsWidgets);
       expect(tester.takeException(), isNull);
     });
   }

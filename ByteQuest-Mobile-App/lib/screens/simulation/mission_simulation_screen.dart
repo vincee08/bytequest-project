@@ -510,8 +510,13 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
                 widget.definition, _state) &&
             !_submitted);
     final step = guide.currentStep;
+    // Bench operations are hotspots on the bench and buttons in its tray,
+    // so they never need the task panel opened.
+    final benchOperation = step?.target == MissionGuideTarget.operations &&
+        MissionEquipmentSimulator.isAssemblyBench(widget.definition);
     if ((step?.target == MissionGuideTarget.controls ||
             step?.target == MissionGuideTarget.operations) &&
+        !benchOperation &&
         !_expandedControls) {
       setState(() => _expandedControls = true);
       await WidgetsBinding.instance.endOfFrame;
@@ -554,7 +559,10 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
         overlayBox is! RenderBox ||
         !box.hasSize ||
         !overlayBox.hasSize) return;
-    Rect rect = box.localToGlobal(Offset.zero, ancestor: overlayBox) & box.size;
+    // The full transform, so a target under a zoomed or panned camera is
+    // outlined at its on-screen size as well as its position.
+    Rect rect = MatrixUtils.transformRect(
+        box.getTransformTo(overlayBox), Offset.zero & box.size);
     final scrollable = Scrollable.maybeOf(target!);
     final scrollBox = scrollable?.context.findRenderObject();
     if (scrollBox is RenderBox && scrollBox.hasSize) {

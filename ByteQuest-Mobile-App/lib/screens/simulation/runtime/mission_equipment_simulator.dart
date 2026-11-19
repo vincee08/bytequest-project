@@ -246,6 +246,7 @@ abstract final class MissionEquipmentSimulator {
           operations[target!] = true;
           next['operations'] = operations;
           feedback = operation['feedback'] as String? ??
+              (bench ? _benchOperationFeedback(phase, target) : null) ??
               MissionContentData.equipmentUpdatedFeedback;
         }
         break;
@@ -371,6 +372,18 @@ abstract final class MissionEquipmentSimulator {
       'simulation_feedback': feedback,
       'equipment_snapshot': next,
     };
+  }
+
+  /// What a bench operation physically changed ("Load lever opened."). Only
+  /// the power-on phase has a test that can check the change; assessment
+  /// replaces this with neutral feedback.
+  static String? _benchOperationFeedback(
+      MissionPhaseDefinition phase, String target) {
+    final done = MissionContentData.benchOperationFeedback[target];
+    if (done == null) return null;
+    return phase.resolvedInteraction == InteractionFamily.testRun
+        ? '$done ${MissionContentData.benchOperationRetest}'
+        : done;
   }
 
   static String _neutralRefusal(String actionType) => switch (actionType) {

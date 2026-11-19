@@ -328,6 +328,50 @@ void main() {
         reason: 'practice names the physical reason');
   });
 
+  // Polish round P2: a bench operation confirms what physically changed. The
+  // generic "run a fresh test" text only fits phases that have a test.
+  test('bench operations confirm the physical change in practice', () {
+    final definition = MissionSimulationDefinitions.byId('coc1_m2');
+    final ids = {
+      for (final phase in definition.phases)
+        for (final operation in MissionEquipmentSimulator.maps(
+            MissionEquipmentSimulator.map(
+                phase.presentation['equipment'])['operations']))
+          operation['id'] as String,
+    };
+    expect(ids, isNotEmpty);
+    expect(MissionContentData.benchOperationFeedback.keys.toSet(), ids,
+        reason: 'every bench operation has its own confirmation');
+
+    final driver = EquipmentPracticeDriver(definition);
+    final strap =
+        driver.act(definition.phases[0], 'equipment_operation', 'wear_wrist_strap');
+    expect(strap['simulation_feedback'], 'Wrist strap fastened on your wrist.');
+    final ground = driver.act(
+        definition.phases[0], 'equipment_operation', 'ground_wrist_strap');
+    expect(ground['simulation_feedback'],
+        'Strap lead clipped to the mat ground point.');
+    final lever =
+        driver.act(definition.phases[1], 'equipment_operation', 'open_cpu_lever');
+    expect(lever['simulation_feedback'], 'Load lever opened.');
+    for (final result in [strap, ground, lever]) {
+      expect(result['simulation_feedback'],
+          isNot(MissionContentData.equipmentUpdatedFeedback));
+    }
+
+    // The power-on phase has a test, so its confirmation points to it.
+    final post = definition.phases[4];
+    final latches = MissionEquipmentSimulator.describeAction(
+        definition: definition,
+        phase: post,
+        state: driver.state.copyWith(currentPhaseId: post.id),
+        actionType: 'equipment_operation',
+        target: 'open_dimm_latches',
+        value: const {});
+    expect(latches['simulation_feedback'],
+        'DIMM latches opened. ${MissionContentData.benchOperationRetest}');
+  });
+
   test('bench parts declare requires, removal resets fastening, reseat counts',
       () {
     final definition = MissionSimulationDefinitions.byId('coc1_m2');

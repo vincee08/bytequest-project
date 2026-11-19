@@ -121,7 +121,7 @@ export function LearnerProfileView({ profile, query }: { profile: LearnerProfile
         </Panel>
       ) : null}
 
-      <Panel title="Evaluation status" description="This learner's technical assessments and homework submitted in the period, by Evaluation Center stage. Only released results count in averages.">
+      <Panel title="Evaluation status" description="This learner's technical assessments, instructor-release quizzes and homework submitted in the period, by Evaluation Center stage. Only released results count in averages.">
         <dl className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-4 sm:p-5">
           {EVALUATION_STAGES.map((stage) => (
             <div key={stage} className="rounded-lg border border-border/70 bg-background px-3.5 py-3">
@@ -130,6 +130,27 @@ export function LearnerProfileView({ profile, query }: { profile: LearnerProfile
             </div>
           ))}
         </dl>
+      </Panel>
+
+      <Panel title="Engagement" description="A6 points and level. Points reward activity; they are not a competency judgement and are not part of the performance score.">
+        <div className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+          <div className="grid grid-cols-2 gap-3">
+            <Stat label="Points" value={profile.engagement.points} helper={`+${profile.engagement.points_in_period} in the period`} />
+            <Stat label="Level" value={profile.engagement.level_title ?? "—"}
+              helper={profile.engagement.next_level_points === null ? "Highest level" : `${profile.engagement.level_progress_percent ?? 0}% of the way to ${profile.engagement.next_level_points} points`} />
+            <Stat label="Achievements" value={profile.engagement.achievements} />
+          </div>
+          {profile.engagement.recent_events.length ? (
+            <ul className="divide-y divide-border rounded-lg border border-border/70 text-xs">
+              {profile.engagement.recent_events.map((event) => (
+                <li key={`${event.event_type}-${event.awarded_at}`} className="flex items-center justify-between gap-3 px-3 py-2">
+                  <span className="min-w-0"><span className="font-medium">{event.label ?? event.event_type.replaceAll("_", " ")}</span>{event.detail ? <span className="block truncate text-muted-foreground">{event.detail}</span> : null}</span>
+                  <span className="shrink-0 tabular-nums">+{event.points} · {formatDateTime(event.awarded_at)}</span>
+                </li>
+              ))}
+            </ul>
+          ) : <EmptyState title="No points awarded in this period" />}
+        </div>
       </Panel>
 
       <Panel title="Curriculum progress" description="COC → module → topic and mission completion using the shared methodology (published topics, server-verified missions, COC practice quiz).">
@@ -164,7 +185,7 @@ export function LearnerProfileView({ profile, query }: { profile: LearnerProfile
         ) : <EmptyState title="No curriculum items match these filters." />}
       </Panel>
 
-      <Panel title="Practice missions and runs" description="Recorded runs in the period; verified completion and best time to date.">
+      <Panel title="Practice missions and runs" description="Recorded runs in the period with the steps each run missed (not completed, or incorrect attempts); verified completion and best time to date.">
         <DataTable<MissionRow>
           caption="Practice missions and runs"
           rows={profile.missions}
@@ -179,7 +200,13 @@ export function LearnerProfileView({ profile, query }: { profile: LearnerProfile
             { key: "invalid", label: "Invalid / run", align: "right", render: (row) => formatNumber(row.avg_invalid_actions) },
             { key: "recent", label: "Recent runs", render: (row) => row.recent_runs.length ? (
               <ul className="space-y-0.5 text-xs text-muted-foreground">
-                {row.recent_runs.map((run) => <li key={`${row.mission_code}-${run.run_number}`}>#{run.run_number} {run.outcome === "verified" ? "verified" : "incomplete"} · {formatDuration(run.duration_seconds)} · {run.invalid_count} invalid</li>)}
+                {row.recent_runs.map((run) => (
+                  <li key={`${row.mission_code}-${run.run_number}`}>#{run.run_number} {run.outcome === "verified" ? "verified" : "incomplete"} · {formatDuration(run.duration_seconds)} · {run.invalid_count} invalid
+                    {run.missed_steps.length ? (
+                      <span className="block pl-3">Missed: {run.missed_steps.map((step) => `${step.step ? `Step ${step.step} ` : ""}${step.title}${step.done ? ` (${step.incorrect} incorrect)` : " (not completed)"}`).join("; ")}</span>
+                    ) : null}
+                  </li>
+                ))}
               </ul>
             ) : <span className="text-xs text-muted-foreground">No run in period</span> },
           ]}
@@ -187,7 +214,7 @@ export function LearnerProfileView({ profile, query }: { profile: LearnerProfile
       </Panel>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Panel title="Quizzes" description="Submitted quiz attempts in the period (published versions only).">
+        <Panel title="Quizzes" description="Submitted quiz attempts in the period (published versions only). Instructor-release quizzes are scored once released.">
           <DataTable<QuizRow>
             caption="Quiz results"
             rows={profile.quizzes}
@@ -196,7 +223,9 @@ export function LearnerProfileView({ profile, query }: { profile: LearnerProfile
             emptyTitle="No submissions in this period"
             columns={[
               { key: "quiz", label: "Quiz", render: (row) => <div><p className="font-medium">{row.title}</p><p className="mt-0.5 text-xs text-muted-foreground">{row.class_title ?? "Class"}</p></div> },
-              { key: "score", label: "Score", align: "right", render: (row) => row.status === "scored" ? `${row.correct_count}/${row.question_count} (${formatPercent(row.percent)})` : "Awaiting evaluation" },
+              { key: "score", label: "Score", align: "right", render: (row) => row.status === "scored"
+                ? `${formatNumber(row.score)} / ${formatNumber(row.max_score)} (${formatPercent(row.percent)})`
+                : <span>Awaiting evaluation{row.stage ? <span className="block text-[11px] text-muted-foreground">{STAGE_LABELS[row.stage]} stage</span> : null}</span> },
               { key: "submitted", label: "Submitted", render: (row) => <span className="text-xs text-muted-foreground">{formatDateTime(row.submitted_at)}</span> },
             ]}
           />
@@ -221,14 +250,14 @@ export function LearnerProfileView({ profile, query }: { profile: LearnerProfile
         </Panel>
       </div>
 
-      <Panel title="Technical assessment results" description="Criterion outcomes are shown only for released results; pending evaluations are listed without a score.">
+      <Panel title="Technical assessment results" description="Criterion outcomes are shown only for released results; pending evaluations are listed without a score. Simulation assessments name the step each criterion checks.">
         {profile.assessments.length ? (
           <ul className="divide-y divide-border">
             {profile.assessments.map((attempt) => (
               <li key={attempt.attempt_id} className="px-5 py-4">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <p className="font-medium">{attempt.title}</p>
+                    <p className="font-medium">{attempt.title}{attempt.simulation ? <span className="ml-2 rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Simulation</span> : null}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">{attempt.assignment_title} · {attempt.class_title ?? "Class"} · submitted {formatDateTime(attempt.submitted_at)}</p>
                   </div>
                   <div className="text-right">
@@ -240,7 +269,8 @@ export function LearnerProfileView({ profile, query }: { profile: LearnerProfile
                   <ul className="mt-3 grid gap-1.5 sm:grid-cols-2">
                     {attempt.criteria.map((criterion) => (
                       <li key={criterion.criterion_id} className="flex items-center justify-between gap-3 rounded-md border border-border/70 px-3 py-2 text-xs">
-                        <span className="min-w-0 truncate"><span className="font-medium">{criterion.code}</span> {criterion.title}</span>
+                        <span className="min-w-0"><span className="block truncate"><span className="font-medium">{criterion.code}</span> {criterion.title}</span>
+                          {criterion.steps.length ? <span className="block truncate text-muted-foreground">{criterion.steps.map((step) => (step.step ? `Step ${step.step} · ${step.title}` : step.title)).join("; ")}</span> : null}</span>
                         <span className={cn("shrink-0 font-semibold", criterion.observation === "satisfied" ? "text-emerald-700" : "text-amber-800")}>{outcomeLabel(criterion.observation)}</span>
                       </li>
                     ))}
