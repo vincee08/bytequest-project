@@ -2,6 +2,35 @@
 
 > Read this file with `AGENTS.md`, `README.md`, and `bytequest.md` before changing the repository.
 
+## Current continuation - 2026-11-20 published to GitHub
+
+**What is on GitHub (`vincee08/bytequest-project`):**
+- The re-defense revision is merged into `main` through PR #1: https://github.com/vincee08/bytequest-project/pull/1.
+- `main` was created at `6548cb0`, the last verified production-release record. GitHub's default branch is still `vince-branch`.
+- On 2026-11-20 the owner approved rewriting the revision's commits so that GitHub credits the owner's account. All 115 commits are now authored and committed by `mikeangelocasono`, through its GitHub no-reply email, and carry no Claude co-author lines. Files, dates and messages are otherwise unchanged.
+- The rewrite was force-pushed with lease, atomically:
+  - `vince-branch`: `6f78136` → `2ecebe3`
+  - `main`: `732c509` → `20c01fc`
+- PR #1 still lists the old commit IDs.
+
+**Git rules from now on:**
+- Commit as `Mike Angelo Casono <mikeangelocasono@users.noreply.github.com>`. This is already set in the repository's local git config.
+- Add no Claude co-author or "Generated with Claude Code" lines.
+
+**Old history backup (local only, not pushed):**
+- branches `backup/vince-branch-pre-rewrite` and `backup/main-pre-rewrite`;
+- `.tmp/bytequest-pre-rewrite-20261120.bundle`.
+
+**For clones made before 2026-11-20:** existing clones must re-sync with `git fetch` then `git reset --hard origin/<branch>`, or re-clone.
+
+**Not done; each needs separate owner approval:**
+- the Vercel production deploy;
+- the hosted Supabase migrations;
+- any production data change;
+- publishing the APK.
+
+See `docs/REDEFENSE_RELEASE_READINESS_2026-11-19.md` for the blockers and the approvals still needed.
+
 ## Current continuation - 2026-11-19/20 re-defense revision (defense 2026-11-23)
 
 **Docs to read first:**
