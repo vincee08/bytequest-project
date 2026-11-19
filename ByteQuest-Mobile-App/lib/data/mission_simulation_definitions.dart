@@ -35,6 +35,21 @@ abstract final class MissionSimulationDefinitions {
     }
     return definition;
   }
+
+  /// Server contract version published for each typed definition. The
+  /// practice verifier and simulation assessments store this value; the app
+  /// refuses an assessment whose published version differs from its own.
+  static String contractVersion(String id) {
+    byId(id);
+    return switch (id) {
+      'coc1_m1' => 'css-sag-20261109-v3',
+      'coc1_m2' => coc1M2AssemblyContractVersion,
+      _ when id.startsWith('coc4') => 'css-sag-20261009-v1',
+      _ => 'css-sag-20261011-v2',
+    };
+  }
+
+  static const coc1M2AssemblyContractVersion = 'css-assembly-20261119-v3';
 }
 
 final class _PhaseSpec {
