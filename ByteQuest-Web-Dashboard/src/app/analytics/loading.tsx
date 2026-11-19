@@ -1,16 +1,18 @@
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
-import { MetricStrip } from "@/components/dashboard/MetricStrip";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export default function AnalyticsLoading() {
   return (
     <DashboardLayout>
-      <div className="mx-auto max-w-[1500px] space-y-7" aria-label="Loading analytics">
-        <div className="space-y-2 border-b border-border pb-5"><Skeleton className="h-8 w-48" /><Skeleton className="h-4 w-full max-w-3xl" /></div>
-        <Skeleton className="h-28 w-full rounded-xl" />
-        <MetricStrip loading ariaLabel="Loading filtered Instructor analytics metrics" />
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.55fr)_minmax(330px,0.75fr)]"><Skeleton className="h-[390px] rounded-xl" /><Skeleton className="h-[390px] rounded-xl" /></div>
-        <Skeleton className="h-[390px] rounded-xl" />
+      <div className="mx-auto max-w-[1500px] space-y-6" role="status" aria-label="Loading performance analytics">
+        <span className="sr-only">Loading performance analytics</span>
+        <div className="space-y-2 border-b border-border pb-5"><Skeleton className="h-8 w-64" /><Skeleton className="h-4 w-full max-w-3xl" /></div>
+        <Skeleton className="h-36 w-full rounded-xl" />
+        <Skeleton className="h-11 w-full max-w-xl rounded-xl" />
+        <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
+          {Array.from({ length: 6 }, (_, index) => <Skeleton key={index} className="h-[176px] rounded-xl" />)}
+        </div>
+        <div className="grid gap-5 xl:grid-cols-2"><Skeleton className="h-[360px] rounded-xl" /><Skeleton className="h-[360px] rounded-xl" /></div>
       </div>
     </DashboardLayout>
   );
