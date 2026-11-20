@@ -161,6 +161,26 @@ void main() {
       ..sort(HomeActivityItem.prioritize);
     expect(list.first, late);
   });
+  // 20261120110000: a released assessment result is announced without an
+  // open-activity action (opening an assessment that allows retries starts a
+  // new attempt); quiz and technical assignment notices keep theirs.
+  test('a released assessment result notification has no open action', () {
+    LearnerNotification note(String type) => LearnerNotification.fromJson({
+          'id': 'n-$type',
+          'title': 'Assessment Result Released',
+          'message': 'Your instructor released your result.',
+          'created_at': '2026-11-20T05:50:11Z',
+          'is_read': false,
+          'metadata': {
+            'activity_type': type,
+            'activity_id': 'assignment-1',
+            'class_id': 'class-1',
+          },
+        });
+    expect(note('technical_result').hasActivity, isFalse);
+    expect(note('quiz').hasActivity, isTrue);
+    expect(note('technical').hasActivity, isTrue);
+  });
   test('deep links revalidate current access without starting attempts',
       () async {
     final service = MutableQuizzes()..rows = [quiz()];
