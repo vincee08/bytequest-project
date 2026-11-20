@@ -78,7 +78,17 @@ OpenRouter 429), 0 FAIL.
   - ACL and SECURITY INVOKER unchanged.
   - The read-back reports no public table without RLS and 20 published simulation assessments.
 - **Screenshots:** the instructor's display name was redacted in d01–d03 before the push, by rewriting only the unpushed commits.
-- **APK:** release blocked. Neither the learners' signing certificate `a4d01056…` nor the 11-13 production key `dc85ef75…` is on this PC; a full-disk search found only this PC's debug key and two Expo template keys.
+- **APK (built after owner approval of fresh installs; "we don't have any real users yet"):**
+  - Neither the learners' signing certificate `a4d01056…` nor the 11-13 production key `dc85ef75…` is on this PC. A full-disk search found only this PC's debug key and two Expo template keys.
+  - The owner therefore approved a fresh install, and a **release-mode** APK of `9af8df8` was built.
+  - Signing: this PC's debug certificate `271cbbf0…` (the repo's `BYTEQUEST_ALLOW_DEBUG_SIGNING=true` opt-in), APK Signature Scheme v2, 1.2.0 (3), not debuggable, minSdk 24, targetSdk 36, three ABIs.
+  - Size and hash: 75,113,538 bytes, sha256 `27a85b69d640606f71e137cce56009509b440e272df5785e1e069757529451ae`.
+  - Location: `C:\Users\MIKE ANGELO CASONO\Downloads\updated bytequest.apk`.
+  - Configuration: the bundled `.env` holds only the production public values (URL, publishable key, practice API). The local `.env`, which points at `127.0.0.1`, was swapped out for the build and restored byte-identical.
+  - The secret scan of every APK entry is clean.
+  - Emulator check: the APK installed in place over the debug build. The first launch after install took 49.9 s (one time); later cold starts took 3.4 s and 2.4 s. Home, Progress and the COC1 M2 bench rendered, with no Flutter errors in logcat.
+  - **Every later update must be signed with this PC's `~/.android/debug.keystore`**, or learners must uninstall again.
+- **D4 is only partly fixed:** `LearnerProgressBar` wraps `LinearProgressIndicator` in `Semantics` without excluding the indicator's own node. A second focusable ProgressBar node therefore still says "17" while the screen shows 16 %, on both the Progress and Practice tabs. Fix: `excludeSemantics: true`, plus a test assertion. Not fixed yet.
 - **GitHub and Vercel (done):**
   - `vince-branch` was pushed as a fast-forward `a7bb6e9..0212ebb`; its Vercel Preview build succeeded.
   - It was merged into `main` through PR #6 (merge commit `9c566de`, 09:44 UTC).
@@ -102,19 +112,16 @@ OpenRouter 429), 0 FAIL.
   - The Vercel CLI token on this PC is invalid.
   - OpenRouter is configured in production (`configured: true`, not simulated); its capacity was last seen as 429.
 - **New minor findings F1–F4** (task panel height in phase 5, post-submit exit copy, class sheet status, hardcoded test-run labels) are not fixed.
-- **Emulator:** it now runs the debug build of `575af68`. To revert, run `adb install -r` with `build/app/outputs/flutter-apk/app-debug.apk`.
+- **Emulator:** it now runs the release APK above (`updated bytequest.apk`).
 
 **Owner actions (need approval):**
 - ~~B1~~ done (see above). Old note: publish the simulation assessment packages to production. Dry-run first, then
   `node scripts/publish-simulation-assessments.mjs --target hosted --confirm` with the service-role
   key. Until then an assigned COC1 M2 assessment opens the legacy form, not the bench.
 - B2: restore OpenRouter capacity (429 on every request).
-- B3: ~~migration~~, ~~push and merge~~ and ~~Vercel production~~ are done; production auto-deployed from `main` `9c566de`. Still open: a new APK, blocked on the signing key.
+- B3: ~~migration~~, ~~push and merge~~, ~~Vercel production~~ and ~~APK~~ are done. The APK is `Downloads\updated bytequest.apk`, release mode, signed with this PC's debug key; anyone on an older build installs it fresh.
 - Change the weak admin and instructor test passwords after the defense.
-- APK signing decision for the 1.2.0 release:
-  - Learners' 1.1.0 is signed with `a4d01056…`, which is not on this PC.
-  - This PC's debug certificate is `271cbbf0…`. A build signed with it cannot update 1.1.0 in place, so learners would uninstall first.
-  - The 11-13 production key `dc85ef75…` is not on this PC either.
+- After the defense, consider a dedicated release key that is backed up off this PC. Moving to it will need one more fresh install.
 - After the defense: remove the TEST ONLY QA class data. This includes the v2 assignment "TEST ONLY QA: COC1 M2 simulation assessment (v2)" and its attempt `e2d4f421-…`.
 
 ## Previous continuation - 2026-11-20 RE-DEFENSE QA AUDIT, PASS 2 (local stack)
