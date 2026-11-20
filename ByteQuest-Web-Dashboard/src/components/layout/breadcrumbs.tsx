@@ -4,20 +4,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronRight, Home } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
+import { breadcrumbTrail } from "@/lib/navigation/breadcrumb-trail";
 
 export function Breadcrumbs() {
   const pathname = usePathname();
   const { user } = useAuth();
-  const paths = pathname.split("/").filter(Boolean);
   const dashboardHref = user?.role === "admin" ? "/admin/dashboard" : "/instructor/dashboard";
-  const crumbs = paths
-    .map((path, index) => ({
-      path,
-      href: `/${paths.slice(0, index + 1).join("/")}`,
-    }))
-    .filter(({ path }) => path !== "admin" && path !== "instructor" && path !== "dashboard");
+  const crumbs = breadcrumbTrail(pathname);
 
-  if (paths.length === 0 || pathname === "/admin/dashboard" || pathname === "/instructor/dashboard") return null;
+  if (pathname.split("/").filter(Boolean).length === 0 || pathname === "/admin/dashboard" || pathname === "/instructor/dashboard") return null;
 
   return (
     <nav aria-label="Breadcrumb" className="mb-5 flex min-w-0 items-center gap-1.5 overflow-x-auto text-xs text-muted-foreground print:hidden">
@@ -29,9 +24,8 @@ export function Breadcrumbs() {
         <span>Dashboard</span>
       </Link>
 
-      {crumbs.map(({ path, href }, index) => {
+      {crumbs.map(({ label, href }, index) => {
         const isLast = index === crumbs.length - 1;
-        const label = path.charAt(0).toUpperCase() + path.slice(1).replace(/-/g, " ");
 
         return (
           <div key={`${href}-${index}`} className="flex min-w-0 items-center gap-1.5">
