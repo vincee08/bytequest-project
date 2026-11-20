@@ -2,7 +2,67 @@
 
 > Read this file with `AGENTS.md`, `README.md`, and `bytequest.md` before changing the repository.
 
-## Current continuation - 2026-11-20 RE-DEFENSE QA AUDIT, PASS 2 (local stack)
+## Current continuation - 2026-11-20 PRODUCTION QA AUDIT
+
+End-to-end audit of the live system: dashboard `https://bytequest-alpha.vercel.app` at `c842f6f`
+(PR #5), Supabase `rslmteqipxqfifwftugk`, the 1.2.0 debug APK with production defines on the
+`padala_pixel7` emulator, and a Flutter web build of the working tree on `http://localhost:3009` (the
+production CORS preview origin) for mouse input. Only TEST ONLY data was created; nothing was
+deployed, migrated or published in production. Report: `docs/PRODUCTION_QA_AUDIT_2026-11-20.md`;
+screenshots: `docs/qa-production-2026-11-20/`.
+
+**Result (production):** 34 PASS, 3 PARTIAL (R2.4, R10 by owner decision, R11.2), 1 BLOCKED (R3.3:
+OpenRouter 429), 0 FAIL.
+- COC1 M2 assembled in production by touch (APK; verified, 16 m 33 s, 0 refused) and by mouse
+  (Chrome; verified, 34 m 04 s, deliberate refusals, Remove → reseat, two POST faults found and
+  repaired on the bench).
+- Evaluate → Finalize → Release for the test learner's assessment (4/5), quiz essay (9/10) and
+  homework (8/10); the learner app showed all three.
+- Live update: a homework deadline change raised the learner bell 4 → 5 on the APK and on web
+  without a reload.
+
+**Fixed locally with tests (not deployed):**
+- D1: breadcrumb 404s. New redirect pages `classes/[id]/assignments`, `progress/learners` and
+  `users/[id]`; `src/lib/navigation/breadcrumb-trail.ts`; record ids read as names.
+- D2: a saved practice run said "Complete the missing task". `MissionActionGuide.forPhase(…,
+  submitted:)` now reads "Saved successfully", and Show me where outlines Back.
+- D3: overlapping cable-header touch areas (drive data over drive power; SYS_FAN over the 24-pin
+  header). `AssemblyBenchLayout.target` splits neighbouring headers halfway.
+- D4: the progress bar spoke "17 percent" next to a visible "16%".
+- D5: no learner notification for released quiz or assessment results. New migration
+  `supabase/migrations/20261120110000_result_release_notifications.sql`; an assessment release uses
+  `activity_type: technical_result`, which has no Open-activity button.
+- D6: a mouse wheel now scrolls the bench tray.
+- D7: logcat "deactivated widget's ancestor" from the 30-second polls in
+  `assigned_class_activities.dart` and `dashboard_screen.dart`.
+- D8: the criteria analytics showed a raw homework criterion id.
+- D9: admin pages were titled "Instructor Dashboard".
+- D10: the login password field had no autocomplete.
+
+**Gates:**
+- Flutter: 735 passed, 1 skipped; `flutter analyze`: 0 errors, 0 warnings, 210 pre-existing infos.
+- Dashboard: tsc, lint, 226 tests and build all pass.
+- Local SQL: 42/42 suites, with `20261120110000` applied to the LOCAL database only.
+
+**Production TEST ONLY data** (delete after the defense):
+- learner QA Test Learner 1120 (its generated password appeared in the session tool log; delete or
+  rotate the account);
+- class TEST ONLY – QA 2026-11-20;
+- quiz v1 (published) and v2 (empty draft);
+- homework (deadline 22 Nov);
+- assessment assignment and its released attempt;
+- two practice runs;
+- curriculum topic "TEST ONLY QA topic 2026-11-20 (do not publish)", Submitted.
+
+**Owner actions (need approval):**
+- B1: publish the simulation assessment packages to production. Dry-run first, then
+  `node scripts/publish-simulation-assessments.mjs --target hosted --confirm` with the service-role
+  key. Until then an assigned COC1 M2 assessment opens the legacy form, not the bench.
+- B2: restore OpenRouter capacity (429 on every request).
+- B3: push, merge, Vercel promotion, apply `20261120110000` to production, new APK.
+- Change the weak admin and instructor test passwords after the defense.
+
+## Previous continuation - 2026-11-20 RE-DEFENSE QA AUDIT, PASS 2 (local stack)
 
 The second pass completed the three PARTIAL items and the drag-and-drop realism follow-ups. It ran against the local stack only; production, Vercel, the APK release and pushes were not touched. Report and screenshots updated in place: `docs/REDEFENSE_QA_AUDIT_2026-11-20.md` and `docs/qa-audit-2026-11-20/` (a14–a22, w05–w11).
 

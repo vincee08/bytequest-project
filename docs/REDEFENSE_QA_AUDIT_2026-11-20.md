@@ -277,6 +277,9 @@ simulated prompt starts with *"Simulated draft"*.
 - **No notification when an assessment or quiz result is released.** The homework release notifies, but
   the learner-notification trigger has no case for `result.released` or `quiz_result.released`. This
   predates the revision and needs a database migration, so it was left for an approved change.
+  *Update (production pass):* reproduced in production and fixed by migration
+  `20261120110000_result_release_notifications.sql` (local only, awaiting approval); see
+  `docs/PRODUCTION_QA_AUDIT_2026-11-20.md`, defect D5.
 - The open homework screen does not refresh itself when the grade is released (the notification and the
   Progress tab do show it).
 - Opening a released assessment whose assignment allows retries starts a new attempt immediately, without
