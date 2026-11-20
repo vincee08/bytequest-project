@@ -2,7 +2,53 @@
 
 > Read this file with `AGENTS.md`, `README.md`, and `bytequest.md` before changing the repository.
 
-## Current continuation - 2026-11-20 RE-DEFENSE QA AUDIT (local stack)
+## Current continuation - 2026-11-20 RE-DEFENSE QA AUDIT, PASS 2 (local stack)
+
+The second pass completed the three PARTIAL items and the drag-and-drop realism follow-ups. It ran against the local stack only; production, Vercel, the APK release and pushes were not touched. Report and screenshots updated in place: `docs/REDEFENSE_QA_AUDIT_2026-11-20.md` and `docs/qa-audit-2026-11-20/` (a14–a22, w05–w11).
+
+**Result:** 38 PASS, 0 PARTIAL, 0 FAIL, 0 BLOCKED.
+- **R3.3 (AI quiz generation).**
+  - Curriculum-source generation, regenerate-one-question with history, edit, delete, add, approve, preview and publish all ran through the production route.
+  - No OpenRouter key exists on this PC, so a QA-only Node start-up hook answered the OpenRouter call with `scripts/quiz-ai-local-provider.mjs`. The hook is in the scratchpad, not the repo.
+  - The repo's simulator mode needs `127.0.0.1:58921`, which is inside a Windows-reserved port range here.
+  - A live model call needs `OPENROUTER_API_KEY` in Vercel production. Locally, the owner can put it in `.tmp/quiz-ai.env`.
+- **R3.5 (automatic quiz submission).**
+  - Time limit, phone in the foreground: `auto_time_limit`, submitted exactly at start + 1:00.
+  - Deadline, app closed: the attempt stayed `in_progress` until the instructor opened the results, then `auto_deadline` was stamped at the exact deadline.
+  - The learner saw both results in the app.
+- **R11.2 (review queue).**
+  - Setup: 8 throwaway learners (`qa.queue.01–08@bytequest.invalid`), 6 submitted attempts, then 8 newer attempts left in progress.
+  - The old 8-newest logic gives 0 pending; the dashboard shows 6, with the 5 oldest in the queue; the Evaluation Center lists 6.
+
+**Fixed in pass 2, with tests** (bench fixes are UI only; contract `css-assembly-20261119-v3` unchanged):
+1. RAM can come out only with the DIMM latches open.
+2. The CPU can come out only with the cooler off and the load plate open.
+3. The I/O shield can come out only with the motherboard out.
+4. The socket lever cannot be lifted under a mounted cooler. Closing an open lever stays possible because the server repair scoring expects it.
+5. A removed part keeps its seated orientation instead of the packaging 180°.
+6. Drive and PSU photographs are fitted by their visible content, so they fill the case bays.
+7. Rings have a reach of at least 160 canvas units (48 dp or more from a 360 dp width). The nearest ring wins; slots keep priority with a part in hand.
+8. Dashboard: Upcoming tasks titles were 0 px wide in the 208 px overview card at 1440 px. The due date now sits under the title.
+9. Test tooling: the offline AI simulator now answers curriculum and essay requests.
+
+**Gates (pass 2):**
+- Flutter full suite in Docker: 727 passed, 1 skipped.
+- `assembly_bench_test`: 57.
+- `flutter analyze`: 0 errors and 0 warnings; 210 infos, all pre-existing.
+- Dashboard: tsc, lint, 222 tests and build all pass.
+- Fixes were verified by touch on the emulator, using the 1.2.0 debug APK with loopback defines and `adb reverse`.
+
+**Pass 2 local data:**
+- quizzes `bf00ae24-1c04-4b20-b104-04085b2dd905` (AI, 1-minute limit) and `8a214626-02c5-49d5-b3af-ddd895043bc9` (deadline);
+- 8 queue learners in the QA class.
+
+**Still pending (owner):**
+- push;
+- Vercel promotion of `main`, which now also needs the Upcoming tasks fix;
+- confirm the OpenRouter key in Vercel production;
+- APK signing.
+
+## Previous continuation - 2026-11-20 RE-DEFENSE QA AUDIT (local stack)
 
 A full end-to-end QA audit ran against the local stack only: local Supabase `127.0.0.1:57321`, the dashboard on `127.0.0.1:3001`, and the learner app on the `padala_pixel7` emulator plus the Flutter web build. Production, Vercel and the APK release were not touched.
 
