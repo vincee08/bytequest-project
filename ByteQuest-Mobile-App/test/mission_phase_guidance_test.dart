@@ -1,4 +1,5 @@
 import 'package:bytequest/data/mission_content_data.dart';
+import 'package:bytequest/data/mission_lab_phases.dart';
 import 'package:bytequest/data/mission_phase_guidance.dart';
 import 'package:bytequest/data/mission_simulation_definitions.dart';
 import 'package:bytequest/screens/simulation/components/mission_guidance_panel.dart';
@@ -91,13 +92,31 @@ void main() {
       expect(guidance.steps.join(' '), contains(entry.value),
           reason: entry.key);
     }
+    // COC4 placements on the standard panel are tap only.
+    final coc4 = MissionSimulationDefinitions.all
+        .where((mission) => mission.id.startsWith('coc4'))
+        .expand((mission) => mission.phases)
+        .where((phase) =>
+            phase.resolvedInteraction == InteractionFamily.place &&
+            !MissionLabPhases.owns(phase.id));
+    for (final phase in coc4) {
+      final tapPlacement = MissionPhaseGuidance.forPhase(
+          phase, MissionRuntimeState.initial(phase.id.substring(0, 7)));
+      expect(tapPlacement.interactionLabel,
+          MissionContentData.guidanceTapPlaceLabel,
+          reason: phase.id);
+      expect(
+          tapPlacement.steps.join(' ').toLowerCase().contains('drag'), isFalse,
+          reason: phase.id);
+    }
+    // The COC4 M4 replacement adapter goes in on the service-bench lab, which
+    // takes a drag onto the slot or a tap on the adapter and then the slot.
     final replacement = MissionSimulationDefinitions.byId('coc4_m4').phases[1];
-    final tapPlacement = MissionPhaseGuidance.forPhase(
+    final labPlacement = MissionPhaseGuidance.forPhase(
         replacement, MissionRuntimeState.initial('coc4_m4'));
-    expect(tapPlacement.interactionLabel,
-        MissionContentData.guidanceTapPlaceLabel);
-    expect(
-        tapPlacement.steps.join(' ').toLowerCase().contains('drag'), isFalse);
+    expect(labPlacement.interactionLabel,
+        MissionContentData.labGuidanceBenchLabel);
+    expect(labPlacement.steps, MissionContentData.labGuidanceInstallSteps);
   });
 
   test('inspection progress reads actual runtime hotspot state', () {
@@ -241,6 +260,11 @@ void main() {
     for (final phase in phases) {
       final guide = MissionActionGuide.forPhase(
           phase, MissionRuntimeState.initial(phase.id.substring(0, 7)));
+      // A realistic lab replaces the standard panels of its phases.
+      if (MissionLabPhases.guide(phase.id) case final lab?) {
+        expect(guide.steps.first.text, lab.text, reason: phase.id);
+        continue;
+      }
       // The assembly bench renders its parts, cables and inspections in the
       // tray below the bench; its test and review keep the standard panels.
       final bench = phase.presentation['bench_steps'] is List &&
@@ -358,6 +382,16 @@ void main() {
                     : connection['sources'])
             .map((item) => item['id'])
             .toSet();
+        if (MissionLabPhases.owns(phase.id)) {
+          // The lab's own controls; mission_labs_test pumps each lab and
+          // finds every key its guide names.
+          for (final step in guide.steps) {
+            expect(step.controlKey, startsWith('lab-'),
+                reason: '${phase.id}: ${step.text}');
+            expect(step.objectId, isNull, reason: phase.id);
+          }
+          continue;
+        }
         for (final step in guide.steps) {
           expect(step.controlKey != null || step.objectId != null, isTrue,
               reason: '${phase.id}: ${step.text}');

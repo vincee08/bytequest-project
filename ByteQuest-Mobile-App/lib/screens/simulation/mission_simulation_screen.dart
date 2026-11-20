@@ -21,6 +21,7 @@ import 'components/assembly/assembly_bench.dart';
 import 'components/equipment_operations.dart';
 import 'components/equipment_workspace.dart';
 import 'components/incorrect_placement_dialog.dart';
+import 'components/labs/mission_labs.dart';
 import 'components/mission_task_status.dart';
 import 'components/mission_guidance_panel.dart';
 import 'components/mission_workspace_layout.dart';
@@ -520,10 +521,11 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
             !_submitted,
         submitted: _submitted);
     final step = guide.currentStep;
-    // Bench operations are hotspots on the bench and buttons in its tray,
-    // so they never need the task panel opened.
-    final benchOperation = step?.target == MissionGuideTarget.operations &&
-        MissionEquipmentSimulator.isAssemblyBench(widget.definition);
+    // Bench operations are hotspots on the bench and buttons in its tray, and
+    // a lab holds every control of its phase, so neither needs the task panel.
+    final benchOperation = MissionLabs.ownsPhase(widget.definition, phase) ||
+        step?.target == MissionGuideTarget.operations &&
+            MissionEquipmentSimulator.isAssemblyBench(widget.definition);
     if ((step?.target == MissionGuideTarget.controls ||
             step?.target == MissionGuideTarget.operations) &&
         !benchOperation &&
@@ -723,8 +725,17 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
         !_submitting &&
         !_submitted &&
         phase.primaryInteraction != InteractionFamily.review;
-    final Widget scene = MissionEquipmentSimulator.isAssemblyBench(
-            widget.definition)
+    final Widget scene = MissionLabs.ownsPhase(widget.definition, phase)
+        ? MissionLabs.build(
+            key: _workspaceLayoutKey,
+            definition: widget.definition,
+            phase: phase,
+            state: _state,
+            onAction: (type, target, value) =>
+                _recordAction(phase, type, target, value),
+            enabled: workspaceEnabled,
+          )
+        : MissionEquipmentSimulator.isAssemblyBench(widget.definition)
         ? AssemblyBench(
             key: _workspaceLayoutKey,
             definition: widget.definition,
@@ -1016,7 +1027,8 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
               ),
               // The assembly bench operates levers, latches and screws where
               // they are, so its operations are not repeated as a list.
-              if (!MissionEquipmentSimulator.isAssemblyBench(widget.definition))
+              if (!MissionEquipmentSimulator.isAssemblyBench(widget.definition) &&
+                  !MissionLabs.ownsPhase(widget.definition, phase))
                 Container(
                   key: _operationsGuideKey,
                   decoration: _showHow &&
@@ -1082,6 +1094,7 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
   /// The assembly bench is the only control for its inspection, placement
   /// and cabling phases; tests and review keep their standard panels.
   bool _benchOwnsInteraction(MissionPhaseDefinition phase) =>
+      MissionLabs.ownsPhase(widget.definition, phase) ||
       MissionEquipmentSimulator.isAssemblyBench(widget.definition) &&
       const {
         InteractionFamily.inspect,

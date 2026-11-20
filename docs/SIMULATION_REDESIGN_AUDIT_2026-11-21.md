@@ -443,3 +443,68 @@ The full redesign is roughly 15–20 working days including testing; the re-defe
 1. Which missions to build before the defense (the recommendation is in §7).
 2. Whether any mission may change its steps or criteria. That means a new contract version, republishing in production and a new APK. The default is no: presentation-only.
 3. APK: a release build cannot be made with the original key, which is not on this PC. Debug builds are used for testing unless the owner again approves a fresh-install key.
+
+## 9. Implemented before the defense (2026-11-21/22): COC4 M4 and COC2 M2 labs
+
+The owner chose **COC4 M4 PCIe NIC swap** and **COC2 M2 RJ45 crimping lab**. Both are UI-layer labs.
+Mission definitions, practice contracts, assessment contracts, rubrics, scoring and the database are
+unchanged; no migration, no new scoring rule.
+
+### What the learner does
+
+| Phase | Before (standard panels) | After (lab) | Evidence recorded (unchanged contract) |
+|---|---|---|---|
+| COC2 M2 p2 | Reorder list of 8 colour names with up/down arrows | RJ45 front view: drag a conductor into a pin channel (or tap conductor, then channel), tap a filled channel to take it out, **Insert and crimp**; re-terminate after a bad crimp. Practice shows a T568B reference card; assessment does not. | One confirmed `sequence_reordered` (pins 1–8), only at the crimp |
+| COC4 M4 p1 | Reorder list + tool tray + operation button | Service bench on a motherboard photo: unplug the power cord, wear the wrist strap, pick a tool and tap the bracket screw, lift the failed adapter, inspect the slot, verify the backup | `tool_attempted` on `retaining_screw`, `equipment_operation` `protect_service_data`, one confirmed `sequence_reordered` with the steps **in the order performed** |
+| COC4 M4 p2 | Tap-only placement panel | Turn the replacement adapter around if needed, drag it onto the PCIe slot (or tap adapter, then slot) | `placement_attempted` with the adapter's orientation |
+| COC4 M4 p4 | Reorder list | Latch the adapter, fasten the screw with the screwdriver, configure, refit the panel and restore power | One confirmed `sequence_reordered` in the order performed |
+
+Unsafe or wrong work is recorded as performed, never corrected by the lab. Practice shows the
+existing technical feedback (for example "The keyed connector is not aligned…", "This tool cannot
+engage the selected interface…") and offers a restart; assessment shows a neutral "Procedure
+recorded." and always offers a restart, so the screen never reveals correctness.
+
+### Assessment integrity
+
+- The bench lists its step controls in the phase's listed (scrambled) order, the same order the
+  standard reorder list starts from, so reading it top to bottom never spells out the safe order.
+- A resumed assessment shows every recorded step as performed, whatever its order.
+- Guidance (top hint, "Show me where", the How-to panel) names the lab's controls only, never the
+  expected order, tool, wiring or orientation. The T568B card and its guidance exist in practice only.
+
+### Files
+
+- `ByteQuest-Mobile-App/lib/screens/simulation/components/labs/` (`mission_labs.dart`,
+  `cable_termination_lab.dart`, `pcie_replacement_lab.dart`).
+- `ByteQuest-Mobile-App/lib/data/mission_lab_phases.dart`: the lab-owned phases and their guidance.
+- `mission_simulation_screen.dart` (the lab replaces the scene and panel controls for its phases),
+  `mission_phase_guidance.dart` (lab guidance), `mission_content_data.dart` (all lab strings).
+- Tests: `test/mission_labs_test.dart` (26 tests, some generated per phase and mode), `test/support/mission_lab_driver.dart`; the
+  screen, assessment, layout and guidance suites drive the lab phases through the labs.
+
+### Verification
+
+- Flutter suite (Docker, Flutter 3.44.0): **764 passed, 1 skipped (pre-existing), 0 failed**.
+  `flutter analyze`: 0 errors, 0 warnings (210 infos, all pre-existing).
+- `assessment_mode_test`: a correct run through the labs records the same counted evidence as the
+  exported happy path, except that the bench records the contingency operation once (the exporter
+  taps every operation twice to prove idempotence).
+- Server scoring (local stack, rollback only): `supabase/tests/simulation_assessment_all_missions_rollback.sql`
+  passes 24/24 both as committed and with the COC4 M4 fixture reduced to one contingency row; every
+  criterion is satisfied and every run is competent.
+- Android emulator (`padala_pixel7`, 411 dp, debug APK against the local stack, local QA learner):
+  - COC4 M4 practice run from phase 1 to submission by touch, with a wrong tool, an unsafe order
+    and a reversed-adapter drag on the way. The server stored all 18 evidence rows (3 invalid) and
+    verified the run.
+  - COC2 M2 phase 2 by real drag and taps: a miswired crimp was recorded as invalid with the T568B
+    message; the re-terminated T568B crimp was valid. The state survived a rotation to landscape.
+- Screenshots: `docs/qa-labs-2026-11-21/` (`before-*` = HEAD `a32ef60` standard panels, `after-*` =
+  labs, same harness at 411 dp; `device-*` = emulator).
+
+### Limitations
+
+- Assessment mode was verified by widget tests and the server replay suite, not on the device: the
+  local QA learner has no class or published assessment.
+- Phones narrower than about 410 dp show the RJ45 plug on its side (one 48 dp row per channel). Tap
+  insertion works everywhere; a drag to the top channels may need a scroll first.
+- The remaining 18 missions keep their standard panels (§7, after the defense).

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:bytequest/data/mission_lab_phases.dart';
 import 'package:bytequest/data/mission_simulation_definitions.dart';
 import 'package:bytequest/data/mission_content_data.dart';
 import 'package:bytequest/data/mission_phase_guidance.dart';
@@ -13,11 +14,13 @@ import 'package:bytequest/screens/simulation/runtime/mission_runtime_controller.
 import 'package:bytequest/screens/simulation/runtime/mission_runtime_models.dart';
 import 'package:bytequest/services/progress_resume_service.dart';
 import 'package:bytequest/services/practice_coc_session_service.dart';
+import 'package:bytequest/screens/simulation/components/labs/mission_labs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'support/equipment_practice_driver.dart';
 import 'support/equipment_widget_driver.dart';
+import 'support/mission_lab_driver.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -265,7 +268,12 @@ void main() {
           await tester.pumpWidget(
               _host(definition, controller: controller, textScale: 2));
           await tester.pumpAndSettle();
-          expect(find.byType(SimulationScene), findsOneWidget,
+          final lab = MissionLabs.ownsPhase(definition, phase);
+          expect(find.byType(SimulationScene),
+              lab ? findsNothing : findsOneWidget,
+              reason: phase.id);
+          expect(find.byKey(const ValueKey('mission-lab')),
+              lab ? findsOneWidget : findsNothing,
               reason: phase.id);
           expect(tester.takeException(), isNull,
               reason: '${phase.id} at $size');
@@ -291,11 +299,17 @@ void main() {
       }
       for (var index = 0; index < definition.phases.length - 1; index++) {
         final phase = definition.phases[index];
-        for (final action
-            in plan.actions.where((action) => action.phaseId == phase.id)) {
-          await performEquipmentAction(tester, phase, action, controller);
-          expect(tester.takeException(), isNull,
-              reason: '${phase.id}/${action.actionType}');
+        if (MissionLabs.ownsPhase(definition, phase)) {
+          // A realistic lab owns this phase: do the work in the lab.
+          await completeLabPhase(tester, phase);
+          expect(tester.takeException(), isNull, reason: phase.id);
+        } else {
+          for (final action
+              in plan.actions.where((action) => action.phaseId == phase.id)) {
+            await performEquipmentAction(tester, phase, action, controller);
+            expect(tester.takeException(), isNull,
+                reason: '${phase.id}/${action.actionType}');
+          }
         }
         final next = find.byKey(const ValueKey('mission-next'));
         expect(tester.widget<FilledButton>(next).onPressed, isNotNull,
@@ -1039,7 +1053,10 @@ void main() {
                 ?.controlKey;
             if (find.byType(TechnicalUnavailableState).evaluate().isNotEmpty ||
                 renderedWidgets.length != 1 ||
-                (key != null && find.byKey(ValueKey(key)).evaluate().isEmpty) ||
+                // A lab's controls live in the lab, not in this panel.
+                (key != null &&
+                    !MissionLabPhases.owns(phase.id) &&
+                    find.byKey(ValueKey(key)).evaluate().isEmpty) ||
                 exception != null) {
               failures.add(
                 '${definition.id}/${phase.id}: '

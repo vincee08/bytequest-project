@@ -16,6 +16,7 @@ import 'package:bytequest/screens/simulation/runtime/mission_runtime_controller.
 import 'package:bytequest/screens/simulation/runtime/mission_runtime_models.dart';
 import 'package:bytequest/services/authoritative_assessment_service.dart';
 import 'package:bytequest/services/progress_resume_service.dart';
+import 'package:bytequest/screens/simulation/components/labs/mission_labs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -24,6 +25,7 @@ import '../tool/export_practice_contracts.dart'
     show replayActionKinds, replayRow;
 import 'support/equipment_practice_driver.dart';
 import 'support/equipment_widget_driver.dart';
+import 'support/mission_lab_driver.dart';
 
 // Practice vs Assessment for every production mission (re-defense slice A1):
 // assessment hides guidance, tutorials and compatible-slot highlights, keeps
@@ -335,12 +337,18 @@ void main() {
       }
       for (var index = 0; index < definition.phases.length - 1; index++) {
         final phase = definition.phases[index];
-        for (final action
-            in plan.actions.where((action) => action.phaseId == phase.id)) {
-          await performEquipmentAction(
-              tester, phase, action, harness.controller);
-          expect(tester.takeException(), isNull,
-              reason: '${phase.id}/${action.actionType}');
+        if (MissionLabs.ownsPhase(definition, phase)) {
+          // The lab must record the counted evidence the plan exports.
+          await completeLabPhase(tester, phase);
+          expect(tester.takeException(), isNull, reason: phase.id);
+        } else {
+          for (final action
+              in plan.actions.where((action) => action.phaseId == phase.id)) {
+            await performEquipmentAction(
+                tester, phase, action, harness.controller);
+            expect(tester.takeException(), isNull,
+                reason: '${phase.id}/${action.actionType}');
+          }
         }
         await tapEquipmentControl(
             tester, find.byKey(const ValueKey('mission-next')));
@@ -350,7 +358,19 @@ void main() {
             reason: '${phase.id} can be completed in assessment mode');
       }
       final recorded = _countedEvidence(definition, harness.transport.actions);
-      final expected = _countedEvidence(definition, plan.actions);
+      // The plan repeats each equipment operation to prove the replay is
+      // idempotent. A lab shows a finished operation as done, so it records
+      // the operation once; the server scores both runs the same
+      // (simulation_assessment_all_missions_rollback.sql, PCIe lab variant).
+      final expected = <Map<String, Object?>>[];
+      for (final row in _countedEvidence(definition, plan.actions)) {
+        final phase = definition.phases
+            .firstWhere((item) => item.id == row['phase_id']);
+        final repeated = row['kind'] == 'equipment_operation' &&
+            MissionLabs.ownsPhase(definition, phase) &&
+            expected.any((seen) => jsonEncode(seen) == jsonEncode(row));
+        if (!repeated) expected.add(row);
+      }
       for (var i = 0; i < recorded.length || i < expected.length; i++) {
         final actual = i < recorded.length ? recorded[i] : null;
         final wanted = i < expected.length ? expected[i] : null;

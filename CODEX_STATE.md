@@ -2,6 +2,29 @@
 
 > Read this file with `AGENTS.md`, `README.md`, and `bytequest.md` before changing the repository.
 
+## Current continuation - 2026-11-21/22 realistic labs: COC4 M4 PCIe swap, COC2 M2 RJ45 crimp
+
+Owner-selected labs from the redesign audit (`docs/SIMULATION_REDESIGN_AUDIT_2026-11-21.md` §9).
+UI layer only: definitions, practice and assessment contracts, rubrics, scoring and the database
+are unchanged. Local commit only; not pushed, not merged, not deployed.
+
+- Labs own `coc2_m2_p2`, `coc4_m4_p1`, `coc4_m4_p2` and `coc4_m4_p4`
+  (`lib/data/mission_lab_phases.dart`, `lib/screens/simulation/components/labs/`). Each records the
+  same action types, targets and values as the panel it replaces.
+- Guidance (top hint, Show me where, How-to panel) speaks the lab's controls for those phases and
+  never names the expected order, tool, wiring or orientation.
+- Gates: Flutter 764 passed / 1 skipped / 0 failed; analyze 0 errors, 0 warnings; server replay
+  suite 24/24 as committed and with one COC4 M4 contingency row; emulator touch runs (COC4 M4
+  practice verified by the local server with 18 evidence rows; COC2 M2 miswire and T568B crimps).
+  Screenshots: `docs/qa-labs-2026-11-21/`.
+- Local QA data changed (local stack only): `qa.learner1` has COC1–COC3 practice progress rows
+  (with stub quiz attempts), bypass module unlocks for LO2.1 and LO4.4, a verified COC4 M4 practice
+  run and a COC2 M2 run paused at phase 3.
+- Emulator: the debug build against the local stack was replaced by the production APK from
+  Downloads after testing.
+- Not done: assessment mode on a device (no local class or assessment for the QA learner); the
+  other 18 missions keep their standard panels; release APK still needs the original key.
+
 ## Current continuation - 2026-11-20 PRODUCTION QA AUDIT
 
 End-to-end audit of the live system: dashboard `https://bytequest-alpha.vercel.app` at `c842f6f`
