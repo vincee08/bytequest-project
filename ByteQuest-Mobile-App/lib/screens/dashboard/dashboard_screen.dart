@@ -38,6 +38,7 @@ class _DashboardScreenState extends State<DashboardScreen>
   Map<String, String> _statuses = const {};
   int _unread = 0, _ticks = 0, _refreshToken = 0;
   bool _loading = true, _fetching = false, _active = false;
+  bool _routeCurrent = false;
   String? _error;
   Timer? _poll;
   AppLifecycleState _lifecycle = AppLifecycleState.resumed;
@@ -55,11 +56,13 @@ class _DashboardScreenState extends State<DashboardScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Uses only state cached in didChangeDependencies: an inherited lookup
+    // from a timer throws while the element is deactivated.
     _poll = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted &&
           _lifecycle == AppLifecycleState.resumed &&
-          TickerMode.valuesOf(context).enabled &&
-          ModalRoute.of(context)?.isCurrent == true) {
+          _active &&
+          _routeCurrent) {
         _ticks++;
         unawaited(_ticks.isEven ? _loadDashboard() : _loadUnread());
       }
@@ -76,6 +79,7 @@ class _DashboardScreenState extends State<DashboardScreen>
       });
     }
     _active = active;
+    _routeCurrent = ModalRoute.of(context)?.isCurrent == true;
   }
 
   @override
