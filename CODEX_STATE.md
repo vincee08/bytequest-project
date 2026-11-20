@@ -79,7 +79,12 @@ OpenRouter 429), 0 FAIL.
   - The read-back reports no public table without RLS and 20 published simulation assessments.
 - **Screenshots:** the instructor's display name was redacted in d01–d03 before the push, by rewriting only the unpushed commits.
 - **APK:** release blocked. Neither the learners' signing certificate `a4d01056…` nor the 11-13 production key `dc85ef75…` is on this PC; a full-disk search found only this PC's debug key and two Expo template keys.
-- **Next:** the push to `vince-branch` and a PR into `main` follow this commit. The teammate deploys `main` to Vercel production.
+- **GitHub and Vercel (done):**
+  - `vince-branch` was pushed as a fast-forward `a7bb6e9..0212ebb`; its Vercel Preview build succeeded.
+  - It was merged into `main` through PR #6 (merge commit `9c566de`, 09:44 UTC).
+  - **The merge auto-deployed `main` to Vercel production** at 09:45:47 UTC (success), so D1, D8, D9 and D10 are live.
+  - Smoke test: 17/17 admin and instructor pages return 200 with no errors, and the D1 redirects work.
+  - The Vercel project now deploys `main` to production on every merge. Treat a merge as a production deploy.
 
 **Post-publish verification (2026-11-20, later; report §8):**
 
@@ -93,7 +98,7 @@ OpenRouter 429), 0 FAIL.
   - SQL: 42/42.
   - Debug APK: builds.
 - **Production state:**
-  - The dashboard is still at `c842f6f`, so D1, D8, D9 and D10 are not live. Merging to `main` auto-deploys production.
+  - At that time the dashboard was still at `c842f6f`. Superseded: production has run `9c566de` since 09:45 UTC (see above).
   - The Vercel CLI token on this PC is invalid.
   - OpenRouter is configured in production (`configured: true`, not simulated); its capacity was last seen as 429.
 - **New minor findings F1–F4** (task panel height in phase 5, post-submit exit copy, class sheet status, hardcoded test-run labels) are not fixed.
@@ -104,7 +109,7 @@ OpenRouter 429), 0 FAIL.
   `node scripts/publish-simulation-assessments.mjs --target hosted --confirm` with the service-role
   key. Until then an assigned COC1 M2 assessment opens the legacy form, not the bench.
 - B2: restore OpenRouter capacity (429 on every request).
-- B3: ~~apply `20261120110000` to production~~ done; push and merge follow this commit. Still open: the Vercel production deploy (the teammate) and a new APK (blocked on the signing key).
+- B3: ~~migration~~, ~~push and merge~~ and ~~Vercel production~~ are done; production auto-deployed from `main` `9c566de`. Still open: a new APK, blocked on the signing key.
 - Change the weak admin and instructor test passwords after the defense.
 - APK signing decision for the 1.2.0 release:
   - Learners' 1.1.0 is signed with `a4d01056…`, which is not on this PC.
