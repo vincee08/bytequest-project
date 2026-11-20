@@ -402,11 +402,17 @@ final class MissionGuideStep {
 }
 
 final class MissionActionGuide {
-  const MissionActionGuide._(this.steps, this.ready, this.pendingEvidenceCount);
+  const MissionActionGuide._(this.steps, this.ready, this.pendingEvidenceCount,
+      {this.submitted = false});
 
   final List<MissionGuideStep> steps;
   final bool ready;
   final int pendingEvidenceCount;
+
+  /// The review phase after the server accepted the submission. Nothing is
+  /// left to do, so the guide confirms the save instead of asking the learner
+  /// to return to the mission.
+  final bool submitted;
 
   int get completedCount => steps.where((step) => step.completed).length;
   int get remainingCount => steps.length - completedCount;
@@ -421,8 +427,10 @@ final class MissionActionGuide {
     MissionPhaseDefinition phase,
     MissionRuntimeState state, {
     bool reviewReady = false,
+    bool submitted = false,
   }) {
     final family = phase.resolvedInteraction;
+    final saved = submitted && family == InteractionFamily.review;
     final p = phase.presentation;
     final equipment = state.mode == MissionRuntimeMode.practice
         ? MissionEquipmentSimulator.map(p['equipment'])
@@ -587,6 +595,12 @@ final class MissionActionGuide {
             MissionGuideTarget.controls,
             controlKey: 'interpretation-input-${phase.id}');
       case InteractionFamily.review:
+        if (saved) {
+          add(MissionContentData.reviewSavedLabel, true,
+              MissionGuideTarget.next,
+              controlKey: 'mission-exit');
+          break;
+        }
         add(
             state.pendingEvidence.isNotEmpty
                 ? MissionContentData.guideReviewPending
@@ -631,7 +645,7 @@ final class MissionActionGuide {
           controlKey: _primaryControlKey(phase));
     }
     final ready = family == InteractionFamily.review
-        ? reviewReady && state.pendingEvidence.isEmpty
+        ? saved || (reviewReady && state.pendingEvidence.isEmpty)
         : MissionPhaseCompletionPolicy.canAdvance(phase, state);
     if (!ready && steps.every((step) => step.completed)) {
       add(MissionContentData.guideCheckRequirements, false,
@@ -639,7 +653,8 @@ final class MissionActionGuide {
           controlKey: _primaryControlKey(phase));
     }
     return MissionActionGuide._(
-        List.unmodifiable(steps), ready, state.pendingEvidence.length);
+        List.unmodifiable(steps), ready, state.pendingEvidence.length,
+        submitted: saved);
   }
 
   static List<String> _labels(Object? raw) =>

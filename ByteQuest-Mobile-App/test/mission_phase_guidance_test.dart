@@ -160,6 +160,66 @@ void main() {
     expect(state.acceptedEvidenceIds, isEmpty);
   });
 
+  // Production QA 2026-11-20: after Confirm evidence saved the practice run,
+  // the bar still said "Complete the missing task, then review again".
+  testWidgets('a saved review confirms the save instead of asking to return',
+      (tester) async {
+    final mission = MissionSimulationDefinitions.byId('coc1_m2');
+    final review = mission.phases.last;
+    expect(review.resolvedInteraction, InteractionFamily.review);
+    final state = MissionRuntimeState.initial(mission.id)
+        .copyWith(currentPhaseId: review.id);
+    // What the screen passes once the server accepted the submission:
+    // reviewReady drops to false because the run can no longer be submitted.
+    final saved = MissionActionGuide.forPhase(review, state,
+        reviewReady: false, submitted: true);
+    expect(saved.submitted, isTrue);
+    expect(saved.ready, isTrue);
+    expect(saved.currentStep, isNull);
+    expect(saved.remainingCount, 0);
+    expect(saved.steps.first.text, MissionContentData.reviewSavedLabel);
+    expect(saved.steps.first.controlKey, 'mission-exit');
+    expect(saved.steps.map((step) => step.text),
+        isNot(contains(MissionContentData.guideReviewIncomplete)));
+    // Before the save the incomplete-review guidance is unchanged.
+    expect(MissionActionGuide.forPhase(review, state).currentStep?.text,
+        MissionContentData.guideReviewIncomplete);
+    // Only the review phase knows about the save.
+    expect(
+        MissionActionGuide.forPhase(mission.phases.first, state,
+                submitted: true)
+            .submitted,
+        isFalse);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Column(children: [
+          MissionGuidanceBar(
+            guidance: MissionPhaseGuidance.forPhase(review, state),
+            actionGuide: saved,
+            expanded: false,
+            onToggle: () {},
+            showHow: false,
+            onShowHow: () {},
+          ),
+          Expanded(
+            child: SingleChildScrollView(
+              child: MissionGuidancePanel(
+                  phase: review,
+                  guidance: MissionPhaseGuidance.forPhase(review, state),
+                  actionGuide: saved,
+                  practice: true),
+            ),
+          ),
+        ]),
+      ),
+    ));
+    expect(find.text(MissionContentData.reviewSavedLabel), findsWidgets);
+    expect(find.textContaining('Complete the missing task'), findsNothing);
+    expect(find.text(MissionContentData.reviewReadyLabel), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   test('guide names only controls rendered by each interaction family', () {
     final expected = <InteractionFamily, String>{
       InteractionFamily.inspect: 'Objects',

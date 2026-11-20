@@ -38,9 +38,12 @@ class MissionGuidanceBar extends StatelessWidget {
     // so the two never disagree (practice only; assessment has no bar).
     final currentText = guidance.benchStep ??
         current?.text ??
-        (guidance.interactionLabel == MissionContentData.guidanceReviewLabel
-            ? MissionContentData.reviewReadyLabel
-            : MissionContentData.guideReadyToContinue);
+        (actionGuide.submitted
+            ? MissionContentData.reviewSavedLabel
+            : guidance.interactionLabel ==
+                    MissionContentData.guidanceReviewLabel
+                ? MissionContentData.reviewReadyLabel
+                : MissionContentData.guideReadyToContinue);
     return Material(
       key: const ValueKey('mission-guidance-bar'),
       color: AppTheme.cardWhite,
@@ -225,12 +228,15 @@ class MissionGuidancePanel extends StatelessWidget {
                 Text(MissionContentData.guideWaitingForSync,
                     style: AppTheme.bodySmall),
               Text(
-                  actionGuide.ready
-                      ? phase.resolvedInteraction == InteractionFamily.review
-                          ? MissionContentData.reviewReadyLabel
-                          : MissionContentData.guideReadyToContinue
-                      : MissionContentData.guideRemaining(
-                          actionGuide.remainingCount),
+                  actionGuide.submitted
+                      ? MissionContentData.reviewSavedLabel
+                      : actionGuide.ready
+                          ? phase.resolvedInteraction ==
+                                  InteractionFamily.review
+                              ? MissionContentData.reviewReadyLabel
+                              : MissionContentData.guideReadyToContinue
+                          : MissionContentData.guideRemaining(
+                              actionGuide.remainingCount),
                   style: AppTheme.bodySmall.copyWith(color: AppTheme.deepBlue)),
             ],
           ),
