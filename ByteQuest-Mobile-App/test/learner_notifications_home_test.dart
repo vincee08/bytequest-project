@@ -83,6 +83,15 @@ class MutableQuizzes extends LearnerQuizService {
   }
 }
 
+class CountingQuizzes extends MutableQuizzes {
+  int fetches = 0;
+  @override
+  Future<List<LearnerQuizSummary>> getAvailableQuizzes() async {
+    fetches++;
+    return rows;
+  }
+}
+
 LearnerQuizSummary quiz(
         {String? status,
         bool available = true,
@@ -151,6 +160,26 @@ void main() {
     final list = [HomeActivityItem.quiz(quiz()), late]
       ..sort(HomeActivityItem.prioritize);
     expect(list.first, late);
+  });
+  // 20261120110000: a released assessment result is announced without an
+  // open-activity action (opening an assessment that allows retries starts a
+  // new attempt); quiz and technical assignment notices keep theirs.
+  test('a released assessment result notification has no open action', () {
+    LearnerNotification note(String type) => LearnerNotification.fromJson({
+          'id': 'n-$type',
+          'title': 'Assessment Result Released',
+          'message': 'Your instructor released your result.',
+          'created_at': '2026-11-20T05:50:11Z',
+          'is_read': false,
+          'metadata': {
+            'activity_type': type,
+            'activity_id': 'assignment-1',
+            'class_id': 'class-1',
+          },
+        });
+    expect(note('technical_result').hasActivity, isFalse);
+    expect(note('quiz').hasActivity, isTrue);
+    expect(note('technical').hasActivity, isTrue);
   });
   test('deep links revalidate current access without starting attempts',
       () async {
@@ -352,6 +381,39 @@ void main() {
     await tester.pumpAndSettle();
     expect(service.fetches, greaterThan(paused));
     Supabase.instance.client.auth.stopAutoRefresh();
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+  // Production QA 2026-11-20 (logcat): the 30-second poll looked up inherited
+  // widgets from its timer and threw "Looking up a deactivated widget's
+  // ancestor is unsafe". It now reads state cached in didChangeDependencies.
+  testWidgets('class activities poll only while their route is current',
+      (tester) async {
+    final quizzes = CountingQuizzes()..rows = [quiz()];
+    await tester.pumpWidget(app(Scaffold(
+        body: SingleChildScrollView(
+            child: AssignedClassActivities(
+                dashboard: true,
+                quizService: quizzes,
+                homeworkService: fixtures.FakeHomework())))));
+    await tester.pumpAndSettle();
+    Future<int> fetchesAfterPoll() async {
+      final before = quizzes.fetches;
+      await tester.pump(const Duration(seconds: 31));
+      await tester.pumpAndSettle();
+      return quizzes.fetches - before;
+    }
+
+    expect(await fetchesAfterPoll(), greaterThan(0), reason: 'polls while current');
+    final navigator = tester.state<NavigatorState>(find.byType(Navigator).first);
+    unawaited(navigator.push(MaterialPageRoute<void>(
+        builder: (_) => const Scaffold(body: Text('Covering page')))));
+    await tester.pumpAndSettle();
+    expect(await fetchesAfterPoll(), 0, reason: 'no poll under another route');
+    navigator.pop();
+    await tester.pumpAndSettle();
+    expect(await fetchesAfterPoll(), greaterThan(0),
+        reason: 'polls again once its route is current');
+    expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
   for (final width in [320.0, 375.0, 768.0, 1440.0]) {

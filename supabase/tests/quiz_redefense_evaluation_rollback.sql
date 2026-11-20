@@ -2,7 +2,7 @@
 -- for quizzes in instructor-release mode, and the Evaluation Center queue item
 -- contract. Rollback-only with a controlled server clock.
 begin;
-select plan(68);
+select plan(70);
 -- Learner calls identify as the 1.2.0 app (client version guard, 20261120100000).
 select set_config('request.headers', '{"x-bytequest-app-version":"1.2.0"}', true);
 
@@ -197,6 +197,14 @@ select is(jsonb_array_length(public.manage_quiz_evaluation(teacher, 'release', j
 select is(jsonb_array_length(public.manage_quiz_evaluation(teacher, 'release', jsonb_build_object('attempt_ids', jsonb_build_array(a1)))->'already_released'), 1,
   'release is idempotent') from qe;
 reset role;
+-- Production QA 2026-11-20 (20261120110000): the release notifies the learner.
+select is((select count(*)::int from public.notifications
+  where event_key = 'quiz_result.released:' || qe.a1::text and user_id = qe.l1
+    and title = 'Quiz Result Released' and metadata->>'activity_type' = 'quiz'), 1,
+  'releasing a quiz result notifies its learner once, also when released again') from qe;
+select is((select count(*)::int from public.notifications
+  where event_key = 'quiz_result.released:' || qe.a1::text and user_id <> qe.l1), 0,
+  'nobody else is told about the quiz result') from qe;
 
 select set_config('request.jwt.claim.sub', (select l1::text from qe), true);
 set local role authenticated;

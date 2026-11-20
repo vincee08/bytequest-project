@@ -13,15 +13,18 @@ interface PasswordInputProps {
   placeholder?: string;
   error?: boolean;
   className?: string;
+  /** Lets password managers fill sign-in ("new-password" for a new one). */
+  autoComplete?: "current-password" | "new-password";
 }
 
-export function PasswordInput({ 
-  id, 
-  value, 
-  onChange, 
+export function PasswordInput({
+  id,
+  value,
+  onChange,
   placeholder = "Enter your password",
   error,
   className,
+  autoComplete = "current-password",
 }: PasswordInputProps) {
   const [showPassword, setShowPassword] = useState(false);
 
@@ -30,6 +33,7 @@ export function PasswordInput({
       <Input
         id={id}
         type={showPassword ? "text" : "password"}
+        autoComplete={autoComplete}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}

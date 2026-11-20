@@ -303,7 +303,10 @@ class _NotificationsScreenState extends State<NotificationsScreen>
   String _type(String? type) => switch (type) {
         'quiz' => MissionContentData.homeQuizzes,
         'homework' => MissionContentData.homeHomework,
-        'technical' => MissionContentData.technicalActivities,
+        // A released assessment result (20261120110000) is read under
+        // Progress; it has no open-activity action (see hasActivity).
+        'technical' || 'technical_result' =>
+          MissionContentData.technicalActivities,
         _ => MissionContentData.notificationsUpdate,
       };
 }

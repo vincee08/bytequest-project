@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_theme.dart';
@@ -1704,9 +1705,7 @@ class _BenchTray extends StatelessWidget {
         height: 64 * MediaQuery.textScalerOf(context).scale(1).clamp(1.0, 1.6),
         // A short, fully built row: every part stays reachable for drag,
         // keyboard and screen-reader focus.
-        child: SingleChildScrollView(
-          key: const ValueKey('assembly-bench-tray-scroll'),
-          scrollDirection: Axis.horizontal,
+        child: _SidewaysWheelScroll(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           child: Row(children: [
             for (final child in children)
@@ -2188,4 +2187,54 @@ class _CableChip extends StatelessWidget {
       ),
     );
   }
+}
+
+/// The tray row, which a mouse wheel also scrolls: a plain (vertical) wheel
+/// turn moves it sideways, as Shift+wheel and a trackpad already do. A
+/// horizontal scroll view ignores a vertical-only wheel, so without this a
+/// mouse user could not reach the tiles past the edge (production QA
+/// 2026-11-20). Touch, keyboard and screen-reader use are unchanged.
+class _SidewaysWheelScroll extends StatefulWidget {
+  const _SidewaysWheelScroll({required this.padding, required this.child});
+
+  final EdgeInsetsGeometry padding;
+  final Widget child;
+
+  @override
+  State<_SidewaysWheelScroll> createState() => _SidewaysWheelScrollState();
+}
+
+class _SidewaysWheelScrollState extends State<_SidewaysWheelScroll> {
+  final _controller = ScrollController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _wheel(PointerSignalEvent event) {
+    if (event is! PointerScrollEvent) return;
+    final delta = event.scrollDelta;
+    if (delta.dy == 0 || delta.dx != 0 || !_controller.hasClients) return;
+    // Claims the turn so the page around the bench does not scroll too.
+    GestureBinding.instance.pointerSignalResolver.register(event, (_) {
+      final position = _controller.position;
+      final target = (position.pixels + delta.dy)
+          .clamp(position.minScrollExtent, position.maxScrollExtent);
+      if (target != position.pixels) position.jumpTo(target);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => Listener(
+        onPointerSignal: _wheel,
+        child: SingleChildScrollView(
+          key: const ValueKey('assembly-bench-tray-scroll'),
+          controller: _controller,
+          scrollDirection: Axis.horizontal,
+          padding: widget.padding,
+          child: widget.child,
+        ),
+      );
 }

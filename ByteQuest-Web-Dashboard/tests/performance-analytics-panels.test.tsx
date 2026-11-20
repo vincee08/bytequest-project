@@ -205,3 +205,17 @@ test("criteria panel lists strongest and weakest skills", () => {
   assert.ok(html.includes(">Simulation step<") && html.includes("Step 2 · Prepare the motherboard"), "simulation criteria name their step");
   assert.ok(html.includes(">Quiz essay<") && html.includes("E1 · Essay quiz · ESSAY-1"), "essay rubric criteria name their quiz item");
 });
+
+// Production QA 2026-11-20: a homework criterion made in the dashboard has no
+// code, so its analytics row carries the criterion's record id as the code
+// ("Homework · 15645138-7d5e-…" in the weakest-skills list).
+test("criteria panel never shows a record id as a criterion code", () => {
+  const id = "15645138-7d5e-456d-9037-384fb34ee9a1";
+  const homework = { source: "homework", criterion_id: `${ITEM}:${id}`, code: id, title: "Complete and correct steps", activity_title: "Assembly checklist",
+    mission_code: "coc1_m2", mission_title: "Install components", max: 10, avg: 8, percent: 80, evaluated_learners: 1, satisfied: null, not_satisfied: null };
+  const data = criteriaAnalyticsSchema.parse({ period, criteria: [homework], strongest: [homework], weakest: [homework], generated_at });
+  const html = renderToStaticMarkup(<CriteriaPanel data={data} query={query} />);
+  assert.ok(!html.includes(id), "the record id is never shown");
+  assert.ok(html.includes("Homework · Assembly checklist · 1 learner"), "the rank list names the homework instead");
+  assert.ok(html.includes("Complete and correct steps"));
+});

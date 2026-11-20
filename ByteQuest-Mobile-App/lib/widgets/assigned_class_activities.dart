@@ -54,6 +54,12 @@ class _AssignedClassActivitiesState extends State<AssignedClassActivities>
   int _filter = 0;
   Timer? _poll;
   AppLifecycleState _lifecycle = AppLifecycleState.resumed;
+  // Read in didChangeDependencies, never from the poll timer: a timer can
+  // fire while this element is deactivated, and an inherited lookup there
+  // throws "Looking up a deactivated widget's ancestor is unsafe"
+  // (production QA 2026-11-20, logcat).
+  bool _tickerEnabled = true;
+  bool _routeCurrent = false;
   @override
   Set<LearnerRealtimeDomain> get realtimeDomains => const {
         LearnerRealtimeDomain.quizzes,
@@ -70,11 +76,20 @@ class _AssignedClassActivitiesState extends State<AssignedClassActivities>
     _poll = Timer.periodic(const Duration(seconds: 30), (_) {
       if (_lifecycle == AppLifecycleState.resumed &&
           mounted &&
-          TickerMode.valuesOf(context).enabled &&
-          ModalRoute.of(context)?.isCurrent == true) {
+          _tickerEnabled &&
+          _routeCurrent) {
         unawaited(_load());
       }
     });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Both are dependencies: a covered or popped route and a disabled ticker
+    // call this again.
+    _tickerEnabled = TickerMode.valuesOf(context).enabled;
+    _routeCurrent = ModalRoute.of(context)?.isCurrent == true;
   }
 
   @override

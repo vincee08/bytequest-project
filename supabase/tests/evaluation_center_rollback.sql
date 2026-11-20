@@ -2,7 +2,7 @@
 -- instructor Evaluate step (evaluated -> under_review) before Finalize and
 -- Release. Rollback-only; every fixture is removed by the final rollback.
 begin;
-select plan(47);
+select plan(50);
 
 create temporary table ec as select
   gen_random_uuid() instructor, gen_random_uuid() other_instructor,
@@ -208,6 +208,19 @@ select is((select count(*)::integer from public.score_revisions sr join ec on sr
 select lives_ok(format('select public.release_attempt(%L,''Released after evaluation'')',(select attempt_override from ec)),'release follows finalization');
 select is((select status::text from public.attempts where id=(select attempt_override from ec)),'released','the attempt is released');
 reset role;
+-- Production QA 2026-11-20 (20261120110000): the release notifies the learner
+-- once, without an open-activity action (opening a released assessment that
+-- allows retries starts a new attempt).
+select is((select count(*)::int from public.notifications n join ec on n.user_id=ec.learner
+  where n.event_key='result.released:'||ec.attempt_override::text and n.title='Assessment Result Released'
+    and n.metadata->>'activity_type'='technical_result'),1,
+  'releasing an assessment result notifies its learner');
+select set_config('request.jwt.claim.sub',(select instructor::text from ec),true);
+set local role authenticated;
+select lives_ok(format('select public.release_attempt(%L,''Released again'')',(select attempt_override from ec)),'releasing again is harmless');
+reset role;
+select is((select count(*)::int from public.notifications n join ec on n.event_key='result.released:'||ec.attempt_override::text),1,
+  'a repeated release does not notify again, and nobody else is notified');
 
 -- Confirming the automated result unchanged, then a reasoned final adjustment.
 set local role service_role;

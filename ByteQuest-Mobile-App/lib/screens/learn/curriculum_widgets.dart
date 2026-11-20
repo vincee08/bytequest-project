@@ -78,6 +78,7 @@ class CurriculumProgressSummary extends StatelessWidget {
             value: progress.total == 0 ? (completed ? 1 : 0) : progress.ratio,
             semanticLabel: semanticLabel,
             color: completed ? AppTheme.accentGreen : AppTheme.primaryBlue,
+            percent: progress.percent,
           ),
           const SizedBox(height: 6),
           Row(

@@ -2,7 +2,117 @@
 
 > Read this file with `AGENTS.md`, `README.md`, and `bytequest.md` before changing the repository.
 
-## Current continuation - 2026-11-20 RE-DEFENSE QA AUDIT, PASS 2 (local stack)
+## Current continuation - 2026-11-20 PRODUCTION QA AUDIT
+
+End-to-end audit of the live system: dashboard `https://bytequest-alpha.vercel.app` at `c842f6f`
+(PR #5), Supabase `rslmteqipxqfifwftugk`, the 1.2.0 debug APK with production defines on the
+`padala_pixel7` emulator, and a Flutter web build of the working tree on `http://localhost:3009` (the
+production CORS preview origin) for mouse input. Only TEST ONLY data was created; nothing was
+deployed, migrated or published in production. Report: `docs/PRODUCTION_QA_AUDIT_2026-11-20.md`;
+screenshots: `docs/qa-production-2026-11-20/`.
+
+**Result (production):** 34 PASS, 3 PARTIAL (R2.4, R10 by owner decision, R11.2), 1 BLOCKED (R3.3:
+OpenRouter 429), 0 FAIL.
+- COC1 M2 assembled in production by touch (APK; verified, 16 m 33 s, 0 refused) and by mouse
+  (Chrome; verified, 34 m 04 s, deliberate refusals, Remove → reseat, two POST faults found and
+  repaired on the bench).
+- Evaluate → Finalize → Release for the test learner's assessment (4/5), quiz essay (9/10) and
+  homework (8/10); the learner app showed all three.
+- Live update: a homework deadline change raised the learner bell 4 → 5 on the APK and on web
+  without a reload.
+
+**Fixed locally with tests (not deployed):**
+- D1: breadcrumb 404s. New redirect pages `classes/[id]/assignments`, `progress/learners` and
+  `users/[id]`; `src/lib/navigation/breadcrumb-trail.ts`; record ids read as names.
+- D2: a saved practice run said "Complete the missing task". `MissionActionGuide.forPhase(…,
+  submitted:)` now reads "Saved successfully", and Show me where outlines Back.
+- D3: overlapping cable-header touch areas (drive data over drive power; SYS_FAN over the 24-pin
+  header). `AssemblyBenchLayout.target` splits neighbouring headers halfway.
+- D4: the progress bar spoke "17 percent" next to a visible "16%".
+- D5: no learner notification for released quiz or assessment results. New migration
+  `supabase/migrations/20261120110000_result_release_notifications.sql`; an assessment release uses
+  `activity_type: technical_result`, which has no Open-activity button.
+- D6: a mouse wheel now scrolls the bench tray.
+- D7: logcat "deactivated widget's ancestor" from the 30-second polls in
+  `assigned_class_activities.dart` and `dashboard_screen.dart`.
+- D8: the criteria analytics showed a raw homework criterion id.
+- D9: admin pages were titled "Instructor Dashboard".
+- D10: the login password field had no autocomplete.
+
+**Gates:**
+- Flutter: 735 passed, 1 skipped; `flutter analyze`: 0 errors, 0 warnings, 210 pre-existing infos.
+- Dashboard: tsc, lint, 226 tests and build all pass.
+- Local SQL: 42/42 suites, with `20261120110000` applied to the LOCAL database only.
+
+**Production TEST ONLY data** (delete after the defense):
+- learner QA Test Learner 1120 (its generated password appeared in the session tool log; delete or
+  rotate the account);
+- class TEST ONLY – QA 2026-11-20;
+- quiz v1 (published) and v2 (empty draft);
+- homework (deadline 22 Nov);
+- assessment assignment and its released attempt;
+- two practice runs;
+- curriculum topic "TEST ONLY QA topic 2026-11-20 (do not publish)", Submitted.
+
+**B1 resolved (2026-11-20, about 15:55 Manila, owner-approved):** the 20 simulation assessment packages were published to production with `scripts/publish-simulation-assessments.mjs --target hosted --confirm`.
+- The pre-publish dry run gave VALIDATED, 20 missions, 106 scored steps and no conflicts (24 reads, no writes).
+- Read-only before/after verification: +20 assessment versions (v2, published), +20 approved rubrics, +106 rubric criteria, +40 curriculum links (20 simulation, 19 form-based, 1 protected reference) and +60 audit events. No existing row was changed or removed in the 12 checked tables (v1 assessments, rubrics, assignments, attempts, profiles, memberships, practice runs, quiz attempts, modules, sources).
+- The temporary release admin is deactivated and banned until 2126, and a sign-in is refused.
+- The class assign form offers COC1 M2 "Install Internal Components — simulation assessment" (Simulation assessment). Existing assignments still point to the v1 forms; make a new assignment to use the bench.
+- The `sb_secret_` key was erased from `.tmp/production-publish.env`; a scan of 3,392 files found no copy.
+
+**D5 migration applied to production (2026-11-20, about 17:30 Manila, owner-approved):**
+
+- **What it is:** `20261120110000_result_release_notifications` notifies learners when a quiz result or an assessment result is released.
+- **Backup:** a fresh encrypted read-only backup at `%LOCALAPPDATA%\ByteQuest\Recovery\rslmteqipxqfifwftugk-20261120-d5`.
+  - Snapshot `0000000E-00002DE7-1`: 148 relations, 7,430 rows.
+  - Restored into an isolated container: all 148 row hashes match.
+  - The Free plan has no platform backups.
+  - The backup script now waits for the pooler to accept the temporary login role. The first two attempts failed on that before reading anything; their folders are kept as `…-d5-failed-attempt1/2` and hold only a key.
+- **Rehearsal:** the exact batch (`.tmp/release-d5/batch-b.sql`, sha256 `6a4a6310…`) on the restored copy changed no pre-existing rows (7,158 rows checked), and 42/42 SQL suites passed there.
+- **Apply:** `supabase db query --linked -f .tmp/release-d5/batch-b.sql`. Not `db push`.
+- **Verification:** production now equals the rehearsed copy:
+  - version recorded (102 versions);
+  - function source md5 `ba034ddc…`;
+  - trigger md5 `6ae35387…`, with both release actions;
+  - ACL and SECURITY INVOKER unchanged.
+  - The read-back reports no public table without RLS and 20 published simulation assessments.
+- **Screenshots:** the instructor's display name was redacted in d01–d03 before the push, by rewriting only the unpushed commits.
+- **APK:** release blocked. Neither the learners' signing certificate `a4d01056…` nor the 11-13 production key `dc85ef75…` is on this PC; a full-disk search found only this PC's debug key and two Expo template keys.
+- **Next:** the push to `vince-branch` and a PR into `main` follow this commit. The teammate deploys `main` to Vercel production.
+
+**Post-publish verification (2026-11-20, later; report §8):**
+
+- **PASS:**
+  - A new TEST ONLY COC1 M2 v2 assignment opened the bench in assessment mode on the emulator.
+  - Submitted with deliberate errors, it auto-evaluated 10/11 (provisional, stage Evaluate, not released). C3 failed by its zero-tolerance rule after one wrong-orientation CPU attempt.
+- **PASS:** a read-only check of all 20 packages (versions, rubrics, 106 criteria, 40 links, payload hashes equal to the local packages, app contract versions).
+- **Gates at `575af68`:**
+  - Flutter: 735 passed, 1 skipped; analyze 0 errors and 0 warnings (210 infos).
+  - Dashboard: tsc, lint, 226 tests and build pass.
+  - SQL: 42/42.
+  - Debug APK: builds.
+- **Production state:**
+  - The dashboard is still at `c842f6f`, so D1, D8, D9 and D10 are not live. Merging to `main` auto-deploys production.
+  - The Vercel CLI token on this PC is invalid.
+  - OpenRouter is configured in production (`configured: true`, not simulated); its capacity was last seen as 429.
+- **New minor findings F1–F4** (task panel height in phase 5, post-submit exit copy, class sheet status, hardcoded test-run labels) are not fixed.
+- **Emulator:** it now runs the debug build of `575af68`. To revert, run `adb install -r` with `build/app/outputs/flutter-apk/app-debug.apk`.
+
+**Owner actions (need approval):**
+- ~~B1~~ done (see above). Old note: publish the simulation assessment packages to production. Dry-run first, then
+  `node scripts/publish-simulation-assessments.mjs --target hosted --confirm` with the service-role
+  key. Until then an assigned COC1 M2 assessment opens the legacy form, not the bench.
+- B2: restore OpenRouter capacity (429 on every request).
+- B3: ~~apply `20261120110000` to production~~ done; push and merge follow this commit. Still open: the Vercel production deploy (the teammate) and a new APK (blocked on the signing key).
+- Change the weak admin and instructor test passwords after the defense.
+- APK signing decision for the 1.2.0 release:
+  - Learners' 1.1.0 is signed with `a4d01056…`, which is not on this PC.
+  - This PC's debug certificate is `271cbbf0…`. A build signed with it cannot update 1.1.0 in place, so learners would uninstall first.
+  - The 11-13 production key `dc85ef75…` is not on this PC either.
+- After the defense: remove the TEST ONLY QA class data. This includes the v2 assignment "TEST ONLY QA: COC1 M2 simulation assessment (v2)" and its attempt `e2d4f421-…`.
+
+## Previous continuation - 2026-11-20 RE-DEFENSE QA AUDIT, PASS 2 (local stack)
 
 The second pass completed the three PARTIAL items and the drag-and-drop realism follow-ups. It ran against the local stack only; production, Vercel, the APK release and pushes were not touched. Report and screenshots updated in place: `docs/REDEFENSE_QA_AUDIT_2026-11-20.md` and `docs/qa-audit-2026-11-20/` (a14–a22, w05–w11).
 

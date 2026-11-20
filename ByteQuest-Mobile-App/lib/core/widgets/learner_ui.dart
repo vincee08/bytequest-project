@@ -360,11 +360,17 @@ class LearnerProgressBar extends StatelessWidget {
   final String semanticLabel;
   final Color color;
 
+  /// The percentage the screen shows beside the bar, when it has one. A
+  /// screen reader then announces the same figure (the server reports
+  /// 1 of 6 as 16%, while rounding the bar's own value would say 17).
+  final int? percent;
+
   const LearnerProgressBar({
     super.key,
     required this.value,
     required this.semanticLabel,
     this.color = AppTheme.primaryBlue,
+    this.percent,
   });
 
   @override
@@ -373,7 +379,7 @@ class LearnerProgressBar extends StatelessWidget {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
     return Semantics(
       label: semanticLabel,
-      value: '${(normalized * 100).round()} percent',
+      value: '${percent ?? (normalized * 100).round()} percent',
       child: TweenAnimationBuilder<double>(
         duration:
             reduceMotion ? Duration.zero : const Duration(milliseconds: 420),

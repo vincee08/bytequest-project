@@ -1157,6 +1157,85 @@ void main() {
     }
   });
 
+  // Production QA 2026-11-20 (mouse): in the case the drive's SATA data port
+  // covered the top 40 % of the SATA power port's highlight (and SYS_FAN the
+  // bottom of the 24-pin header), so a click there reached the wrong port.
+  test('cable header targets never overlap and still cover their port', () {
+    const headers = AssemblyBenchLayout.cableHeaders;
+    for (final view in const [BenchView.board, BenchView.chassis]) {
+      for (var i = 0; i < headers.length; i++) {
+        final a = AssemblyBenchLayout.target(headers[i], view);
+        if (a == null) continue;
+        final port = AssemblyBenchLayout.slot(headers[i], view)!;
+        // A port taller or wider than the minimum keeps its own edges,
+        // recomputed from the centre (floating-point rounding only).
+        const e = 1e-6;
+        expect(
+            a.left <= port.left + e &&
+                a.top <= port.top + e &&
+                a.right >= port.right - e &&
+                a.bottom >= port.bottom - e,
+            isTrue,
+            reason: '${headers[i]} in ${view.name} still covers its port');
+        for (var j = i + 1; j < headers.length; j++) {
+          final b = AssemblyBenchLayout.target(headers[j], view);
+          if (b == null) continue;
+          expect(a.overlaps(b), isFalse,
+              reason: '${headers[i]} and ${headers[j]} in ${view.name}');
+        }
+      }
+    }
+  });
+
+  // Both edges that faced each other: before the fix one of the two drive
+  // ports covered the other's highlight, so one of these clicks reached the
+  // wrong port and was refused.
+  for (final (cable, port, nearEdge) in const [
+    ('sata_power', 'drive_power', 'top'),
+    ('sata_data', 'drive_data', 'bottom'),
+  ]) {
+    testWidgets('a click at the $nearEdge of the $port highlight connects '
+        '$cable', (tester) async {
+      final harness = await _pump(tester, _stateAt(4));
+      int invalid() => ((harness.controller.state.equipmentState['counts']
+              as Map?)?['invalid'] as int?) ??
+          0;
+      await _tapKey(tester, 'bench-cable-$cable');
+      final area = tester.getRect(find.byKey(ValueKey('bench-header-$port')));
+      final before = invalid();
+      await tester.tapAt(
+          Offset(area.center.dx,
+              nearEdge == 'top' ? area.top + 2 : area.bottom - 2),
+          kind: PointerDeviceKind.mouse);
+      await tester.pumpAndSettle();
+      expect(harness.controller.state.connectedNodePairs,
+          contains('$cable>$port'));
+      expect(invalid(), before, reason: 'nothing was refused');
+    });
+  }
+
+  // Production QA 2026-11-20 (mouse): a plain wheel turn over the tray did
+  // nothing; only Shift+wheel or a trackpad moved it.
+  testWidgets('a mouse wheel turn over the tray scrolls it sideways',
+      (tester) async {
+    await _pump(tester, _stateAt(2));
+    final scroll = find.byKey(const ValueKey('assembly-bench-tray-scroll'));
+    ScrollPosition position() => tester
+        .state<ScrollableState>(
+            find.descendant(of: scroll, matching: find.byType(Scrollable)))
+        .position;
+    expect(position().maxScrollExtent, greaterThan(120),
+        reason: 'the phase 2 tray overflows a phone width');
+    final mouse = TestPointer(1, PointerDeviceKind.mouse);
+    await tester.sendEventToBinding(mouse.hover(tester.getCenter(scroll)));
+    await tester.sendEventToBinding(mouse.scroll(const Offset(0, 120)));
+    await tester.pumpAndSettle();
+    expect(position().pixels, 120);
+    await tester.sendEventToBinding(mouse.scroll(const Offset(0, -500)));
+    await tester.pumpAndSettle();
+    expect(position().pixels, 0, reason: 'clamped at the first tile');
+  });
+
   for (final size in const [
     Size(360, 640),
     Size(412, 915),
@@ -1573,3 +1652,4 @@ void main() {
     });
   });
 }
+

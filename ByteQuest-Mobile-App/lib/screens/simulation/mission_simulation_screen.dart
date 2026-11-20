@@ -517,7 +517,8 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
         reviewReady: _controller.canSubmit &&
             MissionEquipmentSimulator.readyForReview(
                 widget.definition, _state) &&
-            !_submitted);
+            !_submitted,
+        submitted: _submitted);
     final step = guide.currentStep;
     // Bench operations are hotspots on the bench and buttons in its tray,
     // so they never need the task panel opened.
@@ -540,7 +541,9 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
       _clearGuideOutline();
       return; // SimulationScene owns object focus and its outline.
     } else {
-      nextKey = step?.controlKey ?? 'mission-next';
+      // After the save the only action left is Back (reviewSavedLabel).
+      nextKey = step?.controlKey ??
+          (guide.submitted ? 'mission-exit' : 'mission-next');
     }
     if (oldKey != nextKey) _clearGuideOutline();
     _guideOutlineKey = nextKey;
@@ -689,7 +692,8 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
         reviewReady: _controller.canSubmit &&
             MissionEquipmentSimulator.readyForReview(
                 widget.definition, _state) &&
-            !_submitted);
+            !_submitted,
+        submitted: _submitted);
     final currentStep = actionGuide.currentStep;
     final activeWorkspaceMode =
         _workspaceModePhaseId == phase.id ? _workspaceMode : null;
@@ -1090,7 +1094,8 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
         reviewReady: _controller.canSubmit &&
             MissionEquipmentSimulator.readyForReview(
                 widget.definition, _state) &&
-            !_submitted);
+            !_submitted,
+        submitted: _submitted);
     if (phase.primaryInteraction == InteractionFamily.review) {
       final equipmentReady =
           MissionEquipmentSimulator.readyForReview(widget.definition, _state);
@@ -2070,6 +2075,7 @@ class _MissionHeader extends StatelessWidget {
         child: Row(
           children: [
             IconButton(
+              key: const ValueKey('mission-exit'),
               tooltip: MissionContentData.exitMissionTooltip,
               onPressed: onBack,
               icon: const Icon(Icons.arrow_back_rounded),

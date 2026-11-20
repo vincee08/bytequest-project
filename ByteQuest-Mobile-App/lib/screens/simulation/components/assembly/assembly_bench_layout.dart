@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/painting.dart';
 
 /// The three physical views of the assembly bench.
@@ -133,20 +135,86 @@ abstract final class AssemblyBenchLayout {
     {'cpu_socket', 'cooler_mount'},
   ];
 
+  /// Cable headers and ports. Where two neighbours' padded touch areas would
+  /// overlap, each stops halfway between the two ports, so the highlighted
+  /// area of one port never takes a tap or a drop meant for it on behalf of
+  /// its neighbour. (In the case the drive's SATA data port covered the top
+  /// of the SATA power port, and SYS_FAN overlapped the 24-pin header.)
+  static const cableHeaders = [
+    'cpu_fan_header',
+    'sys_fan_header',
+    'board_atx24',
+    'board_eps8',
+    'board_front_panel',
+    'drive_power',
+    'drive_data',
+  ];
+
   /// Touch area for a slot: never thinner than [minimum] logical units, and
   /// memory slots claim exactly the pitch between neighbours (a magnetic
   /// snap that never overlaps the next slot, in the close-up and the case).
+  /// Cable headers likewise never overlap one another ([cableHeaders]).
   static Rect? target(String id, BenchView view, {double minimum = 64}) {
     final rect = slot(id, view);
     if (rect == null) return null;
-    final pitch = dimmPitch * _boardScaleIn(view);
+    var area = _padded(id, rect, view, minimum);
+    if (!cableHeaders.contains(id)) return area;
+    for (final other in cableHeaders) {
+      if (other == id) continue;
+      final port = slot(other, view);
+      if (port == null || !_padded(other, port, view, minimum).overlaps(area)) {
+        continue;
+      }
+      area = _awayFrom(area, rect, port);
+    }
+    return area;
+  }
+
+  static Rect _padded(String id, Rect rect, BenchView view, double minimum) {
     final width = id.startsWith('dimm_')
-        ? pitch
-        : rect.width < minimum
-            ? minimum
-            : rect.width;
-    final height = rect.height < minimum ? minimum : rect.height;
-    return Rect.fromCenter(center: rect.center, width: width, height: height);
+        ? dimmPitch * _boardScaleIn(view)
+        : math.max(rect.width, minimum);
+    return Rect.fromCenter(
+        center: rect.center,
+        width: width,
+        height: math.max(rect.height, minimum));
+  }
+
+  /// [area], the padded touch area of the port [own], trimmed back to the
+  /// line halfway between [own] and the neighbouring [port], across the
+  /// wider of the two gaps. Both neighbours trim to the same line.
+  static Rect _awayFrom(Rect area, Rect own, Rect port) {
+    final gapX = own.right <= port.left
+        ? port.left - own.right
+        : port.right <= own.left
+            ? own.left - port.right
+            : -1.0;
+    final gapY = own.bottom <= port.top
+        ? port.top - own.bottom
+        : port.bottom <= own.top
+            ? own.top - port.bottom
+            : -1.0;
+    if (gapY >= 0 && gapY >= gapX) {
+      if (own.bottom <= port.top) {
+        final mid = (own.bottom + port.top) / 2;
+        return Rect.fromLTRB(
+            area.left, area.top, area.right, math.min(area.bottom, mid));
+      }
+      final mid = (port.bottom + own.top) / 2;
+      return Rect.fromLTRB(
+          area.left, math.max(area.top, mid), area.right, area.bottom);
+    }
+    if (gapX >= 0) {
+      if (own.right <= port.left) {
+        final mid = (own.right + port.left) / 2;
+        return Rect.fromLTRB(
+            area.left, area.top, math.min(area.right, mid), area.bottom);
+      }
+      final mid = (port.right + own.left) / 2;
+      return Rect.fromLTRB(
+          math.max(area.left, mid), area.top, area.right, area.bottom);
+    }
+    return area; // The ports themselves overlap: nothing to split.
   }
 
   /// Where a cable leaves its source (power supply, case front, cooler).
