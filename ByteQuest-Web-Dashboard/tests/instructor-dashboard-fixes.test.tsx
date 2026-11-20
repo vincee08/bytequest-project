@@ -73,6 +73,9 @@ test("the pending review panel shows the exact total and links to the Evaluation
   assert.match(html, /href="\/evaluations"/);
   assert.match(html, /Juan Dela Cruz/);
   assert.match(html, /Cable color codes/);
+  // The due date shares the text column with the title (no date column
+  // beside it that can squeeze the title to zero width in a narrow card).
+  assert.match(html, /<span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold" title="Cable color codes">Cable color codes<\/span><span class="mt-0\.5 block truncate[^"]*">(?:(?!<\/span>).)*<\/span><time /);
   assert.match(html, /Homework/);
   assert.match(html, /quizzes, homework and technical assignments/);
   assert.doesNotMatch(html, /Only assignments with a configured due date are shown/);
