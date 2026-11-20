@@ -1,5 +1,7 @@
 import 'package:bytequest/core/theme/app_theme.dart';
 import 'package:bytequest/core/widgets/learner_ui.dart';
+import 'package:bytequest/models/curriculum_model.dart';
+import 'package:bytequest/screens/learn/curriculum_widgets.dart';
 import 'package:bytequest/widgets/bytequest_bottom_nav.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -120,6 +122,29 @@ void main() {
       find.bySemanticsLabel(RegExp('Practice progress')),
       findsOneWidget,
     );
+    semantics.dispose();
+  });
+
+  // Production QA 2026-11-20: the Progress card showed "16%" for 1 of 6
+  // required items while TalkBack read "17 percent".
+  testWidgets('progress summary announces the percentage it shows',
+      (tester) async {
+    final semantics = tester.ensureSemantics();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.lightTheme,
+        home: const Scaffold(
+          body: CurriculumProgressSummary(
+            progress: CurriculumProgress(done: 1, total: 6, percent: 16),
+            semanticLabel: 'COC 1 progress',
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('16%'), findsOneWidget);
+    final node = tester.getSemantics(find.bySemanticsLabel('COC 1 progress'));
+    expect(node.value, '16 percent');
     semantics.dispose();
   });
 }
