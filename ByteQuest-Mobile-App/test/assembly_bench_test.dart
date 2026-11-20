@@ -48,6 +48,22 @@ MissionRuntimeState _stateAt(int phase, {MissionRuntimeMode? mode}) {
   });
 }
 
+/// Phase 2 worked through by the scripted work order (processor seated under
+/// a locked lever, compound, cooler and fan cable on, modules in DIMM_A2 and
+/// DIMM_B2 under locked latches), still on the phase 2 bench.
+MissionRuntimeState _boardBuilt({MissionRuntimeMode? mode}) {
+  final driver = EquipmentPracticeDriver(_definition)
+    ..complete(_phase(1))
+    ..complete(_phase(2));
+  final state = driver.state.copyWith(currentPhaseId: _phase(2).id);
+  if (mode != MissionRuntimeMode.assessment) return state;
+  return MissionRuntimeState.fromJson({
+    ...state.toJson(),
+    'mode': 'assessment',
+    'assessmentAttemptId': 'attempt-qa',
+  });
+}
+
 var _harnessCount = 0;
 
 class _Harness {
@@ -359,16 +375,24 @@ void main() {
 
     await runPost();
     expect(find.textContaining('single-channel mode'), findsOneWidget);
+    // The locked latches hold the modules: pulling one is refused with the
+    // reason and records nothing.
+    await _tapKey(tester, 'bench-part-ram_1');
+    await _tapKey(tester, 'bench-remove');
+    expect(harness.controller.state.placements['ram_1'], 'dimm_a1');
+    expect(find.text(MissionContentData.benchHeldByLatches), findsOneWidget);
+    expect(harness.lastValue('placement_removed'), isNull);
+    await _tapKey(tester, 'bench-cancel');
+    await _tapKey(tester, 'bench-operation-open_dimm_latches');
     for (final module in ['ram_1', 'ram_2']) {
       await _tapKey(tester, 'bench-part-$module');
       await _tapKey(tester, 'bench-remove');
     }
     expect(harness.controller.state.placements.containsKey('ram_1'), isFalse);
-    await _tapKey(tester, 'bench-operation-open_dimm_latches');
     for (final (module, slot) in [('ram_1', 'dimm_a2'), ('ram_2', 'dimm_b2')]) {
       await _tapKey(tester, 'bench-part-$module');
-      await _tapKey(tester, 'bench-rotate');
-      await _tapKey(tester, 'bench-rotate');
+      // A module comes out the way it was seated, so it goes straight in.
+      expect((_turns(tester, module) * 4).round() % 4, 0, reason: module);
       await _tapKey(tester, 'bench-slot-chip-$slot');
       expect(harness.controller.state.placements[module], slot);
     }
@@ -1146,10 +1170,8 @@ void main() {
       await _tapKey(tester, 'bench-part-ram_1');
       await _tapKey(tester, 'bench-remove');
       expect(harness.controller.state.placements.containsKey('ram_1'), isFalse);
-      await _tapKey(tester, 'bench-part-ram_1');
-      await _tapKey(tester, 'bench-rotate');
-      await _tapKey(tester, 'bench-rotate');
-      await _tapKey(tester, 'bench-cancel');
+      // The module came out the way it was seated, so it needs no turning.
+      expect((_turns(tester, 'ram_1') * 4).round() % 4, 0);
       expect(find.byKey(const ValueKey('bench-scene-chassis-coc1_m2_p5')),
           findsOneWidget, reason: 'the drag starts in the case view');
       final chip = find.byKey(const ValueKey('bench-part-ram_1'));
@@ -1381,6 +1403,173 @@ void main() {
           isNot(true),
           reason: 'the compound ring was not worked by the slot tap');
       semantics.dispose();
+    });
+
+    testWidgets('a tap beside a small ring works it; its reach is 48 dp',
+        (tester) async {
+      final harness = await _pump(tester, _stateAt(2));
+      final ring = tester
+          .getRect(find.byKey(const ValueKey('bench-hotspot-open_cpu_lever')));
+      final reach = tester.getRect(
+          find.byKey(const ValueKey('bench-ring-reach-open_cpu_lever')));
+      expect(ring.width, lessThan(48), reason: 'the drawn ring stays small');
+      expect(reach.width, greaterThanOrEqualTo(48));
+      expect(reach.height, greaterThanOrEqualTo(48));
+      // Right of the lever ring: outside the ring and outside every slot.
+      final beside = Offset(ring.right + ring.width * .4, ring.center.dy);
+      expect(reach.contains(beside), isTrue);
+      await tester.tapAt(beside);
+      await tester.pumpAndSettle();
+      expect(harness.controller.state.equipmentState['cpu_lever'], 'open');
+      expect(harness.lastValue('equipment_operation'),
+          containsPair('input_method', 'tap'));
+      expect(invalid(harness), 0);
+    });
+
+    testWidgets('with a part in hand a slot inside a ring reach takes the part',
+        (tester) async {
+      final harness = await _pump(tester, _stateAt(2));
+      await tapRing(tester, 'open_cpu_lever');
+      await _tapKey(tester, 'bench-part-cpu');
+      for (var i = 0; i < 3; i++) {
+        await _tapKey(tester, 'bench-rotate');
+      }
+      final ring = tester
+          .getRect(find.byKey(const ValueKey('bench-hotspot-close_cpu_lever')));
+      final reach = tester.getRect(
+          find.byKey(const ValueKey('bench-ring-reach-close_cpu_lever')));
+      final socket =
+          tester.getRect(find.byKey(const ValueKey('bench-slot-cpu_socket')));
+      // On the socket, beside the lever ring and inside its reach.
+      final point = Offset(ring.left - ring.width * .3, ring.center.dy);
+      expect(socket.contains(point) && reach.contains(point), isTrue);
+      await tester.tapAt(point);
+      await tester.pumpAndSettle();
+      expect(harness.controller.state.placements['cpu'], 'cpu_socket');
+      expect(harness.controller.state.equipmentState['cpu_lever'], 'open',
+          reason: 'the slot tap did not work the lever');
+      expect(invalid(harness), 0);
+    });
+
+    testWidgets('a tap on a part on the mat still inspects it', (tester) async {
+      final harness = await _pump(tester, _stateAt(1));
+      await tester.tap(find.byKey(const ValueKey('bench-inspect-psu')));
+      await tester.pumpAndSettle();
+      expect(harness.lastValue('object_inspected'), isNotNull,
+          reason: 'a ring reach never takes a part tap');
+    });
+  });
+
+  group('physical holds on the bench', () {
+    Future<void> tapRing(WidgetTester tester, String operation) async {
+      await tester.tap(find.byKey(ValueKey('bench-hotspot-$operation')));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a seated module comes out only with the latches open',
+        (tester) async {
+      final harness = await _pump(tester, _boardBuilt());
+      await _tapKey(tester, 'bench-part-ram_1');
+      await _tapKey(tester, 'bench-remove');
+      expect(harness.controller.state.placements['ram_1'], 'dimm_a2');
+      expect(find.text(MissionContentData.benchHeldByLatches), findsOneWidget);
+      expect(harness.lastValue('placement_removed'), isNull,
+          reason: 'a held module records nothing');
+      await _tapKey(tester, 'bench-cancel');
+      await tapRing(tester, 'open_dimm_latches');
+      await _tapKey(tester, 'bench-part-ram_1');
+      await _tapKey(tester, 'bench-remove');
+      expect(harness.controller.state.placements.containsKey('ram_1'), isFalse);
+      expect(harness.lastValue('placement_removed'),
+          containsPair('item_id', 'ram_1'));
+      expect((_turns(tester, 'ram_1') * 4).round() % 4, 0,
+          reason: 'the module comes out the way it was seated, not boxed');
+      await _tapKey(tester, 'bench-part-ram_1');
+      await _tapKey(tester, 'bench-slot-chip-dimm_a2');
+      expect(harness.controller.state.placements['ram_1'], 'dimm_a2',
+          reason: 'it goes straight back in without turning it again');
+    });
+
+    testWidgets('assessment says only that a held part cannot come out yet',
+        (tester) async {
+      final harness = await _pump(
+          tester, _boardBuilt(mode: MissionRuntimeMode.assessment));
+      await _tapKey(tester, 'bench-part-ram_1');
+      await _tapKey(tester, 'bench-remove');
+      expect(harness.controller.state.placements['ram_1'], 'dimm_a2');
+      final note = tester
+          .widget<Text>(
+              find.byKey(const ValueKey('assembly-bench-information')))
+          .data;
+      expect(note, MissionContentData.benchRemovalNotYet('Memory module 1'));
+      expect(note, isNot(contains('latch')),
+          reason: 'assessment does not name what to do');
+      expect(harness.lastValue('placement_removed'), isNull);
+    });
+
+    testWidgets('the cooler keeps the socket lever down and the CPU in place',
+        (tester) async {
+      final harness = await _pump(tester, _boardBuilt());
+      expect(find.byKey(const ValueKey('bench-hotspot-open_cpu_lever')),
+          findsNothing,
+          reason: 'the mounted cooler covers the lever');
+      expect(_enabled(tester, 'bench-operation-open_cpu_lever'), isTrue,
+          reason: 'the tray button stays, so it can say why');
+      await _tapKey(tester, 'bench-operation-open_cpu_lever');
+      expect(find.text(MissionContentData.benchLeverUnderCooler),
+          findsOneWidget);
+      expect(harness.controller.state.equipmentState['cpu_lever'], 'closed');
+      expect(harness.lastValue('equipment_operation'), isNull);
+
+      await _tapKey(tester, 'bench-part-cpu');
+      await _tapKey(tester, 'bench-remove');
+      expect(find.text(MissionContentData.benchHeldByCooler), findsOneWidget);
+      await _tapKey(tester, 'bench-cancel');
+      await _tapKey(tester, 'bench-part-cooler');
+      await _tapKey(tester, 'bench-remove');
+      expect(harness.controller.state.placements.containsKey('cooler'), isFalse);
+      expect(find.byKey(const ValueKey('bench-hotspot-open_cpu_lever')),
+          findsOneWidget,
+          reason: 'with the cooler off the lever can be lifted');
+
+      await _tapKey(tester, 'bench-part-cpu');
+      await _tapKey(tester, 'bench-remove');
+      expect(find.text(MissionContentData.benchHeldByLoadPlate),
+          findsOneWidget);
+      expect(harness.controller.state.placements['cpu'], 'cpu_socket');
+      await _tapKey(tester, 'bench-cancel');
+      await tapRing(tester, 'open_cpu_lever');
+      await _tapKey(tester, 'bench-part-cpu');
+      await _tapKey(tester, 'bench-remove');
+      expect(harness.controller.state.placements.containsKey('cpu'), isFalse);
+    });
+
+    testWidgets('a seated drive and power supply fill their bays',
+        (tester) async {
+      await _pump(tester, _stateAt(4));
+      for (final part in ['storage', 'psu']) {
+        final seat = find.byKey(ValueKey('bench-placed-$part'));
+        final bay = tester.getRect(seat);
+        final photo = tester.getRect(
+            find.descendant(of: seat, matching: find.byType(Image)).first);
+        final content = AssemblyBenchLayout.bayContent[part]!;
+        final visible = Rect.fromLTRB(
+            photo.left + content.left * photo.width,
+            photo.top + content.top * photo.height,
+            photo.left + content.right * photo.width,
+            photo.top + content.bottom * photo.height);
+        // Contain fit of the visible photograph, not of its margin.
+        expect(
+            visible.width / bay.width > .99 ||
+                visible.height / bay.height > .99,
+            isTrue,
+            reason: '$part spans its bay');
+        expect(
+            bay.inflate(.5).contains(visible.topLeft) &&
+                bay.inflate(.5).contains(visible.bottomRight),
+            isTrue,
+            reason: '$part stays inside its bay');
+      }
     });
   });
 }

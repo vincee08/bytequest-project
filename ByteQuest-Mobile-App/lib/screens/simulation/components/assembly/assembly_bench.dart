@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -233,8 +234,56 @@ class _AssemblyBenchState extends State<AssemblyBench> {
     });
   }
 
+  /// What physically holds a seated part in place, or null when it can be
+  /// lifted out: the DIMM latches hold a memory module, a mounted cooler and
+  /// the closed load plate hold the processor, and the installed motherboard
+  /// covers the I/O shield. The equipment rules accept any removal; the
+  /// bench refuses an impossible one before anything is recorded.
+  String? _removalHold(BenchPart part) {
+    final settings = widget.state.equipmentState;
+    final placements = widget.state.placements;
+    if (_itemSpec(part.id)['category'] == 'ddr4_dimm' &&
+        settings['dimm_latches'] != 'open') {
+      return MissionContentData.benchHeldByLatches;
+    }
+    if (part.id == 'cpu') {
+      if (placements['cooler'] != null) {
+        return MissionContentData.benchHeldByCooler;
+      }
+      if (settings['cpu_lever'] != 'open') {
+        return MissionContentData.benchHeldByLoadPlate;
+      }
+    }
+    if (part.id == 'io_shield' && placements['motherboard'] != null) {
+      return MissionContentData.benchHeldByMotherboard;
+    }
+    return null;
+  }
+
+  /// Equipment a mounted part blocks although the rules would allow it: the
+  /// cooler presses on the socket load plate, so the lever cannot be lifted
+  /// until the cooler is off. Closing a lever left open stays possible.
+  String? _operationHold(BenchOperation operation) =>
+      operation.id == 'open_cpu_lever' &&
+              widget.state.placements['cooler'] != null
+          ? MissionContentData.benchLeverUnderCooler
+          : null;
+
   Future<void> _remove(String partId) async {
-    setState(() => _selectedPart = null);
+    final part = AssemblyBenchModel.of(widget.phase, widget.state).part(partId);
+    if (part == null) return;
+    final hold = _removalHold(part);
+    if (hold != null) {
+      _explain(
+          _assessment ? MissionContentData.benchRemovalNotYet(part.label) : hold);
+      return;
+    }
+    setState(() {
+      // A part comes out the way it sat in its slot, so the hand and the
+      // tray keep its seating orientation instead of the boxed one.
+      _turns[partId] = _displayTurns(part);
+      _selectedPart = null;
+    });
     await _emit('placement_removed', partId,
         {'item_id': partId, 'input_method': 'tap'});
   }
@@ -248,6 +297,13 @@ class _AssemblyBenchState extends State<AssemblyBench> {
 
   Future<void> _operate(BenchOperation operation) {
     if (!operation.enabled) return Future.value();
+    final hold = _operationHold(operation);
+    if (hold != null) {
+      _explain(_assessment
+          ? MissionContentData.benchOperationNotYet(operation.label)
+          : hold);
+      return Future.value();
+    }
     return _emit('equipment_operation', operation.id,
         const {'input_method': 'tap'});
   }
@@ -276,10 +332,15 @@ class _AssemblyBenchState extends State<AssemblyBench> {
 
   /// A tap on equipment that cannot be worked yet (the mat ground stud
   /// before the strap is on) explains itself; nothing is recorded.
-  void _operationBlocked(BenchOperation operation) {
+  void _operationBlocked(BenchOperation operation) =>
+      _explain(MissionContentData.benchOperationNotYet(operation.label));
+
+  /// A gesture the bench refuses before the rules (a held part, blocked
+  /// equipment) answers over the feedback of the previous action.
+  void _explain(String text) {
     if (!_interactive) return;
     setState(() {
-      _hint = MissionContentData.benchOperationNotYet(operation.label);
+      _hint = text;
       _hintFirst = true;
       _dismissed = null;
     });
@@ -393,6 +454,10 @@ class _AssemblyBenchState extends State<AssemblyBench> {
     final focus = _guideFocus(model);
     final compatible = _compatible(model);
     final outlined = {...compatible, ..._focusTargets(model, focus)};
+    final held = {
+      for (final operation in model.operations)
+        if (_operationHold(operation) != null) operation.id,
+    };
     final reducedMotion = MediaQuery.disableAnimationsOf(context) ||
         widget.state.reducedMotion;
     // The part in hand, when it carries an orientation marker.
@@ -465,6 +530,7 @@ class _AssemblyBenchState extends State<AssemblyBench> {
                   compatible: compatible,
                   focus: focus,
                   outlined: outlined,
+                  held: held,
                   onTapSlot: (slot) => _tapSlot(slot, snap: true),
                   onTapHeader: _tapHeader,
                   onDropPart: (part, slot) =>
@@ -728,6 +794,7 @@ class _BenchCanvas extends StatelessWidget {
     required this.compatible,
     required this.focus,
     required this.outlined,
+    required this.held,
     required this.onTapSlot,
     required this.onTapHeader,
     required this.onDropPart,
@@ -752,6 +819,10 @@ class _BenchCanvas extends StatelessWidget {
   /// targets and the practice guide focus), drawn in canvas units so the
   /// outline follows the camera at any zoom, pan and viewport size.
   final Set<String> outlined;
+
+  /// Operations a mounted part physically blocks (the socket lever under
+  /// the cooler): no ring on the bench, like equipment not workable yet.
+  final Set<String> held;
   final ValueChanged<String> onTapSlot;
   final ValueChanged<String> onTapHeader;
   final void Function(String part, String slot) onDropPart;
@@ -884,21 +955,27 @@ class _BenchCanvas extends StatelessWidget {
         final rect = AssemblyBenchLayout.slot(entry.value, view);
         final asset = AssemblyBenchLayout.partAssets[entry.key];
         if (rect == null || asset == null) continue;
+        // The rules seat a keyed part only at its seating orientation (0°),
+        // so its marker sits over the mark on the bench.
+        final keyed = AssemblyBenchLayout.markers.containsKey(entry.key);
+        Widget photo(double? extent) => keyed
+            ? _PartImage(
+                id: entry.key,
+                asset: asset,
+                turns: 0,
+                reducedMotion: reducedMotion,
+                size: extent)
+            : Image(image: AssetImage(asset), fit: BoxFit.contain);
+        final content = AssemblyBenchLayout.bayContent[entry.key];
         children.add(Positioned.fromRect(
           key: ValueKey('bench-placed-${entry.key}'),
           rect: rect,
           child: _Seated(
             key: ValueKey('bench-seat-${entry.key}-${entry.value}'),
             reducedMotion: reducedMotion,
-            // The rules seat a keyed part only at its seating orientation
-            // (0°), so its marker sits over the mark on the bench.
-            child: AssemblyBenchLayout.markers.containsKey(entry.key)
-                ? _PartImage(
-                    id: entry.key,
-                    asset: asset,
-                    turns: 0,
-                    reducedMotion: reducedMotion)
-                : Image(image: AssetImage(asset), fit: BoxFit.contain),
+            child: content == null
+                ? photo(null)
+                : _FilledSeat(content: content, builder: photo),
           ),
         ));
       }
@@ -936,14 +1013,42 @@ class _BenchCanvas extends StatelessWidget {
     // lists them all. On the mat, where the strap and the ground stud are
     // always in view, a tap on equipment that cannot be worked yet explains
     // why instead of doing nothing.
-    final hotspots = <(BenchOperation, Rect)>[];
+    final rings = <_Ring>[];
     for (final operation in model.operations) {
       final rect = AssemblyBenchLayout.operation(operation.id, view);
       if (rect == null || operation.idle) continue;
-      final available = operation.enabled;
+      final available = operation.enabled && !held.contains(operation.id);
       if (!available && view != BenchView.mat) continue;
-      final area = _minimum(rect, 72);
-      if (available) hotspots.add((operation, area));
+      rings.add(_Ring(operation, _minimum(rect, 72),
+          _minimum(rect, AssemblyBenchLayout.ringReach), available));
+    }
+    final hotspots = [
+      for (final ring in rings)
+        if (ring.available) (ring.operation, ring.area),
+    ];
+    // A drawn ring is about 24 dp on a phone with the whole bench in view.
+    // Beneath the rings, slots and headers, a tap beside a ring (within its
+    // reach, at least 48 dp across) goes to the nearest ring; a slot or
+    // header over that spot still takes a tap while a part or cable is in
+    // hand. Only the reach areas take a tap, so a part on the mat keeps its
+    // own.
+    for (final ring in rings) {
+      children.add(Positioned.fromRect(
+        rect: ring.reach,
+        child: GestureDetector(
+          key: ValueKey('bench-ring-reach-${ring.operation.id}'),
+          behavior: HitTestBehavior.translucent,
+          excludeFromSemantics: true,
+          onTapUp: interactive
+              ? (details) =>
+                  _reachTap(ring.reach.topLeft + details.localPosition, rings)
+              : null,
+        ),
+      ));
+    }
+    for (final ring in rings) {
+      final (operation, area, available) =
+          (ring.operation, ring.area, ring.available);
       children.add(Positioned.fromRect(
         rect: area,
         child: _OperationHotspot(
@@ -975,6 +1080,26 @@ class _BenchCanvas extends StatelessWidget {
       center: rect.center,
       width: rect.width < minimum ? minimum : rect.width,
       height: rect.height < minimum ? minimum : rect.height);
+
+  /// A tap at [point] (canvas units) beside the rings: the ring nearest to
+  /// it among those whose reach holds it takes the tap; equipment that
+  /// cannot be worked yet explains itself. Elsewhere nothing happens.
+  void _reachTap(Offset point, List<_Ring> rings) {
+    _Ring? nearest;
+    var best = double.infinity;
+    for (final ring in rings) {
+      if (!ring.reach.contains(point)) continue;
+      final distance = (ring.area.center - point).distance;
+      if (distance < best) {
+        best = distance;
+        nearest = ring;
+      }
+    }
+    if (nearest == null) return;
+    nearest.available
+        ? onOperate(nearest.operation)
+        : onOperationBlocked(nearest.operation);
+  }
 
   /// A tap at [point] (canvas units) on a slot or header: a working ring
   /// there (a lever beside the socket, the thermal compound on the CPU, a
@@ -1078,6 +1203,44 @@ class _BenchCanvas extends StatelessWidget {
     }
     return widgets;
   }
+}
+
+/// One ring on the bench: its drawn [area], the larger [reach] a tap may
+/// land in, and whether the equipment can be worked now.
+final class _Ring {
+  const _Ring(this.operation, this.area, this.reach, this.available);
+
+  final BenchOperation operation;
+  final Rect area;
+  final Rect reach;
+  final bool available;
+}
+
+/// A square part photograph drawn so its visible [content] (fractions of
+/// the image), not the transparent margin around it, fills the bay it is
+/// seated in, at the photograph's own proportions.
+class _FilledSeat extends StatelessWidget {
+  const _FilledSeat({required this.content, required this.builder});
+
+  final Rect content;
+  final Widget Function(double extent) builder;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
+        final extent = math.min(
+            box.maxWidth / content.width, box.maxHeight / content.height);
+        return Stack(clipBehavior: Clip.none, children: [
+          Positioned(
+            left: (box.maxWidth - content.width * extent) / 2 -
+                content.left * extent,
+            top: (box.maxHeight - content.height * extent) / 2 -
+                content.top * extent,
+            width: extent,
+            height: extent,
+            child: builder(extent),
+          ),
+        ]);
+      });
 }
 
 /// Seat animation: the part settles into its slot (none with reduced motion).
