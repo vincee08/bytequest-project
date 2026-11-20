@@ -61,6 +61,26 @@ OpenRouter 429), 0 FAIL.
 - The class assign form offers COC1 M2 "Install Internal Components — simulation assessment" (Simulation assessment). Existing assignments still point to the v1 forms; make a new assignment to use the bench.
 - The `sb_secret_` key was erased from `.tmp/production-publish.env`; a scan of 3,392 files found no copy.
 
+**D5 migration applied to production (2026-11-20, about 17:30 Manila, owner-approved):**
+
+- **What it is:** `20261120110000_result_release_notifications` notifies learners when a quiz result or an assessment result is released.
+- **Backup:** a fresh encrypted read-only backup at `%LOCALAPPDATA%\ByteQuest\Recovery\rslmteqipxqfifwftugk-20261120-d5`.
+  - Snapshot `0000000E-00002DE7-1`: 148 relations, 7,430 rows.
+  - Restored into an isolated container: all 148 row hashes match.
+  - The Free plan has no platform backups.
+  - The backup script now waits for the pooler to accept the temporary login role. The first two attempts failed on that before reading anything; their folders are kept as `…-d5-failed-attempt1/2` and hold only a key.
+- **Rehearsal:** the exact batch (`.tmp/release-d5/batch-b.sql`, sha256 `6a4a6310…`) on the restored copy changed no pre-existing rows (7,158 rows checked), and 42/42 SQL suites passed there.
+- **Apply:** `supabase db query --linked -f .tmp/release-d5/batch-b.sql`. Not `db push`.
+- **Verification:** production now equals the rehearsed copy:
+  - version recorded (102 versions);
+  - function source md5 `ba034ddc…`;
+  - trigger md5 `6ae35387…`, with both release actions;
+  - ACL and SECURITY INVOKER unchanged.
+  - The read-back reports no public table without RLS and 20 published simulation assessments.
+- **Screenshots:** the instructor's display name was redacted in d01–d03 before the push, by rewriting only the unpushed commits.
+- **APK:** release blocked. Neither the learners' signing certificate `a4d01056…` nor the 11-13 production key `dc85ef75…` is on this PC; a full-disk search found only this PC's debug key and two Expo template keys.
+- **Next:** the push to `vince-branch` and a PR into `main` follow this commit. The teammate deploys `main` to Vercel production.
+
 **Post-publish verification (2026-11-20, later; report §8):**
 
 - **PASS:**
@@ -84,7 +104,7 @@ OpenRouter 429), 0 FAIL.
   `node scripts/publish-simulation-assessments.mjs --target hosted --confirm` with the service-role
   key. Until then an assigned COC1 M2 assessment opens the legacy form, not the bench.
 - B2: restore OpenRouter capacity (429 on every request).
-- B3: push, merge, Vercel promotion, apply `20261120110000` to production, new APK.
+- B3: ~~apply `20261120110000` to production~~ done; push and merge follow this commit. Still open: the Vercel production deploy (the teammate) and a new APK (blocked on the signing key).
 - Change the weak admin and instructor test passwords after the defense.
 - APK signing decision for the 1.2.0 release:
   - Learners' 1.1.0 is signed with `a4d01056…`, which is not on this PC.

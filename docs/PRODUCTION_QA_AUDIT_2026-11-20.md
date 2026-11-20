@@ -168,7 +168,7 @@ D6, D8). D2 was additionally verified live against production from the web build
 |---|---|---|
 | B1 | **Resolved 2026-11-20 (owner-approved publish, verified read-only: +20 versions, +20 rubrics, +106 criteria, +40 links, no existing row changed).** Before: production had no published simulation assessment packages. An **assigned** COC1 M2 assessment opens the legacy five-stage form, not the bench; practice uses the bench. | Dry-run, then `node scripts/publish-simulation-assessments.mjs --target hosted --confirm` with the production service-role key (needs approval). |
 | B2 | OpenRouter answers 429 on every AI generation (also today). | Add credits or change the model/key in Vercel production; re-test one generation. |
-| B3 | D1–D10 are local only. | Approve: push `vince-branch`, merge, Vercel promotion; apply `20261120110000` to production; build a new APK. |
+| B3 | D1–D10 are local only. **Update 2026-11-20:** `20261120110000` is applied to production and verified (§9). The push to `vince-branch` and a PR into `main` follow the §9 commit. | Remaining: the Vercel production deploy of `main` (the teammate) and a new APK (blocked: the original signing key is not on this PC, §9). |
 | O1 | One transient production 500 on `criterion_results` (learner app); the same request returned 200 at once. | Watch; not reproducible. |
 | O2 | Opening a released assessment that allows retries starts a new attempt without a confirmation (from the local audit). | Not changed; D5 avoids offering that path from the notification. |
 | O3 | An open homework screen does not refresh itself on release (from the local audit). | Not changed; notification and Progress update live. |
@@ -247,3 +247,27 @@ The release signing decision is still open:
 | F2 | After submitting, Exit shows "Your current mission progress will remain available when you return." | Use submitted-state copy, or skip the dialog. |
 | F3 | The class sheet lists the submitted assessment with only "Open activity" (Home shows "Awaiting instructor review"); with retry enabled, opening it can start attempt 2. | Show the status in the class sheet. |
 | F4 | `test_run_interaction.dart` hardcodes "Run test", "Record test interpretation" and related labels (AGENTS 3.2). | Move them to `mission_content_data.dart`. |
+
+## 9. Production migration `20261120110000` (D5) and release state (2026-11-20)
+
+The owner approved this step; the owner signed in to the Supabase dashboard themselves.
+
+| Step | Result |
+|---|---|
+| Target | The dashboard and the CLI both show the ByteQuest project `rslmteqipxqfifwftugk` (production, Free plan). The dashboard states "Free Plan does not include project backups". |
+| Backup | A fresh encrypted read-only logical backup in `%LOCALAPPDATA%\ByteQuest\Recovery\rslmteqipxqfifwftugk-20261120-d5`: snapshot `0000000E-00002DE7-1`, 148 relations, 7,430 rows, TLS verify-full, AES-256-GCM with a DPAPI key. The first two attempts failed before reading any data, because the pooler did not yet accept the fresh temporary login-role password. The script now probes with `SELECT 1` and retries that error only (commit `002b2d7`). |
+| Restore check | The backup was restored into a network-disabled tmpfs container. All 148 relations' row hashes match. |
+| Rehearsal | `scripts/release-migration-batches.mjs --from 20261120110000` produced one batch containing only this migration, plus an already-applied guard, timeouts and the version record (sha256 `6a4a6310…`). On the restored copy it ran in 0.13 s, changed none of the 7,158 pre-existing rows checked, and 42/42 SQL suites passed. |
+| Pre-check (production) | The version was not recorded (101 versions), and the old function and trigger were present (md5 `22a60882…` / `3585e971…`). |
+| Apply | The batch hash matched the manifest and the rehearsal evidence; then `supabase db query --linked -f .tmp/release-d5/batch-b.sql` ran, exit 0. `db push` was not used. |
+| Verification | Production now equals the rehearsed copy on all nine fingerprint fields: version recorded (102), function md5 `ba034ddc…`, trigger md5 `6ae35387…` with `quiz_result.released` and `result.released`, SECURITY INVOKER, `search_path=''`, ACL `postgres` only, trigger enabled. `scripts/release-readback.sql` reports latest version `20261120110000`, no public table without RLS, and 20 published simulation assessments. |
+
+**Screenshots.** OCR of all 24 screenshots at 3× scale found the instructor's display name only in d01–d03 (the header account chip). Those three were redacted ("Name redacted"), and OCR then found no part of the name. The unpushed commits were rewritten so the original images never reach GitHub.
+
+**APK.** The release is blocked on signing:
+- the learners' 1.1.0 is signed with `a4d01056…`;
+- this PC's only Android key is its own debug key `271cbbf0…`, created 2026-07-31;
+- the 11-13 production key `dc85ef75…` and `android/key.properties` are absent;
+- a full-disk search found only two Expo template debug keys (`FA:C6:17:45…`).
+
+An APK signed with any of these keys would not install over the learners' app without an uninstall, so none was built.
