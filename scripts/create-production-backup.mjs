@@ -127,6 +127,23 @@ try {
   run(['run', '-d', '--rm', '--name', container, '--read-only', '--tmpfs', '/tmp:rw,size=16m', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
     '-v', `${caFile}:/bq-ca/root.crt:ro`, '--entrypoint', 'sh', image, '-c', 'sleep 900']);
 
+  // 0. The pooler can take a few seconds to accept a freshly issued login-role
+  // password (the Supabase CLI retries the same way). Probe with a read-only
+  // SELECT 1 and retry only that authentication error, well inside the TTL.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      run(['exec', ...env.flatMap((e) => ['-e', e]), container, 'sh', '-c', 'psql "$BQ_CONN" -X -q -A -t -v ON_ERROR_STOP=1 -c "select 1"']);
+      evidence.login_attempts = attempt;
+      break;
+    } catch (error) {
+      const message = String(error.stderr ?? error.message);
+      if (attempt >= 12 || !/password authentication failed/i.test(message)) {
+        throw new Error(`The login role was not accepted: ${message.replace(/password[^\s]*/gi, '***').slice(0, 300)}`);
+      }
+      await new Promise((r) => setTimeout(r, 5000));
+    }
+  }
+
   // 1. Hold one READ ONLY snapshot open and export it.
   const holder = spawn(docker, ['exec', '-i', ...env.flatMap((e) => ['-e', e]), container, 'sh', '-c',
     'psql "$BQ_CONN" -X -q -A -t -v ON_ERROR_STOP=1'], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
