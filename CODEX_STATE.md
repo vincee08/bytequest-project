@@ -87,7 +87,7 @@ OpenRouter 429), 0 FAIL.
   - A new TEST ONLY COC1 M2 v2 assignment opened the bench in assessment mode on the emulator.
   - Submitted with deliberate errors, it auto-evaluated 10/11 (provisional, stage Evaluate, not released). C3 failed by its zero-tolerance rule after one wrong-orientation CPU attempt.
 - **PASS:** a read-only check of all 20 packages (versions, rubrics, 106 criteria, 40 links, payload hashes equal to the local packages, app contract versions).
-- **Gates at `6c41503`:**
+- **Gates at `575af68`:**
   - Flutter: 735 passed, 1 skipped; analyze 0 errors and 0 warnings (210 infos).
   - Dashboard: tsc, lint, 226 tests and build pass.
   - SQL: 42/42.
@@ -97,7 +97,7 @@ OpenRouter 429), 0 FAIL.
   - The Vercel CLI token on this PC is invalid.
   - OpenRouter is configured in production (`configured: true`, not simulated); its capacity was last seen as 429.
 - **New minor findings F1–F4** (task panel height in phase 5, post-submit exit copy, class sheet status, hardcoded test-run labels) are not fixed.
-- **Emulator:** it now runs the `6c41503` debug build. To revert, run `adb install -r` with `build/app/outputs/flutter-apk/app-debug.apk`.
+- **Emulator:** it now runs the debug build of `575af68`. To revert, run `adb install -r` with `build/app/outputs/flutter-apk/app-debug.apk`.
 
 **Owner actions (need approval):**
 - ~~B1~~ done (see above). Old note: publish the simulation assessment packages to production. Dry-run first, then

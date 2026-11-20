@@ -226,7 +226,7 @@ on it. Nothing was evaluated, finalized, released, pushed, merged, deployed or m
 - COC1 M2 uses `css-assembly-20261119-v3` with the 11 criteria above.
 - `evaluator_config` returns 403 even for an admin session, by design.
 
-**APK.** The working tree at `6c41503` builds a debug APK with the production defines:
+**APK.** The working tree at `575af68` builds a debug APK with the production defines:
 - 236,675,164 bytes, 1.2.0 (3);
 - signed with this PC's debug certificate `271cbbf0…`.
 
@@ -255,7 +255,7 @@ The owner approved this step; the owner signed in to the Supabase dashboard them
 | Step | Result |
 |---|---|
 | Target | The dashboard and the CLI both show the ByteQuest project `rslmteqipxqfifwftugk` (production, Free plan). The dashboard states "Free Plan does not include project backups". |
-| Backup | A fresh encrypted read-only logical backup in `%LOCALAPPDATA%\ByteQuest\Recovery\rslmteqipxqfifwftugk-20261120-d5`: snapshot `0000000E-00002DE7-1`, 148 relations, 7,430 rows, TLS verify-full, AES-256-GCM with a DPAPI key. The first two attempts failed before reading any data, because the pooler did not yet accept the fresh temporary login-role password. The script now probes with `SELECT 1` and retries that error only (commit `002b2d7`). |
+| Backup | A fresh encrypted read-only logical backup in `%LOCALAPPDATA%\ByteQuest\Recovery\rslmteqipxqfifwftugk-20261120-d5`: snapshot `0000000E-00002DE7-1`, 148 relations, 7,430 rows, TLS verify-full, AES-256-GCM with a DPAPI key. The first two attempts failed before reading any data, because the pooler did not yet accept the fresh temporary login-role password. The script now probes with `SELECT 1` and retries that error only (commit "Wait for the pooler to accept the backup login role"). |
 | Restore check | The backup was restored into a network-disabled tmpfs container. All 148 relations' row hashes match. |
 | Rehearsal | `scripts/release-migration-batches.mjs --from 20261120110000` produced one batch containing only this migration, plus an already-applied guard, timeouts and the version record (sha256 `6a4a6310…`). On the restored copy it ran in 0.13 s, changed none of the 7,158 pre-existing rows checked, and 42/42 SQL suites passed. |
 | Pre-check (production) | The version was not recorded (101 versions), and the old function and trigger were present (md5 `22a60882…` / `3585e971…`). |
