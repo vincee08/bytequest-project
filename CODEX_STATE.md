@@ -54,8 +54,15 @@ OpenRouter 429), 0 FAIL.
 - two practice runs;
 - curriculum topic "TEST ONLY QA topic 2026-11-20 (do not publish)", Submitted.
 
+**B1 resolved (2026-11-20, about 15:55 Manila, owner-approved):** the 20 simulation assessment packages were published to production with `scripts/publish-simulation-assessments.mjs --target hosted --confirm`.
+- The pre-publish dry run gave VALIDATED, 20 missions, 106 scored steps and no conflicts (24 reads, no writes).
+- Read-only before/after verification: +20 assessment versions (v2, published), +20 approved rubrics, +106 rubric criteria, +40 curriculum links (20 simulation, 19 form-based, 1 protected reference) and +60 audit events. No existing row was changed or removed in the 12 checked tables (v1 assessments, rubrics, assignments, attempts, profiles, memberships, practice runs, quiz attempts, modules, sources).
+- The temporary release admin is deactivated and banned until 2126, and a sign-in is refused.
+- The class assign form offers COC1 M2 "Install Internal Components — simulation assessment" (Simulation assessment). Existing assignments still point to the v1 forms; make a new assignment to use the bench.
+- The `sb_secret_` key was erased from `.tmp/production-publish.env`; a scan of 3,392 files found no copy.
+
 **Owner actions (need approval):**
-- B1: publish the simulation assessment packages to production. Dry-run first, then
+- ~~B1~~ done (see above). Old note: publish the simulation assessment packages to production. Dry-run first, then
   `node scripts/publish-simulation-assessments.mjs --target hosted --confirm` with the service-role
   key. Until then an assigned COC1 M2 assessment opens the legacy form, not the bench.
 - B2: restore OpenRouter capacity (429 on every request).

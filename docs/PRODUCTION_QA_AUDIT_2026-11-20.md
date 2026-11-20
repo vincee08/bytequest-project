@@ -166,7 +166,7 @@ D6, D8). D2 was additionally verified live against production from the web build
 
 | # | Item | Owner action |
 |---|---|---|
-| B1 | Production has no published simulation assessment packages. An **assigned** COC1 M2 assessment opens the legacy five-stage form, not the bench; practice uses the bench. | Dry-run, then `node scripts/publish-simulation-assessments.mjs --target hosted --confirm` with the production service-role key (needs approval). |
+| B1 | **Resolved 2026-11-20 (owner-approved publish, verified read-only: +20 versions, +20 rubrics, +106 criteria, +40 links, no existing row changed).** Before: production had no published simulation assessment packages. An **assigned** COC1 M2 assessment opens the legacy five-stage form, not the bench; practice uses the bench. | Dry-run, then `node scripts/publish-simulation-assessments.mjs --target hosted --confirm` with the production service-role key (needs approval). |
 | B2 | OpenRouter answers 429 on every AI generation (also today). | Add credits or change the model/key in Vercel production; re-test one generation. |
 | B3 | D1–D10 are local only. | Approve: push `vince-branch`, merge, Vercel promotion; apply `20261120110000` to production; build a new APK. |
 | O1 | One transient production 500 on `criterion_results` (learner app); the same request returned 200 at once. | Watch; not reproducible. |
