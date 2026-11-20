@@ -122,12 +122,8 @@ class AssemblyBenchPainter extends CustomPainter {
           ..color = const Color(0xFFCBD3E0)
           ..strokeWidth = 3.2 * unit
           ..strokeCap = StrokeCap.round);
-    if (settings['thermal_compound'] == true &&
-        placements['cpu'] != null &&
-        placements['cooler'] == null) {
-      canvas.drawCircle(socket.center, 7 * unit,
-          Paint()..color = const Color(0xFFD9DDE3));
-    }
+    // Thermal compound is drawn by the bench over the seated processor
+    // photograph; this painter lies beneath the photographs.
     final latchesOpen = settings['dimm_latches'] == 'open';
     for (final id in const ['dimm_a1', 'dimm_a2', 'dimm_b1', 'dimm_b2']) {
       final slot = AssemblyBenchLayout.slot(id, view)!;

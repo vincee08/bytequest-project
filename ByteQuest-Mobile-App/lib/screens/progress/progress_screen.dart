@@ -668,39 +668,44 @@ class _ResultCard extends StatelessWidget {
               Theme(
                 data: Theme.of(context)
                     .copyWith(dividerColor: Colors.transparent),
-                child: ExpansionTile(
-                  tilePadding: EdgeInsets.zero,
-                  title: Text(LearningContentData.criterionFeedback,
-                      style: AppTheme.labelLarge
-                          .copyWith(fontWeight: FontWeight.w800)),
-                  subtitle: Text(LearningContentData.criterionFeedbackDetail,
-                      style: AppTheme.bodySmall),
-                  children: [
-                    for (final criterion in result.criteria)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(
-                                  criterion.isSatisfied
-                                      ? Icons.check_circle_outline
-                                      : Icons.error_outline,
-                                  size: 20,
-                                  color: criterion.isSatisfied
-                                      ? AppTheme.accentGreen
-                                      : AppTheme.warningYellow),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  '${criterion.code} · ${criterion.title}\n'
-                                  '${criterion.isSatisfied ? LearningContentData.satisfied : LearningContentData.notSatisfied}',
-                                  style: AppTheme.bodySmall,
+                // The card paints a background; the tile needs its own
+                // transparent Material so its ink splash stays visible.
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: Text(LearningContentData.criterionFeedback,
+                        style: AppTheme.labelLarge
+                            .copyWith(fontWeight: FontWeight.w800)),
+                    subtitle: Text(LearningContentData.criterionFeedbackDetail,
+                        style: AppTheme.bodySmall),
+                    children: [
+                      for (final criterion in result.criteria)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 6),
+                          child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                    criterion.isSatisfied
+                                        ? Icons.check_circle_outline
+                                        : Icons.error_outline,
+                                    size: 20,
+                                    color: criterion.isSatisfied
+                                        ? AppTheme.accentGreen
+                                        : AppTheme.warningYellow),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    '${criterion.code} · ${criterion.title}\n'
+                                    '${criterion.isSatisfied ? LearningContentData.satisfied : LearningContentData.notSatisfied}',
+                                    style: AppTheme.bodySmall,
+                                  ),
                                 ),
-                              ),
-                            ]),
-                      ),
-                  ],
+                              ]),
+                        ),
+                    ],
+                  ),
                 ),
               ),
           ]),

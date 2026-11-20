@@ -250,6 +250,22 @@ abstract final class AssemblyBenchLayout {
   /// Height of the memory slot key (and the module notch) along the slot.
   static const dimmKeyFraction = .49;
 
+  /// Visible part of a bay part's photograph at its seating orientation, as
+  /// fractions of the square image; the rest is transparent margin. A part
+  /// seated in a case bay is drawn so this box, not the margin, fills the
+  /// bay. Measured from the alpha channel of the photographs (the power
+  /// supply after its base half turn).
+  static const bayContent = {
+    'psu': Rect.fromLTRB(.264, .098, .734, .906),
+    'storage': Rect.fromLTRB(.194, .056, .808, .936),
+  };
+
+  /// Smallest touch area of a ring on the bench, in canvas units: with the
+  /// whole bench in view, 160 units are 48 dp on a 360 dp wide phone and
+  /// 55 dp on a 412 dp one. The ring keeps its drawn size; a tap in the area
+  /// around it goes to the nearest ring.
+  static const ringReach = 160.0;
+
   /// The default view for a phase; [selection] can bring the close-up.
   static BenchView viewFor(String phaseId, {bool closeUp = false}) {
     if (phaseId.endsWith('_p1')) return BenchView.mat;

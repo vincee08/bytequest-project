@@ -113,22 +113,10 @@ class _MissionsScreenState extends State<MissionsScreen>
     }
   }
 
-  String _normalizeCode(String value) =>
-      value.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
-
-  Mission? _resolveLocalMission(AssignedActivity assignment) {
-    final payloadCode =
-        assignment.learnerPayload['local_mission_code'] as String?;
-    final target = _normalizeCode(payloadCode ?? assignment.missionCode);
-
-    for (final mission in MissionsData.getAllMissions()) {
-      if (_normalizeCode(mission.missionCode) == target ||
-          _normalizeCode(mission.id) == target) {
-        return mission;
-      }
-    }
-    return null;
-  }
+  Mission? _resolveLocalMission(AssignedActivity assignment) =>
+      MissionsData.resolveAssigned(
+          learnerPayload: assignment.learnerPayload,
+          missionCode: assignment.missionCode);
 
   Future<void> _launchAssigned(AssignedActivity assignment) async {
     final mission = _resolveLocalMission(assignment);

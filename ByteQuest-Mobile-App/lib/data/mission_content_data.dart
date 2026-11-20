@@ -782,6 +782,24 @@ class MissionContentData {
   static const benchDismissInformation = 'Hide this note';
   static const benchDropOnTarget =
       'Release the part over a slot, bay or header on the bench.';
+  // Neutral in both modes: it names the equipment, never the next step.
+  static String benchOperationNotYet(String label) =>
+      '$label is not possible yet. Finish the work it depends on first.';
+
+  // Physical holds on the bench. Nothing is recorded for a held part or
+  // lever; practice names what holds it, assessment only that it is held.
+  static const benchHeldByLatches =
+      'The DIMM latches hold the module in its slot. Open the latches to release it, then lift it out.';
+  static const benchHeldByLoadPlate =
+      'The socket load plate holds the processor down. Open the load lever before lifting the processor out.';
+  static const benchHeldByCooler =
+      'The cooler sits on top of the processor. Take the cooler off before lifting the processor out.';
+  static const benchHeldByMotherboard =
+      'The installed motherboard covers the I/O shield. Remove the motherboard before taking the shield out.';
+  static const benchLeverUnderCooler =
+      'The mounted cooler presses on the socket load plate. Take the cooler off before lifting the load lever.';
+  static String benchRemovalNotYet(String part) =>
+      '$part cannot be removed yet. Finish the work it depends on first.';
 
   // Orientation markers on keyed parts. The name states where the marker is
   // now, in quarter turns clockwise from 0°; it never says whether that

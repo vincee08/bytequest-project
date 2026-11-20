@@ -183,8 +183,7 @@ class _ClassDetailsScreenState extends State<ClassDetailsScreen> {
   Future<void> _start(AssignedActivity assignment) async {
     setState(() => _startingId = assignment.id);
     try {
-      final missionId = assignment.missionId;
-      final localMission = _resolveMission(missionId);
+      final localMission = _resolveMission(assignment);
       if (localMission == null) {
         throw StateError(
             'This activity has no installed mobile simulation mapping.');
@@ -222,11 +221,13 @@ class _ClassDetailsScreenState extends State<ClassDetailsScreen> {
     }
   }
 
-  Mission? _resolveMission(String missionId) {
-    // Class detail uses the same installed catalog resolver as Learn. Keeping
-    // this lookup local avoids creating a second mission data source.
-    return MissionsData.getMissionById(missionId);
-  }
+  // The assignment names its mission by a database UUID; the shared resolver
+  // maps it through the mission code to the installed simulation, as the
+  // Missions tab does.
+  Mission? _resolveMission(AssignedActivity assignment) =>
+      MissionsData.resolveAssigned(
+          learnerPayload: assignment.learnerPayload,
+          missionCode: assignment.missionCode);
 
   Future<void> _openResource(LearningResource resource) async {
     await Navigator.push(

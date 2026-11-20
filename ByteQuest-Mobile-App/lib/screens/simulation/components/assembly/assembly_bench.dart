@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -72,6 +73,11 @@ class _AssemblyBenchState extends State<AssemblyBench> {
   bool _applying = false;
   String? _inspected;
   String? _hint;
+
+  /// The hint answers the learner's latest gesture (a drop that missed every
+  /// target, equipment that cannot be worked yet), so it shows over the
+  /// feedback of the previous action until the next action.
+  bool _hintFirst = false;
   String? _dismissed;
   String? _reportedMode;
   late final DateTime _mountedAt = DateTime.now();
@@ -92,6 +98,7 @@ class _AssemblyBenchState extends State<AssemblyBench> {
       _closeUp = false;
       _inspected = null;
       _hint = null;
+      _hintFirst = false;
       _dismissed = null;
       _reportedMode = null;
     }
@@ -184,6 +191,7 @@ class _AssemblyBenchState extends State<AssemblyBench> {
     setState(() {
       _applying = true;
       _hint = hint;
+      _hintFirst = false;
       // The drop (or a tap) ends any drag in hand.
       _dragging = null;
       // A new action may repeat an earlier message; show it again.
@@ -226,8 +234,56 @@ class _AssemblyBenchState extends State<AssemblyBench> {
     });
   }
 
+  /// What physically holds a seated part in place, or null when it can be
+  /// lifted out: the DIMM latches hold a memory module, a mounted cooler and
+  /// the closed load plate hold the processor, and the installed motherboard
+  /// covers the I/O shield. The equipment rules accept any removal; the
+  /// bench refuses an impossible one before anything is recorded.
+  String? _removalHold(BenchPart part) {
+    final settings = widget.state.equipmentState;
+    final placements = widget.state.placements;
+    if (_itemSpec(part.id)['category'] == 'ddr4_dimm' &&
+        settings['dimm_latches'] != 'open') {
+      return MissionContentData.benchHeldByLatches;
+    }
+    if (part.id == 'cpu') {
+      if (placements['cooler'] != null) {
+        return MissionContentData.benchHeldByCooler;
+      }
+      if (settings['cpu_lever'] != 'open') {
+        return MissionContentData.benchHeldByLoadPlate;
+      }
+    }
+    if (part.id == 'io_shield' && placements['motherboard'] != null) {
+      return MissionContentData.benchHeldByMotherboard;
+    }
+    return null;
+  }
+
+  /// Equipment a mounted part blocks although the rules would allow it: the
+  /// cooler presses on the socket load plate, so the lever cannot be lifted
+  /// until the cooler is off. Closing a lever left open stays possible.
+  String? _operationHold(BenchOperation operation) =>
+      operation.id == 'open_cpu_lever' &&
+              widget.state.placements['cooler'] != null
+          ? MissionContentData.benchLeverUnderCooler
+          : null;
+
   Future<void> _remove(String partId) async {
-    setState(() => _selectedPart = null);
+    final part = AssemblyBenchModel.of(widget.phase, widget.state).part(partId);
+    if (part == null) return;
+    final hold = _removalHold(part);
+    if (hold != null) {
+      _explain(
+          _assessment ? MissionContentData.benchRemovalNotYet(part.label) : hold);
+      return;
+    }
+    setState(() {
+      // A part comes out the way it sat in its slot, so the hand and the
+      // tray keep its seating orientation instead of the boxed one.
+      _turns[partId] = _displayTurns(part);
+      _selectedPart = null;
+    });
     await _emit('placement_removed', partId,
         {'item_id': partId, 'input_method': 'tap'});
   }
@@ -241,6 +297,13 @@ class _AssemblyBenchState extends State<AssemblyBench> {
 
   Future<void> _operate(BenchOperation operation) {
     if (!operation.enabled) return Future.value();
+    final hold = _operationHold(operation);
+    if (hold != null) {
+      _explain(_assessment
+          ? MissionContentData.benchOperationNotYet(operation.label)
+          : hold);
+      return Future.value();
+    }
     return _emit('equipment_operation', operation.id,
         const {'input_method': 'tap'});
   }
@@ -254,9 +317,39 @@ class _AssemblyBenchState extends State<AssemblyBench> {
     setState(() => _turns[part.id] = _turnsFor(part) + 1);
   }
 
+  /// A part or connector released over no slot, bay or header goes back to
+  /// the tray. Say where it has to be released instead of doing nothing;
+  /// nothing is recorded.
+  void _dropMissed() {
+    if (!mounted) return;
+    setState(() {
+      _dragging = null;
+      _hint = MissionContentData.benchDropOnTarget;
+      _hintFirst = true;
+      _dismissed = null;
+    });
+  }
+
+  /// A tap on equipment that cannot be worked yet (the mat ground stud
+  /// before the strap is on) explains itself; nothing is recorded.
+  void _operationBlocked(BenchOperation operation) =>
+      _explain(MissionContentData.benchOperationNotYet(operation.label));
+
+  /// A gesture the bench refuses before the rules (a held part, blocked
+  /// equipment) answers over the feedback of the previous action.
+  void _explain(String text) {
+    if (!_interactive) return;
+    setState(() {
+      _hint = text;
+      _hintFirst = true;
+      _dismissed = null;
+    });
+  }
+
   void _selectPart(BenchPart part) {
     if (!_interactive) return;
     setState(() {
+      _hintFirst = false;
       _selectedCable = null;
       _selectedPart = _selectedPart == part.id ? null : part.id;
       _hint = _selectedPart == null
@@ -272,6 +365,7 @@ class _AssemblyBenchState extends State<AssemblyBench> {
   void _selectCable(BenchCable cable) {
     if (!_interactive) return;
     setState(() {
+      _hintFirst = false;
       _selectedPart = null;
       _selectedCable = _selectedCable == cable.id ? null : cable.id;
       _hint = _selectedCable == null
@@ -286,6 +380,7 @@ class _AssemblyBenchState extends State<AssemblyBench> {
         _selectedPart = null;
         _selectedCable = null;
         _hint = null;
+        _hintFirst = false;
       });
 
   void _tapSlot(String slotId, {bool snap = false}) {
@@ -359,6 +454,10 @@ class _AssemblyBenchState extends State<AssemblyBench> {
     final focus = _guideFocus(model);
     final compatible = _compatible(model);
     final outlined = {...compatible, ..._focusTargets(model, focus)};
+    final held = {
+      for (final operation in model.operations)
+        if (_operationHold(operation) != null) operation.id,
+    };
     final reducedMotion = MediaQuery.disableAnimationsOf(context) ||
         widget.state.reducedMotion;
     // The part in hand, when it carries an orientation marker.
@@ -374,7 +473,8 @@ class _AssemblyBenchState extends State<AssemblyBench> {
       BenchView.chassis => MissionContentData.benchChassisView,
     };
     final canToggle = widget.phase.id.endsWith('_p5');
-    final information = widget.feedback ??
+    final information = (_hintFirst ? _hint : null) ??
+        widget.feedback ??
         _hint ??
         (_inspected == null
             ? null
@@ -402,44 +502,46 @@ class _AssemblyBenchState extends State<AssemblyBench> {
           Expanded(
             child: Stack(fit: StackFit.expand, children: [
               SimulationScene(
-              key: ValueKey('bench-scene-${view.name}-${widget.phase.id}'),
-              scene: SimulationSceneDefinition(
-                id: '${widget.definition.id}_assembly_bench',
-                objects: const [],
-                initialStatus: {'title': viewTitle, 'prompt': viewTitle},
+                key: ValueKey('bench-scene-${view.name}-${widget.phase.id}'),
+                scene: SimulationSceneDefinition(
+                  id: '${widget.definition.id}_assembly_bench',
+                  objects: const [],
+                  initialStatus: {'title': viewTitle, 'prompt': viewTitle},
+                ),
+                compactToolbar: true,
+                showObjectsButton: false,
+                enabled: widget.enabled,
+                panEnabled: widget.enabled,
+                scrollEnabled: !widget.saving,
+                initialCameraScale: widget.state.cameraScale,
+                initialCameraOffset: Offset(
+                    widget.state.cameraOffsetX, widget.state.cameraOffsetY),
+                onCameraChanged: widget.onCameraChanged,
+                onObjectSelected: (_) {},
+                backgroundRenderer: _BenchCanvas(
+                  model: model,
+                  view: view,
+                  state: widget.state,
+                  interactive: _interactive,
+                  assessment: _assessment,
+                  reducedMotion: reducedMotion,
+                  selectedPart: _selectedPart,
+                  selectedCable: _selectedCable,
+                  compatible: compatible,
+                  focus: focus,
+                  outlined: outlined,
+                  held: held,
+                  onTapSlot: (slot) => _tapSlot(slot, snap: true),
+                  onTapHeader: _tapHeader,
+                  onDropPart: (part, slot) =>
+                      unawaited(_place(part, slot, 'drag', snap: true)),
+                  onDropCable: (cable, header) =>
+                      unawaited(_connect(cable, header, 'drag')),
+                  onOperate: (operation) => unawaited(_operate(operation)),
+                  onOperationBlocked: _operationBlocked,
+                  onInspect: (object) => unawaited(_inspect(object)),
+                ),
               ),
-              compactToolbar: true,
-              showObjectsButton: false,
-              enabled: widget.enabled,
-              panEnabled: widget.enabled,
-              scrollEnabled: !widget.saving,
-              initialCameraScale: widget.state.cameraScale,
-              initialCameraOffset: Offset(
-                  widget.state.cameraOffsetX, widget.state.cameraOffsetY),
-              onCameraChanged: widget.onCameraChanged,
-              onObjectSelected: (_) {},
-              backgroundRenderer: _BenchCanvas(
-                model: model,
-                view: view,
-                state: widget.state,
-                interactive: _interactive,
-                assessment: _assessment,
-                reducedMotion: reducedMotion,
-                selectedPart: _selectedPart,
-                selectedCable: _selectedCable,
-                compatible: compatible,
-                focus: focus,
-                outlined: outlined,
-                onTapSlot: (slot) => _tapSlot(slot, snap: true),
-                onTapHeader: _tapHeader,
-                onDropPart: (part, slot) =>
-                    unawaited(_place(part, slot, 'drag', snap: true)),
-                onDropCable: (cable, header) =>
-                    unawaited(_connect(cable, header, 'drag')),
-                onOperate: (operation) => unawaited(_operate(operation)),
-                onInspect: (object) => unawaited(_inspect(object)),
-              ),
-            ),
               // The floating step header and the preview of the part in hand
               // never block a drop or a tap.
               if (!roomy || keyed != null)
@@ -500,6 +602,7 @@ class _AssemblyBenchState extends State<AssemblyBench> {
             onSelectPart: _selectPart,
             onSelectCable: _selectCable,
             onDragChanged: _dragChanged,
+            onDropMissed: _dropMissed,
             onRotate: _rotate,
             onRemove: (part) => unawaited(_remove(part.id)),
             onCancel: _clearSelection,
@@ -691,11 +794,13 @@ class _BenchCanvas extends StatelessWidget {
     required this.compatible,
     required this.focus,
     required this.outlined,
+    required this.held,
     required this.onTapSlot,
     required this.onTapHeader,
     required this.onDropPart,
     required this.onDropCable,
     required this.onOperate,
+    required this.onOperationBlocked,
     required this.onInspect,
   });
 
@@ -714,11 +819,16 @@ class _BenchCanvas extends StatelessWidget {
   /// targets and the practice guide focus), drawn in canvas units so the
   /// outline follows the camera at any zoom, pan and viewport size.
   final Set<String> outlined;
+
+  /// Operations a mounted part physically blocks (the socket lever under
+  /// the cooler): no ring on the bench, like equipment not workable yet.
+  final Set<String> held;
   final ValueChanged<String> onTapSlot;
   final ValueChanged<String> onTapHeader;
   final void Function(String part, String slot) onDropPart;
   final void Function(String cable, String header) onDropCable;
   final ValueChanged<BenchOperation> onOperate;
+  final ValueChanged<BenchOperation> onOperationBlocked;
   final ValueChanged<BenchInspectable> onInspect;
 
   bool get _boardInstalled => state.placements['motherboard'] != null;
@@ -845,22 +955,44 @@ class _BenchCanvas extends StatelessWidget {
         final rect = AssemblyBenchLayout.slot(entry.value, view);
         final asset = AssemblyBenchLayout.partAssets[entry.key];
         if (rect == null || asset == null) continue;
+        // The rules seat a keyed part only at its seating orientation (0°),
+        // so its marker sits over the mark on the bench.
+        final keyed = AssemblyBenchLayout.markers.containsKey(entry.key);
+        Widget photo(double? extent) => keyed
+            ? _PartImage(
+                id: entry.key,
+                asset: asset,
+                turns: 0,
+                reducedMotion: reducedMotion,
+                size: extent)
+            : Image(image: AssetImage(asset), fit: BoxFit.contain);
+        final content = AssemblyBenchLayout.bayContent[entry.key];
         children.add(Positioned.fromRect(
           key: ValueKey('bench-placed-${entry.key}'),
           rect: rect,
           child: _Seated(
             key: ValueKey('bench-seat-${entry.key}-${entry.value}'),
             reducedMotion: reducedMotion,
-            // The rules seat a keyed part only at its seating orientation
-            // (0°), so its marker sits over the mark on the bench.
-            child: AssemblyBenchLayout.markers.containsKey(entry.key)
-                ? _PartImage(
-                    id: entry.key,
-                    asset: asset,
-                    turns: 0,
-                    reducedMotion: reducedMotion)
-                : Image(image: AssetImage(asset), fit: BoxFit.contain),
+            child: content == null
+                ? photo(null)
+                : _FilledSeat(content: content, builder: photo),
           ),
+        ));
+      }
+      // Thermal compound sits on the processor's heat spreader, so it is
+      // drawn over the seated CPU photograph (the board painter is beneath
+      // the photographs) until the cooler covers it.
+      final socket = AssemblyBenchLayout.slot('cpu_socket', view);
+      if (view == BenchView.board &&
+          socket != null &&
+          settings['thermal_compound'] == true &&
+          state.placements['cpu'] != null &&
+          state.placements['cooler'] == null) {
+        children.add(Positioned.fromRect(
+          key: const ValueKey('bench-thermal-compound'),
+          rect: socket,
+          child: const IgnorePointer(
+              child: CustomPaint(painter: _ThermalCompoundPainter())),
         ));
       }
       children.add(Positioned.fill(
@@ -877,23 +1009,62 @@ class _BenchCanvas extends StatelessWidget {
       ));
     }
     // Levers, latches, screws and the strap are hotspots only while the
-    // operation is physically possible; the tray lists them all.
+    // operation is physically possible and would change something; the tray
+    // lists them all. On the mat, where the strap and the ground stud are
+    // always in view, a tap on equipment that cannot be worked yet explains
+    // why instead of doing nothing.
+    final rings = <_Ring>[];
     for (final operation in model.operations) {
       final rect = AssemblyBenchLayout.operation(operation.id, view);
-      if (rect == null || !operation.enabled) continue;
+      if (rect == null || operation.idle) continue;
+      final available = operation.enabled && !held.contains(operation.id);
+      if (!available && view != BenchView.mat) continue;
+      rings.add(_Ring(operation, _minimum(rect, 72),
+          _minimum(rect, AssemblyBenchLayout.ringReach), available));
+    }
+    final hotspots = [
+      for (final ring in rings)
+        if (ring.available) (ring.operation, ring.area),
+    ];
+    // A drawn ring is about 24 dp on a phone with the whole bench in view.
+    // Beneath the rings, slots and headers, a tap beside a ring (within its
+    // reach, at least 48 dp across) goes to the nearest ring; a slot or
+    // header over that spot still takes a tap while a part or cable is in
+    // hand. Only the reach areas take a tap, so a part on the mat keeps its
+    // own.
+    for (final ring in rings) {
       children.add(Positioned.fromRect(
-        rect: _minimum(rect, 72),
-        child: _OperationHotspot(
-          operation: operation,
-          enabled: interactive,
-          focused: focus.contains(operation.id),
-          onTap: () => onOperate(operation),
+        rect: ring.reach,
+        child: GestureDetector(
+          key: ValueKey('bench-ring-reach-${ring.operation.id}'),
+          behavior: HitTestBehavior.translucent,
+          excludeFromSemantics: true,
+          onTapUp: interactive
+              ? (details) =>
+                  _reachTap(ring.reach.topLeft + details.localPosition, rings)
+              : null,
         ),
       ));
     }
-    // Drop and tap targets sit on top but are translucent, so a hotspot
-    // beneath still receives taps when nothing is selected.
-    if (view != BenchView.mat) children.addAll(_targets(context));
+    for (final ring in rings) {
+      final (operation, area, available) =
+          (ring.operation, ring.area, ring.available);
+      children.add(Positioned.fromRect(
+        rect: area,
+        child: _OperationHotspot(
+          operation: operation,
+          enabled: interactive,
+          available: available,
+          focused: focus.contains(operation.id),
+          onTap: available
+              ? () => onOperate(operation)
+              : () => onOperationBlocked(operation),
+        ),
+      ));
+    }
+    // Drop and tap targets sit on top but never stop a hit test, so a ring
+    // beneath always takes its tap, also while a part or cable is in hand.
+    if (view != BenchView.mat) children.addAll(_targets(context, hotspots));
     return Semantics(
       label: '${switch (view) {
         BenchView.mat => MissionContentData.benchMatView,
@@ -910,7 +1081,43 @@ class _BenchCanvas extends StatelessWidget {
       width: rect.width < minimum ? minimum : rect.width,
       height: rect.height < minimum ? minimum : rect.height);
 
-  List<Widget> _targets(BuildContext context) {
+  /// A tap at [point] (canvas units) beside the rings: the ring nearest to
+  /// it among those whose reach holds it takes the tap; equipment that
+  /// cannot be worked yet explains itself. Elsewhere nothing happens.
+  void _reachTap(Offset point, List<_Ring> rings) {
+    _Ring? nearest;
+    var best = double.infinity;
+    for (final ring in rings) {
+      if (!ring.reach.contains(point)) continue;
+      final distance = (ring.area.center - point).distance;
+      if (distance < best) {
+        best = distance;
+        nearest = ring;
+      }
+    }
+    if (nearest == null) return;
+    nearest.available
+        ? onOperate(nearest.operation)
+        : onOperationBlocked(nearest.operation);
+  }
+
+  /// A tap at [point] (canvas units) on a slot or header: a working ring
+  /// there (a lever beside the socket, the thermal compound on the CPU, a
+  /// screw over a bay) takes it, as it would with nothing in hand; otherwise
+  /// the part or cable in hand goes to [fallback].
+  void _tapAt(Offset point, List<(BenchOperation, Rect)> hotspots,
+      VoidCallback fallback) {
+    for (final (operation, area) in hotspots) {
+      if (area.contains(point)) {
+        onOperate(operation);
+        return;
+      }
+    }
+    fallback();
+  }
+
+  List<Widget> _targets(
+      BuildContext context, List<(BenchOperation, Rect)> hotspots) {
     final widgets = <Widget>[];
     // Larger slots first, so a smaller slot inside one (the CPU socket under
     // the cooler mount) is hit first.
@@ -935,6 +1142,11 @@ class _BenchCanvas extends StatelessWidget {
         child: Semantics(
           button: true,
           label: MissionContentData.benchSlotSemantics(slot.label, occupant),
+          // A screen-reader tap has no position on the bench, so it always
+          // installs the part in hand; only a pointer tap can land on a ring.
+          onTap: interactive && selectedPart != null && occupantId == null
+              ? () => onTapSlot(slot.id)
+              : null,
           child: DragTarget<BenchDrag>(
             onWillAcceptWithDetails: (details) =>
                 interactive && details.data.kind == 'part',
@@ -942,8 +1154,10 @@ class _BenchCanvas extends StatelessWidget {
                 onDropPart(details.data.id, slot.id),
             builder: (context, candidates, _) => GestureDetector(
               behavior: HitTestBehavior.translucent,
-              onTap: interactive && selectedPart != null && occupantId == null
-                  ? () => onTapSlot(slot.id)
+              excludeFromSemantics: true,
+              onTapUp: interactive && selectedPart != null && occupantId == null
+                  ? (details) => _tapAt(rect.topLeft + details.localPosition,
+                      hotspots, () => onTapSlot(slot.id))
                   : null,
               child: _TargetFrame(
                 hovering: candidates.isNotEmpty,
@@ -963,6 +1177,9 @@ class _BenchCanvas extends StatelessWidget {
         child: Semantics(
           button: true,
           label: MissionContentData.benchHeaderSemantics(header.label),
+          onTap: interactive && selectedCable != null
+              ? () => onTapHeader(header.id)
+              : null,
           child: DragTarget<BenchDrag>(
             onWillAcceptWithDetails: (details) =>
                 interactive && details.data.kind == 'cable',
@@ -970,8 +1187,10 @@ class _BenchCanvas extends StatelessWidget {
                 onDropCable(details.data.id, header.id),
             builder: (context, candidates, _) => GestureDetector(
               behavior: HitTestBehavior.translucent,
-              onTap: interactive && selectedCable != null
-                  ? () => onTapHeader(header.id)
+              excludeFromSemantics: true,
+              onTapUp: interactive && selectedCable != null
+                  ? (details) => _tapAt(rect.topLeft + details.localPosition,
+                      hotspots, () => onTapHeader(header.id))
                   : null,
               child: _TargetFrame(
                 hovering: candidates.isNotEmpty,
@@ -984,6 +1203,44 @@ class _BenchCanvas extends StatelessWidget {
     }
     return widgets;
   }
+}
+
+/// One ring on the bench: its drawn [area], the larger [reach] a tap may
+/// land in, and whether the equipment can be worked now.
+final class _Ring {
+  const _Ring(this.operation, this.area, this.reach, this.available);
+
+  final BenchOperation operation;
+  final Rect area;
+  final Rect reach;
+  final bool available;
+}
+
+/// A square part photograph drawn so its visible [content] (fractions of
+/// the image), not the transparent margin around it, fills the bay it is
+/// seated in, at the photograph's own proportions.
+class _FilledSeat extends StatelessWidget {
+  const _FilledSeat({required this.content, required this.builder});
+
+  final Rect content;
+  final Widget Function(double extent) builder;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
+        final extent = math.min(
+            box.maxWidth / content.width, box.maxHeight / content.height);
+        return Stack(clipBehavior: Clip.none, children: [
+          Positioned(
+            left: (box.maxWidth - content.width * extent) / 2 -
+                content.left * extent,
+            top: (box.maxHeight - content.height * extent) / 2 -
+                content.top * extent,
+            width: extent,
+            height: extent,
+            child: builder(extent),
+          ),
+        ]);
+      });
 }
 
 /// Seat animation: the part settles into its slot (none with reduced motion).
@@ -1012,19 +1269,53 @@ class _TargetFrame extends StatelessWidget {
   final bool hovering;
   final bool compatible;
 
+  // The frame is paint only. A decorated box reports a hit anywhere inside
+  // it, which would stop the hit test at the slot and leave the lever,
+  // thermal-compound and screw rings beneath it dead. The slot's own tap
+  // detector and drag target stay hit (both are translucent).
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-        decoration: BoxDecoration(
-          color: hovering ? AppTheme.primaryBlue.withValues(alpha: .14) : null,
-          border: hovering || compatible
-              ? Border.all(
-                  color: hovering ? AppTheme.primaryBlue : AppTheme.skyBlue,
-                  width: hovering ? 5 : 4)
-              : null,
-          borderRadius: BorderRadius.circular(8),
+  Widget build(BuildContext context) => IgnorePointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color:
+                hovering ? AppTheme.primaryBlue.withValues(alpha: .14) : null,
+            border: hovering || compatible
+                ? Border.all(
+                    color: hovering ? AppTheme.primaryBlue : AppTheme.skyBlue,
+                    width: hovering ? 5 : 4)
+                : null,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: const SizedBox.expand(),
         ),
-        child: const SizedBox.expand(),
       );
+}
+
+/// A pea-sized dot of grey thermal compound in the middle of the socket
+/// rectangle (the processor's heat spreader), with a rim and a highlight so
+/// it reads on the silver photograph.
+class _ThermalCompoundPainter extends CustomPainter {
+  const _ThermalCompoundPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final unit = size.width / 60;
+    final centre = size.center(Offset.zero);
+    canvas.drawCircle(
+        centre, 6.5 * unit, Paint()..color = const Color(0xFF8E96A1));
+    canvas.drawCircle(
+        centre,
+        6.5 * unit,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2 * unit
+          ..color = const Color(0xFF5F6874));
+    canvas.drawCircle(centre.translate(-2 * unit, -2 * unit), 1.8 * unit,
+        Paint()..color = const Color(0xFFC3C9D1));
+  }
+
+  @override
+  bool shouldRepaint(covariant _ThermalCompoundPainter oldDelegate) => false;
 }
 
 class _WiringPainter extends AssemblyBenchPainter {
@@ -1048,6 +1339,7 @@ class _OperationHotspot extends StatelessWidget {
     required this.enabled,
     required this.focused,
     required this.onTap,
+    this.available = true,
   });
 
   final BenchOperation operation;
@@ -1055,14 +1347,20 @@ class _OperationHotspot extends StatelessWidget {
   final bool focused;
   final VoidCallback onTap;
 
+  /// False for equipment that cannot be worked yet: no ring, and a tap only
+  /// explains why.
+  final bool available;
+
   @override
   Widget build(BuildContext context) => Semantics(
         button: true,
-        enabled: enabled,
+        enabled: enabled && available,
         label: MissionContentData.benchOperationSemantics(
-            operation.label, enabled),
+            operation.label, enabled && available),
         child: GestureDetector(
-          key: ValueKey('bench-hotspot-${operation.id}'),
+          key: ValueKey(available
+              ? 'bench-hotspot-${operation.id}'
+              : 'bench-hotspot-blocked-${operation.id}'),
           behavior: HitTestBehavior.opaque,
           onTap: enabled ? onTap : null,
           child: DecoratedBox(
@@ -1071,7 +1369,7 @@ class _OperationHotspot extends StatelessWidget {
               border: Border.all(
                 color: focused
                     ? AppTheme.primaryBlue
-                    : enabled
+                    : enabled && available
                         ? AppTheme.accentYellow
                         : Colors.transparent,
                 width: focused ? 6 : 4,
@@ -1196,6 +1494,7 @@ class _BenchTray extends StatelessWidget {
     required this.onSelectPart,
     required this.onSelectCable,
     required this.onDragChanged,
+    required this.onDropMissed,
     required this.onRotate,
     required this.onRemove,
     required this.onCancel,
@@ -1215,6 +1514,9 @@ class _BenchTray extends StatelessWidget {
   final Set<String> focus;
   final int Function(BenchPart part) turnsFor;
   final ValueChanged<BenchDrag?> onDragChanged;
+
+  /// A drag released over no slot, bay or header.
+  final VoidCallback onDropMissed;
 
   /// Non-null where the learner can switch between the case and the
   /// motherboard close-up (the power-on test bench).
@@ -1261,6 +1563,7 @@ class _BenchTray extends StatelessWidget {
         onTap: () => onSelectPart(part),
         onDoubleTap: part.rotatable && !part.placed ? () => onRotate(part) : null,
         onDragChanged: onDragChanged,
+        onDropMissed: onDropMissed,
       ));
       if (part.placed) {
         children.add(_TrayButton(
@@ -1321,6 +1624,7 @@ class _BenchTray extends StatelessWidget {
         focused: false,
         onTap: () => onSelectCable(cable),
         onDragChanged: onDragChanged,
+        onDropMissed: onDropMissed,
       ));
       for (final header in model.headers) {
         children.add(_TrayButton(
@@ -1363,6 +1667,7 @@ class _BenchTray extends StatelessWidget {
           reducedMotion: reducedMotion,
           onTap: () => onSelectPart(part),
           onDragChanged: onDragChanged,
+          onDropMissed: onDropMissed,
         ));
       }
       for (final cable in model.cables) {
@@ -1373,6 +1678,7 @@ class _BenchTray extends StatelessWidget {
           focused: focus.contains(cable.id),
           onTap: () => onSelectCable(cable),
           onDragChanged: onDragChanged,
+          onDropMissed: onDropMissed,
         ));
       }
       for (final operation in model.operations) {
@@ -1479,6 +1785,7 @@ class _PartChip extends StatelessWidget {
     required this.reducedMotion,
     required this.onTap,
     required this.onDragChanged,
+    required this.onDropMissed,
     this.onDoubleTap,
   });
 
@@ -1490,6 +1797,7 @@ class _PartChip extends StatelessWidget {
   final bool reducedMotion;
   final VoidCallback onTap;
   final ValueChanged<BenchDrag?> onDragChanged;
+  final VoidCallback onDropMissed;
   final VoidCallback? onDoubleTap;
 
   @override
@@ -1544,6 +1852,7 @@ class _PartChip extends StatelessWidget {
             affinity: Axis.vertical,
             onDragStarted: () => onDragChanged(drag),
             onDragEnd: (_) => onDragChanged(null),
+            onDraggableCanceled: (_, __) => onDropMissed(),
             feedback: Material(
               type: MaterialType.transparency,
               child: SizedBox(
@@ -1791,6 +2100,7 @@ class _CableChip extends StatelessWidget {
     required this.focused,
     required this.onTap,
     required this.onDragChanged,
+    required this.onDropMissed,
   });
 
   final BenchCable cable;
@@ -1799,6 +2109,7 @@ class _CableChip extends StatelessWidget {
   final bool focused;
   final VoidCallback onTap;
   final ValueChanged<BenchDrag?> onDragChanged;
+  final VoidCallback onDropMissed;
 
   @override
   Widget build(BuildContext context) {
@@ -1856,6 +2167,7 @@ class _CableChip extends StatelessWidget {
                 affinity: Axis.vertical,
                 onDragStarted: () => onDragChanged(drag),
                 onDragEnd: (_) => onDragChanged(null),
+                onDraggableCanceled: (_, __) => onDropMissed(),
                 feedback: Material(
                   type: MaterialType.transparency,
                   child: SizedBox(

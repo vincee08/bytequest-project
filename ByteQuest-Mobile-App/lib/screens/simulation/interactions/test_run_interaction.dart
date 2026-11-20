@@ -218,11 +218,9 @@ class _TestRunInteractionState extends State<TestRunInteraction> {
                     : const SizedBox.shrink(),
           ),
           if (running || completed) const SizedBox(height: 12),
-          if (completed)
-            EquipmentTestReadout(
-                result: MissionEquipmentSimulator.map(
-                    MissionEquipmentSimulator.map(
-                        widget.state.equipmentState['results'])[_target])),
+          // The run control stays right under the status, so "Run test
+          // again" is in view after a correction instead of below a long
+          // readout.
           FilledButton.icon(
             key: ValueKey(running ? 'test-run-running' : 'test-run-start'),
             onPressed: !widget.enabled || running ? null : _run,
@@ -237,6 +235,13 @@ class _TestRunInteractionState extends State<TestRunInteraction> {
                       : 'Run test',
             ),
           ),
+          if (completed) ...[
+            const SizedBox(height: 12),
+            EquipmentTestReadout(
+                result: MissionEquipmentSimulator.map(
+                    MissionEquipmentSimulator.map(
+                        widget.state.equipmentState['results'])[_target])),
+          ],
           if (completed && _requiresInterpretation) ...[
             const SizedBox(height: 16),
             TextField(

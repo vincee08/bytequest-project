@@ -69,12 +69,19 @@ final class BenchOperation {
     required this.label,
     required this.enabled,
     required this.done,
+    this.idle = false,
   });
 
   final String id;
   final String label;
   final bool enabled;
   final bool done;
+
+  /// Every effect of the operation already holds, so working it now changes
+  /// nothing: thermal compound already on the processor, the strap already
+  /// on the wrist, screws already fastened. The bench drops its ring then;
+  /// the tray still lists it.
+  final bool idle;
 }
 
 final class BenchStep {
@@ -196,6 +203,7 @@ final class AssemblyBenchModel {
             done: MissionEquipmentSimulator.map(
                     state.equipmentState['operations'])[operation['id']] ==
                 true,
+            idle: _effectsHold(operation['effects'], state),
           ),
       ],
       inspectables: family == InteractionFamily.inspect
@@ -299,5 +307,14 @@ final class AssemblyBenchModel {
       if (pair.startsWith('$source>')) return pair.substring(source.length + 1);
     }
     return null;
+  }
+
+  /// Whether every effect an operation writes already holds in the
+  /// equipment state (an operation without effects is never idle).
+  static bool _effectsHold(Object? effects, MissionRuntimeState state) {
+    final values = MissionEquipmentSimulator.map(effects);
+    return values.isNotEmpty &&
+        values.entries
+            .every((entry) => state.equipmentState[entry.key] == entry.value);
   }
 }

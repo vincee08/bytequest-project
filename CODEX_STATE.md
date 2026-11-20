@@ -2,6 +2,107 @@
 
 > Read this file with `AGENTS.md`, `README.md`, and `bytequest.md` before changing the repository.
 
+## Current continuation - 2026-11-20 RE-DEFENSE QA AUDIT, PASS 2 (local stack)
+
+The second pass completed the three PARTIAL items and the drag-and-drop realism follow-ups. It ran against the local stack only; production, Vercel, the APK release and pushes were not touched. Report and screenshots updated in place: `docs/REDEFENSE_QA_AUDIT_2026-11-20.md` and `docs/qa-audit-2026-11-20/` (a14–a22, w05–w11).
+
+**Result:** 38 PASS, 0 PARTIAL, 0 FAIL, 0 BLOCKED.
+- **R3.3 (AI quiz generation).**
+  - Curriculum-source generation, regenerate-one-question with history, edit, delete, add, approve, preview and publish all ran through the production route.
+  - No OpenRouter key exists on this PC, so a QA-only Node start-up hook answered the OpenRouter call with `scripts/quiz-ai-local-provider.mjs`. The hook is in the scratchpad, not the repo.
+  - The repo's simulator mode needs `127.0.0.1:58921`, which is inside a Windows-reserved port range here.
+  - A live model call needs `OPENROUTER_API_KEY` in Vercel production. Locally, the owner can put it in `.tmp/quiz-ai.env`.
+- **R3.5 (automatic quiz submission).**
+  - Time limit, phone in the foreground: `auto_time_limit`, submitted exactly at start + 1:00.
+  - Deadline, app closed: the attempt stayed `in_progress` until the instructor opened the results, then `auto_deadline` was stamped at the exact deadline.
+  - The learner saw both results in the app.
+- **R11.2 (review queue).**
+  - Setup: 8 throwaway learners (`qa.queue.01–08@bytequest.invalid`), 6 submitted attempts, then 8 newer attempts left in progress.
+  - The old 8-newest logic gives 0 pending; the dashboard shows 6, with the 5 oldest in the queue; the Evaluation Center lists 6.
+
+**Fixed in pass 2, with tests** (bench fixes are UI only; contract `css-assembly-20261119-v3` unchanged):
+1. RAM can come out only with the DIMM latches open.
+2. The CPU can come out only with the cooler off and the load plate open.
+3. The I/O shield can come out only with the motherboard out.
+4. The socket lever cannot be lifted under a mounted cooler. Closing an open lever stays possible because the server repair scoring expects it.
+5. A removed part keeps its seated orientation instead of the packaging 180°.
+6. Drive and PSU photographs are fitted by their visible content, so they fill the case bays.
+7. Rings have a reach of at least 160 canvas units (48 dp or more from a 360 dp width). The nearest ring wins; slots keep priority with a part in hand.
+8. Dashboard: Upcoming tasks titles were 0 px wide in the 208 px overview card at 1440 px. The due date now sits under the title.
+9. Test tooling: the offline AI simulator now answers curriculum and essay requests.
+
+**Gates (pass 2):**
+- Flutter full suite in Docker: 727 passed, 1 skipped.
+- `assembly_bench_test`: 57.
+- `flutter analyze`: 0 errors and 0 warnings; 210 infos, all pre-existing.
+- Dashboard: tsc, lint, 222 tests and build all pass.
+- Fixes were verified by touch on the emulator, using the 1.2.0 debug APK with loopback defines and `adb reverse`.
+
+**Pass 2 local data:**
+- quizzes `bf00ae24-1c04-4b20-b104-04085b2dd905` (AI, 1-minute limit) and `8a214626-02c5-49d5-b3af-ddd895043bc9` (deadline);
+- 8 queue learners in the QA class.
+
+**Still pending (owner):**
+- push;
+- Vercel promotion of `main`, which now also needs the Upcoming tasks fix;
+- confirm the OpenRouter key in Vercel production;
+- APK signing.
+
+## Previous continuation - 2026-11-20 RE-DEFENSE QA AUDIT (local stack)
+
+A full end-to-end QA audit ran against the local stack only: local Supabase `127.0.0.1:57321`, the dashboard on `127.0.0.1:3001`, and the learner app on the `padala_pixel7` emulator plus the Flutter web build. Production, Vercel and the APK release were not touched.
+
+The full report is `docs/REDEFENSE_QA_AUDIT_2026-11-20.md`, with screenshots in `docs/qa-audit-2026-11-20/`.
+
+**Result:** 35 PASS, 3 PARTIAL, 0 FAIL, 0 BLOCKED across the 38 panel items.
+- R3.3: AI generation was not run.
+- R3.5: live auto-submit at expiry was not exercised.
+- R11.2: the review-queue limit could not be exercised.
+
+Realtime refresh was demonstrated on both the dashboard and the learner Progress tab. The opt-in leaderboard was verified.
+
+**COC1 M2 assembly** was completed as a learner by touch and by mouse:
+- touch practice run, server-verified;
+- mouse assessment, auto-evaluated 11/11;
+- touch assessment on the fixed build: 35 actions, 0 refused, auto-evaluated 11/11.
+
+**Fixed in this session, with tests:**
+1. Dead lever, compound and screw rings under the slot targets. A ring tap with a part in hand was scored as an incorrect placement.
+2. Silent missed drop.
+3. Silent blocked mat ground stud.
+4. Invisible thermal paste and lingering idle rings.
+5. "Run test again" below the POST readout.
+6. Dashboard learner refusal used a global sign-out, which revoked the learner's mobile session. Refusals now use `scope: 'local'`.
+7. Assigned simulations could not open from the class space: the UUID was looked up as a mission code. Fixed with `MissionsData.resolveAssigned`.
+8. Screen-reader slot taps could work an overlapping ring. This was a regression from fix 1, caught by a new test.
+9. Progress-screen `ListTile` ink assertion.
+
+**Gates after the fixes:**
+- Flutter full suite in Docker: 720 passed, 1 skipped.
+- `flutter analyze`: 0 errors and 0 warnings; 210 infos, all pre-existing.
+- Dashboard: tsc, lint, 222 tests and build all pass.
+
+**Open, not fixed:**
+- No learner notification on assessment or quiz result release. The trigger has no case for `result.released` or `quiz_result.released`; fixing it needs a migration.
+- The homework screen does not refresh itself on release.
+- A retry starts with no confirmation.
+- Realism and copy gaps; see report §3.4 and §8.4.
+
+**Local testing note:**
+- The emulator build that uses `10.0.2.2` cannot upload homework files. The dashboard signs URLs for `127.0.0.1`, and the app's origin guard rejects them.
+- For phone or emulator demos, use the `local-web-defines.json` build together with `adb reverse tcp:57321 tcp:57321` and `adb reverse tcp:3001 tcp:3001`.
+
+**Local QA data** (local DB only):
+- class *QA Audit 2026-11-20 (test class)*;
+- learner `qa.assembly.a@bytequest.invalid`, whose credentials are in the gitignored `.tmp/qa-audit-accounts.json`;
+- one quiz, one homework and one technical assessment;
+- a second, touch assessment attempt `5e4743fd…`, released;
+- one archived temporary curriculum topic.
+
+**Still pending:**
+- Vercel promotion of `main`, which must now include the LoginForm fix.
+- 1.2.0 APK signing and release.
+
 ## Current continuation - 2026-11-20 PRODUCTION DATABASE MIGRATED (re-defense release)
 
 The owner approved and the migration ran on hosted ByteQuest `rslmteqipxqfifwftugk`. The project ID was verified in the dashboard and the CLI, and re-checked before each batch.
