@@ -12,7 +12,8 @@ const plusJakartaSans = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "ByteQuest | Instructor Dashboard",
+  // One title for every signed-in role (admins saw "Instructor Dashboard").
+  title: "ByteQuest | Dashboard",
   description: "Gamified Simulation Platform for CSS NC II",
 };
 
