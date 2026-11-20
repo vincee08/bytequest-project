@@ -175,3 +175,75 @@ D6, D8). D2 was additionally verified live against production from the web build
 | O4 | A new quiz draft version starts empty (by design: "Add and review its questions"). | Suggestion: offer to copy the published questions. |
 | O5 | The COC practice timer is per device (by design: it controls local practice availability only). | None. |
 | O6 | Dashboard page loads take 3–11 s on Vercel (server render). | Monitor; consider a closer region or caching. |
+
+## 8. Post-publish verification (2026-11-20, after B1)
+
+Production stayed read-only except one authorized TEST ONLY assignment and the test learner's attempt
+on it. Nothing was evaluated, finalized, released, pushed, merged, deployed or migrated.
+
+**COC1 M2 simulation assessment, end to end (PASS).**
+
+- Instructor: in the TEST ONLY class, the form selected "Install Internal Components — simulation
+  assessment" (v2, `28fc0297-…`, label "Simulation assessment", type Assessment), and
+  `assign_activity` returned 200. The new row appeared after a page reload.
+- Learner (emulator, 1.2.0 debug): the assignment appeared and opened the 2D bench in assessment
+  mode ("No hints are shown"), not the form.
+- The run took 22 m 37 s:
+  - 38 actions accepted, 2 refused, 1 correction and 1 power-on fault.
+  - Deliberate errors:
+    - a processor in the wrong orientation (refused, "Component Not Seated");
+    - memory in DIMM_A1 (accepted silently, as assessment mode intends), then removed and reseated
+      in A2/B2;
+    - a SATA power cable on the 24-pin header (refused);
+    - SATA data left off, so the first POST measured "No boot device detected"; after the cable was
+      connected, the second POST reported "Boot drive detected".
+  - The typed interpretation was recorded, then the evidence review showed 5 phases and 46
+    synchronized events, and the submit confirmed "Evidence submitted for authoritative evaluation
+    and review".
+- Learner Home showed "Official assessment · Awaiting instructor review". No result was visible.
+- Instructor Evaluation Center listed the attempt as 10 / 11, "Evaluated (automatic)", provisional,
+  stage Evaluate, with 48 chronological evidence events.
+- The rubric is "COC1_M2 simulation step rubric", with 11 criteria. C3 "CPU seated in the correct
+  orientation with the lever closed" is not satisfied:
+  - its rule is `Max Incorrect: 0`, and the one wrong-orientation attempt counts even after the
+    correct reseat;
+  - C1 (ESD) has the same zero tolerance;
+  - the other nine allow two incorrect actions, so C5, C9 and C10 (one incorrect each) are
+    satisfied.
+
+**All 20 packages, read-only through the admin session (PASS).**
+
+- Totals:
+  - 20 missions, each with v1 (published) and v2 (published, assessment, bench payload);
+  - 40 activity versions and no duplicate version numbers;
+  - 20 approved rubrics with 106 criteria, numbered 1..n with no duplicate codes;
+  - 40 links (20 simulation, 19 form_based, 1 protected_reference), with no orphans or duplicates.
+- Every link resolves to a curriculum module, and v1 and v2 of each mission link to the same
+  learning outcome.
+- Each v2 payload and its criteria are hash-identical to the locally emitted package (20 / 20).
+  Each `definition_version` equals `MissionSimulationDefinitions.contractVersion()` for its mission,
+  so `requiresAppUpdate` is false for all 20.
+- COC1 M2 uses `css-assembly-20261119-v3` with the 11 criteria above.
+- `evaluator_config` returns 403 even for an admin session, by design.
+
+**APK.** The working tree at `6c41503` builds a debug APK with the production defines:
+- 236,675,164 bytes, 1.2.0 (3);
+- signed with this PC's debug certificate `271cbbf0…`.
+
+The new build was installed in place on the emulator:
+- D4: the screen shows 16 % and announces "16 percent".
+- D7: no "deactivated widget" error during about 100 s of navigation across three polls. The
+  pre-fix build had logged one; the error was intermittent, so the widget test remains the proof.
+
+The release signing decision is still open:
+- learners' 1.1.0 is signed with `a4d01056…`;
+- the 2026-11-13 production key `dc85ef75…` and `android/key.properties` are not on this PC.
+
+**New minor findings (not fixed).**
+
+| # | Finding | Suggestion |
+|---|---|---|
+| F1 | Phone portrait, phase 5: the task panel is about 300 px tall, so the readout, the interpretation field and its button need inner scrolling, and a tap on the card does not focus the field. | Scroll the field into view when a test completes, or give the panel more height in that phase. |
+| F2 | After submitting, Exit shows "Your current mission progress will remain available when you return." | Use submitted-state copy, or skip the dialog. |
+| F3 | The class sheet lists the submitted assessment with only "Open activity" (Home shows "Awaiting instructor review"); with retry enabled, opening it can start attempt 2. | Show the status in the class sheet. |
+| F4 | `test_run_interaction.dart` hardcodes "Run test", "Record test interpretation" and related labels (AGENTS 3.2). | Move them to `mission_content_data.dart`. |

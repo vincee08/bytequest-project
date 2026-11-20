@@ -61,6 +61,24 @@ OpenRouter 429), 0 FAIL.
 - The class assign form offers COC1 M2 "Install Internal Components — simulation assessment" (Simulation assessment). Existing assignments still point to the v1 forms; make a new assignment to use the bench.
 - The `sb_secret_` key was erased from `.tmp/production-publish.env`; a scan of 3,392 files found no copy.
 
+**Post-publish verification (2026-11-20, later; report §8):**
+
+- **PASS:**
+  - A new TEST ONLY COC1 M2 v2 assignment opened the bench in assessment mode on the emulator.
+  - Submitted with deliberate errors, it auto-evaluated 10/11 (provisional, stage Evaluate, not released). C3 failed by its zero-tolerance rule after one wrong-orientation CPU attempt.
+- **PASS:** a read-only check of all 20 packages (versions, rubrics, 106 criteria, 40 links, payload hashes equal to the local packages, app contract versions).
+- **Gates at `6c41503`:**
+  - Flutter: 735 passed, 1 skipped; analyze 0 errors and 0 warnings (210 infos).
+  - Dashboard: tsc, lint, 226 tests and build pass.
+  - SQL: 42/42.
+  - Debug APK: builds.
+- **Production state:**
+  - The dashboard is still at `c842f6f`, so D1, D8, D9 and D10 are not live. Merging to `main` auto-deploys production.
+  - The Vercel CLI token on this PC is invalid.
+  - OpenRouter is configured in production (`configured: true`, not simulated); its capacity was last seen as 429.
+- **New minor findings F1–F4** (task panel height in phase 5, post-submit exit copy, class sheet status, hardcoded test-run labels) are not fixed.
+- **Emulator:** it now runs the `6c41503` debug build. To revert, run `adb install -r` with `build/app/outputs/flutter-apk/app-debug.apk`.
+
 **Owner actions (need approval):**
 - ~~B1~~ done (see above). Old note: publish the simulation assessment packages to production. Dry-run first, then
   `node scripts/publish-simulation-assessments.mjs --target hosted --confirm` with the service-role
@@ -68,6 +86,11 @@ OpenRouter 429), 0 FAIL.
 - B2: restore OpenRouter capacity (429 on every request).
 - B3: push, merge, Vercel promotion, apply `20261120110000` to production, new APK.
 - Change the weak admin and instructor test passwords after the defense.
+- APK signing decision for the 1.2.0 release:
+  - Learners' 1.1.0 is signed with `a4d01056…`, which is not on this PC.
+  - This PC's debug certificate is `271cbbf0…`. A build signed with it cannot update 1.1.0 in place, so learners would uninstall first.
+  - The 11-13 production key `dc85ef75…` is not on this PC either.
+- After the defense: remove the TEST ONLY QA class data. This includes the v2 assignment "TEST ONLY QA: COC1 M2 simulation assessment (v2)" and its attempt `e2d4f421-…`.
 
 ## Previous continuation - 2026-11-20 RE-DEFENSE QA AUDIT, PASS 2 (local stack)
 
