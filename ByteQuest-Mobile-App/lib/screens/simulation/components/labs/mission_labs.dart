@@ -30,6 +30,7 @@ abstract final class MissionLabs {
     required MissionRuntimeState state,
     required MissionActionCallback onAction,
     required bool enabled,
+    ValueChanged<Map<String, dynamic>>? onDraftChanged,
   }) =>
       switch (definition.id) {
         'coc2_m2' => CableTerminationLab(
@@ -38,6 +39,7 @@ abstract final class MissionLabs {
             state: state,
             onAction: onAction,
             enabled: enabled,
+            onDraftChanged: onDraftChanged,
           ),
         'coc4_m4' => PcieReplacementLab(
             key: key,
@@ -45,6 +47,7 @@ abstract final class MissionLabs {
             state: state,
             onAction: onAction,
             enabled: enabled,
+            onDraftChanged: onDraftChanged,
           ),
         _ => throw ArgumentError.value(definition.id, 'definition.id'),
       };

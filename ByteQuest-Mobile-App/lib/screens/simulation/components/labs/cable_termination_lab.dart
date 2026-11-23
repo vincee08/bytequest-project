@@ -21,12 +21,14 @@ class CableTerminationLab extends StatefulWidget {
     required this.state,
     required this.onAction,
     required this.enabled,
+    this.onDraftChanged,
   });
 
   final MissionPhaseDefinition phase;
   final MissionRuntimeState state;
   final MissionActionCallback onAction;
   final bool enabled;
+  final ValueChanged<Map<String, dynamic>>? onDraftChanged;
 
   @override
   State<CableTerminationLab> createState() => _CableTerminationLabState();
@@ -86,28 +88,68 @@ class _CableTerminationLabState extends State<CableTerminationLab> {
   @override
   void didUpdateWidget(covariant CableTerminationLab oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.phase.id != widget.phase.id) _restore();
+    if (oldWidget.phase.id != widget.phase.id ||
+        oldWidget.state.mode != widget.state.mode ||
+        oldWidget.state.assessmentAttemptId !=
+            widget.state.assessmentAttemptId) {
+      _restore();
+    }
   }
 
-  /// A recorded termination (only the crimp records one) survives pause
-  /// and resume as a crimped connector.
+  int get _evidenceCount =>
+      widget.state.acceptedEvidenceIds.length +
+      widget.state.pendingEvidence.length;
+  List<String> get _recordedOrder =>
+      MissionEquipmentSimulator.strings(_recorded['order']);
+
   void _restore() {
-    final order = MissionEquipmentSimulator.strings(_recorded['order']);
+    final order = _recordedOrder;
     _selected = null;
-    if (order.length == _pinCount) {
-      _pins = List<String?>.from(order);
-      _crimped = true;
-    } else {
-      _pins = List<String?>.filled(_pinCount, null);
-      _crimped = false;
+    _inputMethod = 'tap';
+    _crimped = order.length == _pinCount;
+    _pins = _crimped ? List.of(order) : List<String?>.filled(_pinCount, null);
+    final draft = widget.state.workbenchDraft;
+    final pins = draft['pins'];
+    final selected = draft['selected'];
+    final method = draft['method'];
+    final ids = _conductors.map((c) => c['id']).toSet();
+    // A fresh plug must not hide a later crimp, even one with the same eight wires.
+    if (draft['phase'] != widget.phase.id ||
+        draft['base'] != order.join(',') ||
+        (_crimped && draft['baseCount'] != _evidenceCount) ||
+        pins is! List ||
+        pins.length != _pinCount ||
+        !pins.every((p) => p == null || ids.contains(p)) ||
+        pins.whereType<String>().toSet().length !=
+            pins.whereType<String>().length ||
+        (selected != null &&
+            (!ids.contains(selected) || pins.contains(selected))) ||
+        (method != 'drag' && method != 'tap')) {
+      return;
     }
+    _crimped = false;
+    _pins = List<String?>.from(pins);
+    _selected = selected as String?;
+    _inputMethod = method as String;
+  }
+
+  void _edit(VoidCallback change) {
+    setState(change);
+    widget.onDraftChanged?.call({
+      'phase': widget.phase.id,
+      'base': _recordedOrder.join(','),
+      'baseCount': _evidenceCount,
+      'pins': List<String?>.of(_pins),
+      'selected': _selected,
+      'method': _inputMethod,
+    });
   }
 
   bool get _interactive => widget.enabled && !_crimped;
 
   void _insert(String conductor, int pin, String method) {
-    if (!_interactive) return;
-    setState(() {
+    if (!_interactive || !_conductors.any((c) => c['id'] == conductor)) return;
+    _edit(() {
       final from = _pins.indexOf(conductor);
       if (from >= 0) _pins[from] = null;
       _pins[pin] = conductor;
@@ -122,13 +164,13 @@ class _CableTerminationLabState extends State<CableTerminationLab> {
     if (selected != null) {
       _insert(selected, pin, 'tap');
     } else if (_pins[pin] != null) {
-      setState(() => _pins[pin] = null);
+      _edit(() => _pins[pin] = null);
     }
   }
 
   void _tapConductor(String id) {
     if (!_interactive) return;
-    setState(() => _selected = _selected == id ? null : id);
+    _edit(() => _selected = _selected == id ? null : id);
   }
 
   void _crimp() {
@@ -143,10 +185,11 @@ class _CableTerminationLabState extends State<CableTerminationLab> {
 
   void _reterminate() {
     if (!widget.enabled) return;
-    setState(() {
+    _edit(() {
       _pins = List<String?>.filled(_pinCount, null);
       _crimped = false;
       _selected = null;
+      _inputMethod = 'tap';
     });
   }
 
@@ -232,10 +275,7 @@ class _CableTerminationLabState extends State<CableTerminationLab> {
                         style: OutlinedButton.styleFrom(
                             minimumSize: const Size.fromHeight(48)),
                         onPressed: _interactive && placed.isNotEmpty
-                            ? () => setState(() {
-                                  _pins = List<String?>.filled(_pinCount, null);
-                                  _selected = null;
-                                })
+                            ? _reterminate
                             : null,
                         child:
                             const Text(MissionContentData.labCableClearLabel),
@@ -258,7 +298,7 @@ class _CableTerminationLabState extends State<CableTerminationLab> {
                   Semantics(
                     liveRegion: true,
                     child: _StatusLine(
-                      good: _assessment || !recordedHere || valid,
+                      valid: _assessment || !recordedHere ? null : valid,
                       text: !recordedHere || _assessment
                           ? MissionContentData.labCableCrimped
                           : valid
@@ -662,13 +702,17 @@ class _ReferenceCard extends StatelessWidget {
 }
 
 class _StatusLine extends StatelessWidget {
-  const _StatusLine({required this.good, required this.text});
-  final bool good;
+  const _StatusLine({required this.valid, required this.text});
+  final bool? valid;
   final String text;
 
   @override
   Widget build(BuildContext context) {
-    final color = good ? AppTheme.successGreen : AppTheme.errorRed;
+    final (color, icon) = switch (valid) {
+      true => (AppTheme.successGreen, Icons.check_circle_outline),
+      false => (AppTheme.errorRed, Icons.error_outline),
+      null => (AppTheme.deepBlue, Icons.receipt_long_outlined),
+    };
     return Container(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
@@ -677,8 +721,7 @@ class _StatusLine extends StatelessWidget {
         border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Row(children: [
-        Icon(good ? Icons.check_circle_outline : Icons.error_outline,
-            color: color),
+        Icon(icon, color: color),
         const SizedBox(width: 8),
         Expanded(child: Text(text, style: AppTheme.bodySmall)),
       ]),

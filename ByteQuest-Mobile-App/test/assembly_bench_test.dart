@@ -26,7 +26,8 @@ class _RecordingTransport implements MissionEvidenceTransport {
   final actions = <MissionEvidenceAction>[];
 
   @override
-  Future<void> append(MissionEvidenceAction action) async => actions.add(action);
+  Future<void> append(MissionEvidenceAction action) async =>
+      actions.add(action);
 
   @override
   Future<List<AcknowledgedMissionEvidenceAction>>
@@ -67,12 +68,13 @@ MissionRuntimeState _boardBuilt({MissionRuntimeMode? mode}) {
 var _harnessCount = 0;
 
 class _Harness {
-  _Harness(this.initial) : transport = _RecordingTransport();
+  _Harness(this.initial, {String? userId})
+      : transport = _RecordingTransport(),
+        userId = userId ?? 'bench-qa-${_harnessCount++}';
 
   final MissionRuntimeState initial;
   final _RecordingTransport transport;
-  // A fresh learner per harness, so one pump never restores another's save.
-  final String userId = 'bench-qa-${_harnessCount++}';
+  final String userId;
   late final MissionRuntimeController controller = MissionRuntimeController(
     userId: userId,
     initialState: initial,
@@ -116,12 +118,14 @@ class _Harness {
 }
 
 Future<_Harness> _pump(WidgetTester tester, MissionRuntimeState state,
-    {Size size = const Size(412, 915), bool reducedMotion = true}) async {
+    {Size size = const Size(412, 915),
+    bool reducedMotion = true,
+    String? userId}) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  final harness = _Harness(state);
+  final harness = _Harness(state, userId: userId);
   await tester.pumpWidget(harness.app(reducedMotion: reducedMotion));
   await tester.pumpAndSettle();
   return harness;
@@ -135,15 +139,37 @@ Future<void> _tapKey(WidgetTester tester, String key) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> _releasePart(
+    WidgetTester tester, Finder source, Offset destination,
+    {PointerDeviceKind kind = PointerDeviceKind.touch,
+    bool cancel = false}) async {
+  await tester.ensureVisible(source);
+  await tester.pumpAndSettle();
+  final start = tester.getCenter(source);
+  final gesture = await tester.startGesture(start, kind: kind);
+  await gesture.moveTo(start + const Offset(0, -35));
+  await tester.pump();
+  await gesture.moveTo(destination);
+  await tester.pump();
+  if (cancel) {
+    await gesture.cancel();
+  } else {
+    await gesture.up();
+  }
+  await tester.pumpAndSettle();
+}
+
 bool _enabled(WidgetTester tester, String key) {
   final button = tester.widget<ButtonStyleButton>(find.descendant(
       of: find.byKey(ValueKey(key)),
-      matching: find.byWidgetPredicate((widget) => widget is ButtonStyleButton)));
+      matching:
+          find.byWidgetPredicate((widget) => widget is ButtonStyleButton)));
   return button.onPressed != null;
 }
 
 double _turns(WidgetTester tester, String part) => tester
-    .widget<AnimatedRotation>(find.byKey(ValueKey('bench-rotation-$part')).first)
+    .widget<AnimatedRotation>(
+        find.byKey(ValueKey('bench-rotation-$part')).first)
     .turns;
 
 /// Which side of its photograph a part's marker is on, on screen: the sign
@@ -197,18 +223,21 @@ void main() {
     await _pump(tester, _stateAt(2));
     expect(find.byType(AssemblyBench), findsOneWidget);
     expect(find.byKey(const ValueKey('simulation-workspace-scroll')),
-        findsOneWidget, reason: 'zoom and pan come from the shared scene');
+        findsOneWidget,
+        reason: 'zoom and pan come from the shared scene');
     final images = tester
         .widgetList<Image>(find.descendant(
             of: find.byType(AssemblyBench), matching: find.byType(Image)))
         .map((image) => (image.image as AssetImage).assetName)
         .toSet();
-    expect(images, containsAll([
-      AssemblyBenchLayout.boardAsset,
-      'assets/COC1/Mission 2/cpu.png',
-      'assets/COC1/Mission 2/ram.png',
-      'assets/COC1/Mission 2/cooling_fan.png',
-    ]));
+    expect(
+        images,
+        containsAll([
+          AssemblyBenchLayout.boardAsset,
+          'assets/COC1/Mission 2/cpu.png',
+          'assets/COC1/Mission 2/ram.png',
+          'assets/COC1/Mission 2/cooling_fan.png',
+        ]));
     expect(find.textContaining('Step 1 of 9'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -225,8 +254,8 @@ void main() {
     expect(ghost, findsOneWidget);
     final image = tester.widget<Image>(
         find.descendant(of: ghost, matching: find.byType(Image)));
-    expect((image.image as AssetImage).assetName,
-        'assets/COC1/Mission 2/cpu.png');
+    expect(
+        (image.image as AssetImage).assetName, 'assets/COC1/Mission 2/cpu.png');
     await gesture.up();
     await tester.pumpAndSettle();
   });
@@ -247,8 +276,8 @@ void main() {
     final slot = find.byKey(const ValueKey('bench-slot-cpu_socket'));
     await tester.ensureVisible(part);
     await tester.pumpAndSettle();
-    await tester.dragFrom(
-        tester.getCenter(part), tester.getCenter(slot) - tester.getCenter(part));
+    await tester.dragFrom(tester.getCenter(part),
+        tester.getCenter(slot) - tester.getCenter(part));
     await tester.pump();
     await tester.pump();
     expect(harness.controller.state.placements['cpu'], 'cpu_socket');
@@ -273,8 +302,7 @@ void main() {
 
   testWidgets('the seat animation runs for 150–250 ms with motion enabled',
       (tester) async {
-    final harness =
-        await _pump(tester, _stateAt(2), reducedMotion: false);
+    final harness = await _pump(tester, _stateAt(2), reducedMotion: false);
     await _tapKey(tester, 'bench-operation-open_cpu_lever');
     await _tapKey(tester, 'bench-part-cpu');
     for (var i = 0; i < 3; i++) {
@@ -298,10 +326,12 @@ void main() {
     await _tapKey(tester, 'bench-rotate');
     await _tapKey(tester, 'bench-slot-chip-dimm_a2');
     expect(harness.controller.state.placements['ram_1'], 'dimm_a2');
-    expect(harness.lastValue('placement_attempted'), containsPair('input_method', 'tap'));
+    expect(harness.lastValue('placement_attempted'),
+        containsPair('input_method', 'tap'));
   });
 
-  testWidgets('levers, latches and screws stay disabled until physically possible',
+  testWidgets(
+      'levers, latches and screws stay disabled until physically possible',
       (tester) async {
     final harness = await _pump(tester, _stateAt(2));
     expect(_enabled(tester, 'bench-operation-close_cpu_lever'), isFalse);
@@ -327,7 +357,8 @@ void main() {
     await _tapKey(tester, 'bench-part-cooler');
     await _tapKey(tester, 'bench-slot-chip-dimm_a1');
     expect(harness.controller.state.placements.containsKey('cooler'), isFalse);
-    expect(find.text(MissionContentData.incorrectPlacementTitle), findsOneWidget);
+    expect(
+        find.text(MissionContentData.incorrectPlacementTitle), findsOneWidget);
   });
 
   testWidgets('assessment refuses an impossible fit with neutral feedback only',
@@ -341,23 +372,25 @@ void main() {
     expect(find.text(MissionContentData.incorrectPlacementTitle), findsNothing);
     expect(
         tester
-            .widget<Text>(find.byKey(const ValueKey('assembly-bench-information')))
+            .widget<Text>(
+                find.byKey(const ValueKey('assembly-bench-information')))
             .data,
         MissionContentData.assessmentNeutralPlacement);
     expect(find.textContaining('triangle'), findsNothing);
-    expect(harness.lastValue('placement_attempted')?['simulation_valid'], isFalse);
+    expect(
+        harness.lastValue('placement_attempted')?['simulation_valid'], isFalse);
   });
 
   testWidgets('a wrong DIMM pair is accepted, flagged at POST and fixable',
       (tester) async {
-    final driver = EquipmentPracticeDriver(_definition)
-      ..complete(_phase(1));
+    final driver = EquipmentPracticeDriver(_definition)..complete(_phase(1));
     final p2 = _phase(2);
     for (final step in practiceScripts[p2.id]!) {
       final value = Map<String, dynamic>.from(step.$3);
       if (value['item_id'] == 'ram_1') value['destination_id'] = 'dimm_a1';
       if (value['item_id'] == 'ram_2') value['destination_id'] = 'dimm_b1';
-      driver.act(p2, step.$1, value['destination_id'] as String? ?? step.$2, value);
+      driver.act(
+          p2, step.$1, value['destination_id'] as String? ?? step.$2, value);
     }
     expect(driver.state.placements['ram_1'], 'dimm_a1',
         reason: 'a physically possible mistake is not refused');
@@ -402,8 +435,7 @@ void main() {
     expect(find.textContaining('single-channel mode'), findsNothing);
     // Fix round 2: the failed POST charged the memory step once; reseating
     // the modules it flagged is the repair, not two more corrections.
-    final counts =
-        harness.controller.state.equipmentState['counts'] as Map;
+    final counts = harness.controller.state.equipmentState['counts'] as Map;
     expect(counts['faults'], 1);
     expect(counts['repairs'], 2);
     expect(counts['corrections'], isNull);
@@ -448,14 +480,16 @@ void main() {
   });
 
   for (final size in const [Size(320, 568), Size(640, 360)]) {
-    testWidgets('every bench phase fits $size without overflow', (tester) async {
+    testWidgets('every bench phase fits $size without overflow',
+        (tester) async {
       for (var phase = 1; phase <= 6; phase++) {
         await _pump(tester, _stateAt(phase), size: size);
         expect(tester.takeException(), isNull, reason: 'phase $phase');
         expect(find.byType(SimulationScene), findsOneWidget);
-        final canvas = tester.getRect(
-            find.byKey(const ValueKey('simulation-workspace-scroll')));
-        expect(canvas.height, greaterThanOrEqualTo(100), reason: 'phase $phase');
+        final canvas = tester
+            .getRect(find.byKey(const ValueKey('simulation-workspace-scroll')));
+        expect(canvas.height, greaterThanOrEqualTo(100),
+            reason: 'phase $phase');
         final tray = find.byKey(const ValueKey('assembly-bench-tray'));
         if (phase < 6) {
           expect(tester.getSize(tray).height, greaterThanOrEqualTo(48));
@@ -527,7 +561,8 @@ void main() {
     }
     expect(seen, hasLength(4), reason: 'each rotation moves the triangle');
     Rect photo(Finder within) => tester.getRect(find.descendant(
-        of: within, matching: find.byKey(const ValueKey('bench-rotation-cpu'))));
+        of: within,
+        matching: find.byKey(const ValueKey('bench-rotation-cpu'))));
     expect(photo(preview).width, greaterThanOrEqualTo(2 * photo(tile).width),
         reason: 'the preview is a larger view of the part in hand');
   });
@@ -721,12 +756,15 @@ void main() {
           final outlines = _outlinesOnScreen(tester);
           final reason = '$slot at ×$scale';
           expect(outlines, hasLength(1), reason: reason);
-          expect((outlines.single.center - target.center).distance,
-              lessThan(1), reason: reason);
+          expect((outlines.single.center - target.center).distance, lessThan(1),
+              reason: reason);
           expect(outlines.single.contains(target.topLeft), isTrue,
               reason: reason);
-          expect(outlines.single.contains(target.bottomRight - const Offset(.5, .5)),
-              isTrue, reason: reason);
+          expect(
+              outlines.single
+                  .contains(target.bottomRight - const Offset(.5, .5)),
+              isTrue,
+              reason: reason);
           await tester.pumpWidget(const SizedBox.shrink());
         }
       }
@@ -744,11 +782,13 @@ void main() {
       ]) {
         final plate = find.byKey(ValueKey('bench-hotspot-label-$id'));
         expect(find.descendant(of: plate, matching: find.text(label)),
-            findsOneWidget, reason: '$id in ${mode.name}');
+            findsOneWidget,
+            reason: '$id in ${mode.name}');
         // Beside its hotspot, inside the canvas, never over it.
         final rect = AssemblyBenchLayout.hotspotLabel(id)!;
         final spot = AssemblyBenchLayout.operation(id, BenchView.mat)!;
-        expect((Offset.zero & AssemblyBenchLayout.canvas).contains(rect.topLeft) &&
+        expect(
+            (Offset.zero & AssemblyBenchLayout.canvas).contains(rect.topLeft) &&
                 (Offset.zero & AssemblyBenchLayout.canvas)
                     .contains(rect.bottomRight),
             isTrue);
@@ -842,8 +882,8 @@ void main() {
         if (rect.left >= tray.left && rect.right <= tray.right) return;
         final before = trayPosition(tester).pixels;
         final left = rect.right > tray.right;
-        final ghost =
-            await swipe(tester, chipStart(tester), Offset(left ? -140 : 140, 0));
+        final ghost = await swipe(
+            tester, chipStart(tester), Offset(left ? -140 : 140, 0));
         expect(ghost, isFalse, reason: 'a sideways swipe never drags a part');
         expect(trayPosition(tester).pixels, isNot(before),
             reason: 'a swipe that starts on a chip scrolls the tray ($key)');
@@ -855,7 +895,8 @@ void main() {
         (tester) async {
       final harness = await _pump(tester, _stateAt(2), size: phone);
       final actions = harness.transport.actions.length;
-      final start = tester.getCenter(find.byKey(const ValueKey('bench-part-cpu')));
+      final start =
+          tester.getCenter(find.byKey(const ValueKey('bench-part-cpu')));
       expect(trayRect(tester).contains(start), isTrue);
       final ghost = await swipe(tester, start, const Offset(-200, 0));
       expect(ghost, isFalse, reason: 'the swipe must not pick the CPU up');
@@ -888,7 +929,8 @@ void main() {
       }
     });
 
-    testWidgets('every cable and the screwdriver are reachable in the POST phase',
+    testWidgets(
+        'every cable and the screwdriver are reachable in the POST phase',
         (tester) async {
       await _pump(tester, _stateAt(5), size: phone);
       for (final key in const [
@@ -910,7 +952,8 @@ void main() {
         (tester) async {
       final harness = await _pump(tester, _stateAt(2), size: phone);
       await swipeTo(tester, 'bench-operation-open_cpu_lever');
-      await tester.tap(find.byKey(const ValueKey('bench-operation-open_cpu_lever')));
+      await tester
+          .tap(find.byKey(const ValueKey('bench-operation-open_cpu_lever')));
       await tester.pumpAndSettle();
       expect(harness.controller.state.equipmentState['cpu_lever'], 'open');
       // A touch tap selects the processor; rotate it to the socket mark.
@@ -921,7 +964,8 @@ void main() {
         await tester.tap(find.byKey(const ValueKey('bench-rotate')));
         await tester.pumpAndSettle();
       }
-      final start = tester.getCenter(find.byKey(const ValueKey('bench-part-cpu')));
+      final start =
+          tester.getCenter(find.byKey(const ValueKey('bench-part-cpu')));
       final gesture =
           await tester.startGesture(start, kind: PointerDeviceKind.touch);
       for (var i = 1; i <= 6; i++) {
@@ -996,7 +1040,8 @@ void main() {
 
     await semanticTap('bench-cable-cooler_fan');
     expect(find.byKey(const ValueKey('bench-header-chip-cpu_fan_header')),
-        findsOneWidget, reason: 'the fan cable is selected');
+        findsOneWidget,
+        reason: 'the fan cable is selected');
     await semanticTap('bench-header-chip-cpu_fan_header');
     expect(harness.controller.state.connectedNodePairs,
         contains('cooler_fan>cpu_fan_header'));
@@ -1025,7 +1070,8 @@ void main() {
             HotspotVisualState.selected);
       } else {
         expect(find.byKey(const ValueKey('bench-scene-board-coc1_m2_p5')),
-            findsOneWidget, reason: 'the close-up opened');
+            findsOneWidget,
+            reason: 'the close-up opened');
       }
       await tester.pumpWidget(const SizedBox.shrink());
     }
@@ -1070,9 +1116,8 @@ void main() {
           _description(tester),
           MissionContentData.benchMarkerPosition(
               MissionContentData.benchMarkerTriangle, corner));
-      final rotate = tester
-          .getSemantics(find.byKey(const ValueKey('bench-rotate')))
-          .label;
+      final rotate =
+          tester.getSemantics(find.byKey(const ValueKey('bench-rotate'))).label;
       final preview = tester
           .getSemantics(find.byKey(const ValueKey('bench-part-preview')))
           .label;
@@ -1194,10 +1239,12 @@ void main() {
     ('sata_power', 'drive_power', 'top'),
     ('sata_data', 'drive_data', 'bottom'),
   ]) {
-    testWidgets('a click at the $nearEdge of the $port highlight connects '
+    testWidgets(
+        'a click at the $nearEdge of the $port highlight connects '
         '$cable', (tester) async {
       final harness = await _pump(tester, _stateAt(4));
-      int invalid() => ((harness.controller.state.equipmentState['counts']
+      int invalid() =>
+          ((harness.controller.state.equipmentState['counts']
               as Map?)?['invalid'] as int?) ??
           0;
       await _tapKey(tester, 'bench-cable-$cable');
@@ -1242,7 +1289,8 @@ void main() {
     Size(640, 360),
     Size(1280, 800),
   ]) {
-    testWidgets('a module dragged in the case view lands in the aimed slot '
+    testWidgets(
+        'a module dragged in the case view lands in the aimed slot '
         'at $size', (tester) async {
       final harness = await _pump(tester, _stateAt(5), size: size);
       await _tapKey(tester, 'bench-operation-open_dimm_latches');
@@ -1252,17 +1300,25 @@ void main() {
       // The module came out the way it was seated, so it needs no turning.
       expect((_turns(tester, 'ram_1') * 4).round() % 4, 0);
       expect(find.byKey(const ValueKey('bench-scene-chassis-coc1_m2_p5')),
-          findsOneWidget, reason: 'the drag starts in the case view');
+          findsOneWidget,
+          reason: 'the drag starts in the case view');
       final chip = find.byKey(const ValueKey('bench-part-ram_1'));
       await tester.ensureVisible(chip);
       await tester.pumpAndSettle();
       final start = tester.getCenter(chip);
+      final sideRail = find
+          .byKey(const ValueKey('assembly-bench-side-tray'))
+          .evaluate()
+          .isNotEmpty;
+      final lift = sideRail ? const Offset(8, 0) : const Offset(0, -8);
       final gesture =
           await tester.startGesture(start, kind: PointerDeviceKind.touch);
       for (var i = 1; i <= 6; i++) {
-        await gesture.moveTo(start + Offset(0, -8.0 * i));
+        await gesture.moveTo(start + lift * i.toDouble());
         await tester.pump(const Duration(milliseconds: 16));
       }
+      expect(
+          find.byKey(const ValueKey('bench-drag-ghost-ram_1')), findsOneWidget);
       final slot = find.byKey(const ValueKey('bench-slot-dimm_a2'));
       final aimed = tester.getCenter(slot);
       for (final other in const ['dimm_a1', 'dimm_b1', 'dimm_b2']) {
@@ -1304,23 +1360,25 @@ void main() {
         for (final operation in equipment['operations'] as List? ?? const [])
           (operation as Map)['label'] as String,
       };
-      await _pump(tester, _stateAt(number, mode: MissionRuntimeMode.assessment));
-      expect(find.textContaining(RegExp(r'Step \d+ of \d+'), skipOffstage: false),
+      await _pump(
+          tester, _stateAt(number, mode: MissionRuntimeMode.assessment));
+      expect(
+          find.textContaining(RegExp(r'Step \d+ of \d+'), skipOffstage: false),
           findsNothing,
           reason: '${phase.id}: no step position in assessment');
       for (final label in labels.where((label) => !controls.contains(label))) {
         expect(find.textContaining(label, skipOffstage: false), findsNothing,
             reason: '${phase.id}: $label');
-        expect(find.bySemanticsLabel(RegExp(RegExp.escape(label))),
-            findsNothing,
+        expect(
+            find.bySemanticsLabel(RegExp(RegExp.escape(label))), findsNothing,
             reason: '${phase.id} semantics: $label');
       }
-      expect(find.text(MissionContentData.benchAssessmentHeader),
-          findsOneWidget);
+      expect(
+          find.text(MissionContentData.benchAssessmentHeader), findsOneWidget);
       await tester.pumpWidget(const SizedBox.shrink());
       await _pump(tester, _stateAt(number));
-      expect(find.textContaining(labels.first, skipOffstage: false),
-          findsWidgets,
+      expect(
+          find.textContaining(labels.first, skipOffstage: false), findsWidgets,
           reason: 'practice shows the step (${phase.id})');
       await tester.pumpWidget(const SizedBox.shrink());
     }
@@ -1404,25 +1462,90 @@ void main() {
       expect(invalid(harness), 0);
     });
 
-    testWidgets('a drop that misses every slot says where to release the part',
+    testWidgets(
+        'a loose part follows the release, rotates, resumes and returns without evidence',
+        (tester) async {
+      final harness = await _pump(tester, _stateAt(2));
+      final scene = tester.renderObject<RenderBox>(
+          find.byKey(const ValueKey('bench-physical-surface')));
+      final start = find.byKey(const ValueKey('bench-part-cpu'));
+      final loose = find.byKey(const ValueKey('bench-loose-cpu'));
+      final rest = scene.localToGlobal(const Offset(180, 350));
+      await _releasePart(tester, start, rest);
+      expect((tester.getCenter(loose) - rest).distance, lessThan(1));
+      expect(find.text(MissionContentData.benchLooseHint), findsOneWidget);
+      await _tapKey(tester, 'bench-rotate');
+      final snapshot = await const SharedPreferencesMissionRuntimeStore()
+          .loadMissionRuntime(
+              userId: harness.userId,
+              missionId: _definition.id,
+              mode: MissionRuntimeMode.practice);
+      expect((snapshot!.workbenchDraft['turns'] as Map)['cpu'], 2);
+      expect(snapshot.placements.containsKey('cpu'), isFalse);
+      expect(harness.transport.actions, isEmpty);
+      await tester.pumpWidget(const SizedBox.shrink());
+      final resumed = await _pump(tester, _stateAt(2), userId: harness.userId);
+      expect((tester.getCenter(loose) - rest).distance, lessThan(1));
+      expect(_turns(tester, 'cpu'), .5);
+      final again = rest + const Offset(35, 16);
+      await _releasePart(tester, loose, again, kind: PointerDeviceKind.mouse);
+      expect((tester.getCenter(loose) - again).distance, lessThan(1));
+      await _tapKey(tester, 'bench-return-loose');
+      expect(loose, findsNothing);
+      expect(resumed.transport.actions, isEmpty);
+      expect(
+          (resumed.controller.state.workbenchDraft['loose'] as Map), isEmpty);
+    });
+
+    testWidgets(
+        'CPU must reach its own mount, and a refused CPU stays available to reseat',
+        (tester) async {
+      final harness =
+          await _pump(tester, _stateAt(2, mode: MissionRuntimeMode.assessment));
+      await tapRing(tester, 'open_cpu_lever');
+      final cpu = find.byKey(const ValueKey('bench-part-cpu'));
+      final loose = find.byKey(const ValueKey('bench-loose-cpu'));
+      final socket = find.byKey(const ValueKey('bench-slot-cpu_socket'));
+      final outer =
+          tester.getRect(find.byKey(const ValueKey('bench-slot-cooler_mount')));
+      await _releasePart(tester, cpu, outer.topCenter + const Offset(0, 2));
+      expect(harness.lastValue('placement_attempted'), isNull,
+          reason:
+              'Reaching the outer edge of the cooler bracket is not reaching the CPU socket.');
+      expect(loose, findsOneWidget);
+      await _releasePart(tester, loose, tester.getCenter(socket));
+      expect(harness.lastValue('placement_attempted'),
+          containsPair('simulation_valid', false));
+      expect(harness.controller.state.placements.containsKey('cpu'), isFalse);
+      expect(loose, findsOneWidget);
+      expect(find.byKey(const ValueKey('assembly-bench-invalid-count')),
+          findsNothing);
+      for (var turn = 0; turn < 3; turn++) {
+        await _tapKey(tester, 'bench-rotate');
+      }
+      await _releasePart(tester, loose, tester.getCenter(socket),
+          kind: PointerDeviceKind.mouse);
+      expect(harness.controller.state.placements['cpu'], 'cpu_socket');
+      expect(harness.lastValue('placement_attempted'),
+          containsPair('input_method', 'drag'));
+      expect(loose, findsNothing);
+      expect(
+          harness.transport.actions.where(
+              (a) => a.value['runtime_action_type'] == 'placement_attempted'),
+          hasLength(2));
+    });
+
+    testWidgets('cancel and outside release cannot install a part',
         (tester) async {
       final harness = await _pump(tester, _stateAt(2));
       final part = find.byKey(const ValueKey('bench-part-cpu'));
-      await tester.ensureVisible(part);
-      await tester.pumpAndSettle();
-      final scene = tester.getRect(find.byType(SimulationScene));
-      final from = tester.getCenter(part);
-      // Straight up, then into the empty top-left corner of the bench.
-      final gesture = await tester.startGesture(from);
-      await gesture.moveBy(const Offset(0, -60));
-      await tester.pump();
-      await gesture.moveTo(scene.topLeft + const Offset(14, 70));
-      await tester.pump();
-      await gesture.up();
-      await tester.pumpAndSettle();
+      final slot =
+          tester.getCenter(find.byKey(const ValueKey('bench-slot-cpu_socket')));
+      await _releasePart(tester, part, slot, cancel: true);
+      await _releasePart(tester, part, const Offset(8, 14));
+      expect(find.byKey(const ValueKey('bench-loose-cpu')), findsNothing);
       expect(harness.controller.state.placements.containsKey('cpu'), isFalse);
-      expect(harness.lastValue('placement_attempted'), isNull);
-      expect(find.text(MissionContentData.benchDropOnTarget), findsOneWidget);
+      expect(harness.transport.actions, isEmpty);
     });
 
     testWidgets('the mat ground stud explains itself before the strap is on',
@@ -1571,8 +1694,8 @@ void main() {
 
     testWidgets('assessment says only that a held part cannot come out yet',
         (tester) async {
-      final harness = await _pump(
-          tester, _boardBuilt(mode: MissionRuntimeMode.assessment));
+      final harness =
+          await _pump(tester, _boardBuilt(mode: MissionRuntimeMode.assessment));
       await _tapKey(tester, 'bench-part-ram_1');
       await _tapKey(tester, 'bench-remove');
       expect(harness.controller.state.placements['ram_1'], 'dimm_a2');
@@ -1595,8 +1718,8 @@ void main() {
       expect(_enabled(tester, 'bench-operation-open_cpu_lever'), isTrue,
           reason: 'the tray button stays, so it can say why');
       await _tapKey(tester, 'bench-operation-open_cpu_lever');
-      expect(find.text(MissionContentData.benchLeverUnderCooler),
-          findsOneWidget);
+      expect(
+          find.text(MissionContentData.benchLeverUnderCooler), findsOneWidget);
       expect(harness.controller.state.equipmentState['cpu_lever'], 'closed');
       expect(harness.lastValue('equipment_operation'), isNull);
 
@@ -1606,15 +1729,16 @@ void main() {
       await _tapKey(tester, 'bench-cancel');
       await _tapKey(tester, 'bench-part-cooler');
       await _tapKey(tester, 'bench-remove');
-      expect(harness.controller.state.placements.containsKey('cooler'), isFalse);
+      expect(
+          harness.controller.state.placements.containsKey('cooler'), isFalse);
       expect(find.byKey(const ValueKey('bench-hotspot-open_cpu_lever')),
           findsOneWidget,
           reason: 'with the cooler off the lever can be lifted');
 
       await _tapKey(tester, 'bench-part-cpu');
       await _tapKey(tester, 'bench-remove');
-      expect(find.text(MissionContentData.benchHeldByLoadPlate),
-          findsOneWidget);
+      expect(
+          find.text(MissionContentData.benchHeldByLoadPlate), findsOneWidget);
       expect(harness.controller.state.placements['cpu'], 'cpu_socket');
       await _tapKey(tester, 'bench-cancel');
       await tapRing(tester, 'open_cpu_lever');
@@ -1652,4 +1776,3 @@ void main() {
     });
   });
 }
-

@@ -103,6 +103,34 @@ void main() {
     expect(transport.appendedIds, isEmpty);
   });
 
+  test('loose parts checkpoint without evidence, survive replay and expire on advance', () async {
+    final definition = MissionSimulationDefinitions.byId('coc1_m2');
+    final phase = definition.phases[1].id;
+    final next = definition.phases[2].id;
+    final initial = MissionRuntimeState.initial(definition.id,
+      definitionVersion: MissionSimulationDefinitions.contractVersion(definition.id)).copyWith(currentPhaseId: phase);
+    final store = _FakeRuntimeStore();
+    final transport = _FakeEvidenceTransport();
+    MissionRuntimeController open() => _controller(store: store, transport: transport,
+        initialState: initial, restoreReducer: MissionRuntimeActionReducer(definition));
+    final first = open();
+    final point = [120.0, 88.0];
+    final pending = first.updateWorkbenchDraft(phase, {'loose': {'cpu': point}});
+    point[0] = 666;
+    await pending;
+    final restored = open();
+    await restored.restore();
+    expect(restored.state.workbenchDraft, {'loose': {'cpu': [120.0, 88.0]}});
+    expect(transport.appendedIds, isEmpty);
+    expect(restored.state.acceptedEvidenceIds, isEmpty);
+    expect(restored.state.equipmentState, isEmpty);
+    await restored.dispatch(phaseId: phase, actionType: 'phase_completed', target: next,
+        transition: (s) => s.copyWith(currentPhaseId: next));
+    await restored.updateWorkbenchDraft(phase, {'late_pointer': true});
+    expect(restored.state.workbenchDraft, isEmpty);
+    expect(transport.appendedIds, hasLength(1));
+  });
+
   test('restore ignores acknowledged actions from other missions', () async {
     final definition = MissionSimulationDefinitions.byId('coc2_m5');
     final unrelated = _actionFor(

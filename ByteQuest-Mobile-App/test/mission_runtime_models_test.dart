@@ -13,6 +13,17 @@ void main() {
     expect(MissionRuntimeState.fromJson(state.toJson()), state);
   });
 
+  test('an optional bench draft leaves old snapshots readable and round-trips separately from equipment', () {
+    final original = MissionRuntimeState.initial('coc1_m2').copyWith(currentPhaseId: 'phase');
+    expect(original.toJson(), isNot(contains('workbenchDraft')));
+    expect(MissionRuntimeState.fromJson(original.toJson()).workbenchDraft, isEmpty);
+    final moved = original.copyWith(workbenchDraft: {'turns': {'cpu': 3}});
+    expect(MissionRuntimeState.fromJson(moved.toJson()), moved);
+    expect(moved.equipmentState, original.equipmentState);
+    expect(moved.copyWith(currentPhaseId: 'next').workbenchDraft, isEmpty);
+    expect(moved.copyWith(clearCurrentPhaseId: true).workbenchDraft, isEmpty);
+  });
+
   test('definition rejects phase counts outside three to six', () {
     expect(
       () => _definition(phases: const []),

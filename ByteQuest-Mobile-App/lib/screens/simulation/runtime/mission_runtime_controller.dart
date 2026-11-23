@@ -250,6 +250,9 @@ final class MissionRuntimeController {
         acceptedEvidenceIds: serverIds,
         pendingEvidence: pending,
         reducedMotion: local?.reducedMotion ?? rebuilt.reducedMotion,
+        workbenchDraft: local?.currentPhaseId == rebuilt.currentPhaseId
+            ? local?.workbenchDraft
+            : const {},
         cameraScale: local?.cameraScale ?? rebuilt.cameraScale,
         cameraOffsetX: local?.cameraOffsetX ?? rebuilt.cameraOffsetX,
         cameraOffsetY: local?.cameraOffsetY ?? rebuilt.cameraOffsetY,
@@ -279,6 +282,16 @@ final class MissionRuntimeController {
       _state = _state.copyWith(cameraScale: scale.clamp(1.0, 3.0).toDouble(),
           cameraOffsetX: offsetX, cameraOffsetY: offsetY);
       if (!await _saveState()) throw StateError('Camera preference could not be saved.');
+    });
+  }
+
+  Future<void> updateWorkbenchDraft(String phaseId, Map<String, dynamic> draft) {
+    // Freeze the gesture at release, not later when preceding writes finish.
+    final snapshot = MissionRuntimeState.freezeDraft(draft);
+    return _enqueue(() async {
+      if (_state.currentPhaseId != phaseId) return;
+      _state = _state.copyWith(workbenchDraft: snapshot);
+      if (!await _saveState()) throw StateError('Workbench draft could not be saved.');
     });
   }
 

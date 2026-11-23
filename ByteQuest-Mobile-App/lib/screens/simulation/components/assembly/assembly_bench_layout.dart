@@ -43,10 +43,11 @@ abstract final class AssemblyBenchLayout {
   // --- Motherboard close-up on the anti-static mat (board view). ----------
   // Board image pixel (u, v) maps to canvas (boardOrigin + (u, v) * scale).
   static const boardScale = 3.18;
-  static const boardOrigin = Offset(250 - 190 * boardScale, 10 - 25 * boardScale);
+  static const boardOrigin =
+      Offset(250 - 190 * boardScale, 10 - 25 * boardScale);
   static Rect boardImageRect(BenchView view) => view == BenchView.board
-      ? Rect.fromLTWH(boardOrigin.dx, boardOrigin.dy, 500 * boardScale,
-          500 * boardScale)
+      ? Rect.fromLTWH(
+          boardOrigin.dx, boardOrigin.dy, 500 * boardScale, 500 * boardScale)
       : Rect.fromLTWH(_chassisBoardOrigin.dx, _chassisBoardOrigin.dy,
           500 * _chassisBoardScale, 500 * _chassisBoardScale);
 
@@ -77,7 +78,8 @@ abstract final class AssemblyBenchLayout {
   static final Rect _tray = _case(197, 228, 443, 530);
   static final _chassisBoardScale = _tray.width / 352;
   static final Offset _chassisBoardOrigin = Offset(
-      _tray.left - 76 * _chassisBoardScale, _tray.top - 37 * _chassisBoardScale);
+      _tray.left - 76 * _chassisBoardScale,
+      _tray.top - 37 * _chassisBoardScale);
 
   /// Board-level destinations exist in the close-up and, once the
   /// motherboard is installed, at the same physical spot in the case.
@@ -168,6 +170,26 @@ abstract final class AssemblyBenchLayout {
       area = _awayFrom(area, rect, port);
     }
     return area;
+  }
+
+  static double looseExtent(String id) => switch (id) {
+        'motherboard' => 380,
+        'psu' || 'cooler' => 250,
+        'storage' => 235,
+        'ram_1' || 'ram_2' => 210,
+        'io_shield' => 195,
+        _ => 160,
+      };
+
+  /// Drag contact is the centre of the part. Dropping one corner over a bay is not alignment.
+  static Rect? alignmentArea(String id, BenchView view) {
+    final hit = target(id, view);
+    if (hit == null) return null;
+    return Rect.fromCenter(
+      center: hit.center,
+      width: math.min(hit.width, math.max(48, hit.width * .48)),
+      height: math.min(hit.height, math.max(55, hit.height * .42)),
+    );
   }
 
   static Rect _padded(String id, Rect rect, BenchView view, double minimum) {

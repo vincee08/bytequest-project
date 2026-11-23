@@ -548,6 +548,7 @@ final class MissionRuntimeState {
     Iterable<String> selectedBranchActionIds = const [],
     Map<String, dynamic> testState = const {},
     Map<String, dynamic> equipmentState = const {},
+    Map<String, dynamic> workbenchDraft = const {},
     Iterable<String> acceptedEvidenceIds = const [],
     Iterable<MissionEvidenceAction> pendingEvidence = const [],
     this.mode = MissionRuntimeMode.practice,
@@ -576,6 +577,7 @@ final class MissionRuntimeState {
         selectedBranchActionIds = Set.unmodifiable(selectedBranchActionIds),
         testState = _immutableJsonMap(testState),
         equipmentState = _immutableJsonMap(equipmentState),
+        workbenchDraft = _immutableJsonMap(workbenchDraft),
         acceptedEvidenceIds = Set.unmodifiable(acceptedEvidenceIds),
         pendingEvidence = List.unmodifiable(pendingEvidence),
         updatedAt = updatedAt ?? DateTime.now() {
@@ -645,6 +647,9 @@ final class MissionRuntimeState {
       selectedBranchActionIds: _stringSet(json['selectedBranchActionIds']),
       testState: _jsonMapOrEmpty(json['testState']),
       equipmentState: _jsonMapOrEmpty(json['equipmentState']),
+      workbenchDraft: json['workbenchDraft'] is Map
+          ? _jsonMap(json['workbenchDraft'])
+          : const {},
       acceptedEvidenceIds: _stringSet(json['acceptedEvidenceIds']),
       pendingEvidence: _jsonList(json['pendingEvidence'])
           .map((item) => MissionEvidenceAction.fromJson(_jsonMap(item)))
@@ -684,6 +689,11 @@ final class MissionRuntimeState {
 
   /// Simulated equipment observations, never an official assessment outcome.
   final Map<String, dynamic> equipmentState;
+
+  /// Uncommitted gestures in this phase, saved locally but never replayed or graded.
+  final Map<String, dynamic> workbenchDraft;
+  static Map<String, dynamic> freezeDraft(Map<String, dynamic> draft) =>
+      _immutableJsonMap(draft);
   final Set<String> acceptedEvidenceIds;
   final List<MissionEvidenceAction> pendingEvidence;
   final MissionRuntimeMode mode;
@@ -719,6 +729,7 @@ final class MissionRuntimeState {
     Set<String>? selectedBranchActionIds,
     Map<String, dynamic>? testState,
     Map<String, dynamic>? equipmentState,
+    Map<String, dynamic>? workbenchDraft,
     List<MissionEvidenceAction>? pendingEvidence,
     MissionRuntimeMode? mode,
     String? assessmentAttemptId,
@@ -753,6 +764,10 @@ final class MissionRuntimeState {
           selectedBranchActionIds ?? this.selectedBranchActionIds,
       testState: testState ?? this.testState,
       equipmentState: equipmentState ?? this.equipmentState,
+      workbenchDraft: workbenchDraft ??
+          (clearCurrentPhaseId || (currentPhaseId != null && currentPhaseId != this.currentPhaseId)
+              ? const {}
+              : this.workbenchDraft),
       acceptedEvidenceIds: acceptedEvidenceIds ?? this.acceptedEvidenceIds,
       pendingEvidence: pendingEvidence ?? this.pendingEvidence,
       mode: mode ?? this.mode,
@@ -811,6 +826,7 @@ final class MissionRuntimeState {
         'selectedBranchActionIds': selectedBranchActionIds.toList(),
         'testState': _jsonCopy(testState),
         'equipmentState': _jsonCopy(equipmentState),
+        if (workbenchDraft.isNotEmpty) 'workbenchDraft': _jsonCopy(workbenchDraft),
         'acceptedEvidenceIds': acceptedEvidenceIds.toList(),
         'pendingEvidence':
             pendingEvidence.map((action) => action.toJson()).toList(),
@@ -849,6 +865,7 @@ final class MissionRuntimeState {
       _deepEquals(other.selectedBranchActionIds, selectedBranchActionIds) &&
       _deepEquals(other.testState, testState) &&
       _deepEquals(other.equipmentState, equipmentState) &&
+      _deepEquals(other.workbenchDraft, workbenchDraft) &&
       _deepEquals(other.acceptedEvidenceIds, acceptedEvidenceIds) &&
       _deepEquals(other.pendingEvidence, pendingEvidence) &&
       other.mode == mode &&
@@ -881,6 +898,7 @@ final class MissionRuntimeState {
         _deepHash(selectedBranchActionIds),
         _deepHash(testState),
         _deepHash(equipmentState),
+        _deepHash(workbenchDraft),
         _deepHash(acceptedEvidenceIds),
         _deepHash(pendingEvidence),
         mode,

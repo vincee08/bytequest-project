@@ -68,13 +68,19 @@ class AssemblyBenchPainter extends CustomPainter {
     }
     final ground = AssemblyBenchLayout.operation('ground_wrist_strap', view)!;
     canvas.drawCircle(ground.center, 22, Paint()..color = _metal);
-    canvas.drawCircle(ground.center, 9, Paint()..color = const Color(0xFF2E3A4D));
+    canvas.drawCircle(
+        ground.center, 9, Paint()..color = const Color(0xFF2E3A4D));
     if (settings['esd_grounded'] == true) {
       final strap = AssemblyBenchLayout.operation('wear_wrist_strap', view)!;
       final cord = Path()
         ..moveTo(strap.center.dx, strap.center.dy)
-        ..cubicTo(strap.center.dx - 260, strap.bottom + 60, ground.center.dx + 220,
-            ground.center.dy + 60, ground.center.dx, ground.center.dy);
+        ..cubicTo(
+            strap.center.dx - 260,
+            strap.bottom + 60,
+            ground.center.dx + 220,
+            ground.center.dy + 60,
+            ground.center.dx,
+            ground.center.dy);
       canvas.drawPath(
           cord,
           Paint()
@@ -163,8 +169,7 @@ class AssemblyBenchPainter extends CustomPainter {
         final body = slot.inflate(1.2 * s);
         canvas.drawRRect(RRect.fromRectAndRadius(body, Radius.circular(s)),
             Paint()..color = const Color(0xFF14181F));
-        canvas.drawRect(
-            Rect.fromLTWH(body.left, body.top, body.width, 3 * s),
+        canvas.drawRect(Rect.fromLTWH(body.left, body.top, body.width, 3 * s),
             Paint()..color = const Color(0xFFC9A227));
         // The module's notch, on its contact edge over the slot key.
         canvas.drawRect(
@@ -234,12 +239,12 @@ class AssemblyBenchPainter extends CustomPainter {
         16);
     if (placements['io_shield'] == 'io_cutout') {
       final shield = AssemblyBenchLayout.slot('io_cutout', view)!;
-      canvas.drawRect(shield, Paint()..color = _metal);
-      final hole = Paint()..color = const Color(0xFF384252);
-      for (var y = shield.top + 8; y < shield.bottom - 8; y += 18) {
-        canvas.drawRect(
-            Rect.fromLTWH(shield.left + 4, y, shield.width - 8, 9), hole);
-      }
+      canvas.save();
+      canvas.translate(shield.left, shield.top);
+      canvas.scale(shield.width / 28, shield.height / 92);
+      canvas.translate(-36, -4);
+      const BenchIoShieldPainter().paint(canvas, const Size(100, 100));
+      canvas.restore();
     }
     if (!boardInstalled) {
       final tray = AssemblyBenchLayout.slot('board_standoffs', view)!;
@@ -252,8 +257,7 @@ class AssemblyBenchPainter extends CustomPainter {
         tray.bottomLeft,
         tray.bottomRight
       ]) {
-        canvas.drawCircle(
-            Offset.lerp(corner, tray.center, .06)!, 5, standoff);
+        canvas.drawCircle(Offset.lerp(corner, tray.center, .06)!, 5, standoff);
       }
     }
     final screw = Paint()..color = const Color(0xFFDFE5EE);
@@ -269,10 +273,10 @@ class AssemblyBenchPainter extends CustomPainter {
       ]) {
         final at = Offset.lerp(corner, rect.center, .12)!;
         canvas.drawCircle(at, 6, screw);
-        canvas.drawLine(at - const Offset(4, 0), at + const Offset(4, 0),
-            slotLine);
-        canvas.drawLine(at - const Offset(0, 4), at + const Offset(0, 4),
-            slotLine);
+        canvas.drawLine(
+            at - const Offset(4, 0), at + const Offset(4, 0), slotLine);
+        canvas.drawLine(
+            at - const Offset(0, 4), at + const Offset(0, 4), slotLine);
       }
     }
 
@@ -324,7 +328,8 @@ class AssemblyBenchPainter extends CustomPainter {
             ..strokeWidth = 7
             ..strokeCap = StrokeCap.round);
       canvas.drawRRect(
-          RRect.fromRectAndRadius(Rect.fromCenter(center: to, width: 18, height: 12),
+          RRect.fromRectAndRadius(
+              Rect.fromCenter(center: to, width: 18, height: 12),
               const Radius.circular(3)),
           Paint()..color = colour);
     }
@@ -380,8 +385,8 @@ class AssemblyBenchPainter extends CustomPainter {
               letterSpacing: .4)),
       textDirection: TextDirection.ltr,
     )..layout();
-    painter.paint(canvas,
-        center - Offset(painter.width / 2, painter.height / 2));
+    painter.paint(
+        canvas, center - Offset(painter.width / 2, painter.height / 2));
   }
 
   @override
@@ -397,6 +402,110 @@ class AssemblyBenchPainter extends CustomPainter {
 
   static bool _same(Map<String, dynamic> a, Map<String, dynamic> b) =>
       a.length == b.length && a.entries.every((e) => b[e.key] == e.value);
+}
+
+/// Stamped rear-panel plate shown from above; cutouts are the sheet, not a card label.
+class BenchIoShieldPainter extends CustomPainter {
+  const BenchIoShieldPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.save();
+    canvas.scale(size.width / 100, size.height / 100);
+    final edge = RRect.fromLTRBR(36, 4, 64, 96, const Radius.circular(1.8));
+    final lip =
+        RRect.fromLTRBR(37.5, 5.5, 62.5, 94.5, const Radius.circular(1.1));
+    final face = Path()
+      ..fillType = PathFillType.evenOdd
+      ..addRRect(lip);
+    final apertures = <Rect>[
+      const Rect.fromLTWH(42, 11, 14, 9),
+      const Rect.fromLTWH(40, 26, 20, 5),
+      const Rect.fromLTWH(40, 35, 20, 6),
+      const Rect.fromLTWH(40, 46, 9, 4),
+      const Rect.fromLTWH(51, 46, 9, 4),
+      const Rect.fromLTWH(40, 53, 9, 4),
+      const Rect.fromLTWH(51, 53, 9, 4),
+      const Rect.fromLTWH(42, 64, 16, 12),
+    ];
+    for (final hole in apertures) {
+      face.addRect(hole);
+    }
+    for (final x in [42.0, 50.0, 58.0]) {
+      face.addOval(Rect.fromCircle(center: Offset(x, 85), radius: 2.8));
+    }
+    canvas.drawRRect(
+        edge,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.6
+          ..color = const Color(0xFF606D7E));
+    canvas.drawPath(
+        face,
+        Paint()
+          ..shader = const LinearGradient(colors: [
+            Color(0xFF8896A8),
+            Color(0xFFE3E9EC),
+            Color(0xFF9CA6B4)
+          ]).createShader(edge.outerRect));
+    canvas.drawPath(
+        face,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = .65
+          ..color = const Color(0xFF535F72));
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(BenchIoShieldPainter oldDelegate) => false;
+}
+
+/// The loose lead stays attached to its physical origin while the connector moves.
+class BenchContactPainter extends CustomPainter {
+  const BenchContactPainter({required this.point, this.origin, this.hover});
+  final Offset point;
+  final Offset? origin;
+  final Rect? hover;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final start = origin;
+    if (start != null) {
+      final slack = math.min(100.0, (point - start).distance * .28);
+      final path = Path()
+        ..moveTo(start.dx, start.dy)
+        ..cubicTo(start.dx, start.dy + slack, point.dx - slack, point.dy,
+            point.dx, point.dy);
+      final lead = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round;
+      canvas.drawPath(
+          path,
+          lead
+            ..color = const Color(0xFFAFB9C4)
+            ..strokeWidth = 11);
+      canvas.drawPath(
+          path,
+          lead
+            ..color = const Color(0xFF26313C)
+            ..strokeWidth = 7);
+    }
+    if (hover case final rect?) {
+      canvas.drawRRect(
+          RRect.fromRectAndRadius(rect.inflate(2), const Radius.circular(5)),
+          Paint()
+            ..style = PaintingStyle.stroke
+            ..strokeWidth = 4
+            ..color = AppTheme.primaryBlue);
+    }
+  }
+
+  @override
+  bool shouldRepaint(BenchContactPainter oldDelegate) =>
+      oldDelegate.origin != origin ||
+      oldDelegate.point != point ||
+      oldDelegate.hover != hover;
 }
 
 /// A keyed part's marker, drawn in its box at 0° (see [BenchMarker]): the

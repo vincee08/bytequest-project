@@ -12,6 +12,23 @@ class HardwareItem {
 /// Mission Content Data
 /// Contains questions, components, steps, and scenarios for all missions
 class MissionContentData {
+  static const portBenchRear = 'Peripheral wiring bench';
+  static const portBenchRearPlate = 'Rear I/O';
+  static const portBenchTester = 'Cable tester';
+  static const portBenchTesterJack = 'Tester input';
+  static const portBenchNetwork = 'Network patch bench';
+  static const portBenchLan = 'LAN';
+  static const portBenchMiss = 'No jack at that spot. Release the plug over a jack.';
+  static const portBenchOccupied = 'Jack occupied. Move the seated plug first.';
+  static const portBenchChooseJack = 'Plug selected. Choose a jack.';
+  static const portBenchChoosePlug = 'Select a plug first.';
+  static String portJack(String bank, int n) => '$bank · $n';
+  static String portJackStatus(String label, String? device) => device == null
+      ? '$label, empty jack'
+      : '$label, connected to $device. Drag the plug or select it to reconnect.';
+  static String portPlugStatus(String label, String? jack) => jack == null
+      ? '$label, loose cable. Drag the plug or tap to select it.'
+      : '$label, connected to $jack. Drag or select to reconnect.';
   static const notificationsTitle = 'Notifications';
   static const notificationsAll = 'All';
   static const notificationsUnread = 'Unread';
@@ -667,6 +684,21 @@ class MissionContentData {
   static const workspaceOrientationHint =
       'Choose the physical orientation before seating this component.';
   static const workspaceObjectsLabel = 'Objects';
+  static const inspectionLensLabel = 'Inspection lens';
+  static const inspectionLensHint = 'Drag the lens onto hardware, or tap a part.';
+  static const inspectionLensHelp =
+      'Move the lens to look closer. Lift your finger on a part to inspect it. You can also tap the part or choose it from Objects.';
+  static const inspectionLensMiss = 'No hardware under the lens.';
+  static const hardwareObservations = {
+    'motherboard': 'The processor socket, memory slots and power header are visible. No capacitors appear swollen.',
+    'cpu': 'The contacts are intact. One corner of the processor carries a triangular mark.',
+    'ram': 'The memory module has an off-centre notch in its contact edge.',
+    'psu': 'The power supply has a mains inlet, a switch and a fan grille. No mains cable is attached.',
+    'cpu_socket': 'The socket is empty. Its orientation mark is visible and no contacts appear bent.',
+    'dimm_slot': 'The slot has an offset key. One retaining latch is open.',
+    'atx_power_port': 'The two-row, keyed 24-pin header is empty and clear of debris.',
+    'anti_static_strap': 'A coiled lead connects the wrist band to a grounding clip.',
+  };
   static String workspaceDragLabel(String label) =>
       'Drag $label to a work location';
   static String workspaceDropLabel(String label) =>
@@ -817,6 +849,10 @@ class MissionContentData {
   static const labPcieRotateLabel = 'Turn the adapter around';
   static const labPcieCardAligned = 'Bracket faces the rear opening';
   static const labPcieCardReversed = 'Bracket faces into the case';
+  static const labPcieBracketLeft = 'Bracket on the left';
+  static const labPcieBracketRight = 'Bracket on the right';
+  static const labPcieLooseAdapter = 'Unseated adapter on the work surface';
+  static const labPcieReturnToTray = 'Return adapter to tray';
   static const labPcieSeatLabel = 'Press the adapter down and latch it';
   static const labPcieSeated = 'Adapter seated and latched';
   static const labPcieConfigureLabel = 'Install the driver and configure addressing';
@@ -894,6 +930,11 @@ class MissionContentData {
   static const benchInspectionTitle = 'Inspection';
   static const benchReadMore = 'Read the full note';
   static const benchDismissInformation = 'Hide this note';
+  static const benchLooseHint =
+      'Part resting on the bench. Pick it up again or return it to the tray.';
+  static const benchReturnToTray = 'Return to tray';
+  static String benchLooseSemantics(String part) =>
+      '$part, loose on the bench. Drag to reposition, or select to work with it.';
   static const benchDropOnTarget =
       'Release the part over a slot, bay or header on the bench.';
   // Neutral in both modes: it names the equipment, never the next step.

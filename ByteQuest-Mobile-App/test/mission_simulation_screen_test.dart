@@ -76,7 +76,7 @@ void main() {
     expect(controller.state.placements, isEmpty);
   });
 
-  testWidgets('Show me where scrolls to the actual off-screen scene object',
+  testWidgets('Show me where makes the actual scene object visible',
       (tester) async {
     SharedPreferences.setMockInitialValues({
       'bq_mission_tutorial_seen_locator-learner': true,
@@ -125,15 +125,10 @@ void main() {
         last);
     final workspaceScroll =
         find.byKey(const ValueKey('simulation-workspace-scroll'));
-    expect(
-        tester
-            .state<ScrollableState>(find
-                .descendant(
-                    of: workspaceScroll, matching: find.byType(Scrollable))
-                .first)
-            .position
-            .pixels,
-        greaterThan(0));
+    final target = find.byKey(ValueKey('simulation-object-$last'));
+    expect(target.hitTestable(), findsOneWidget);
+    expect(tester.getRect(workspaceScroll).contains(tester.getCenter(target)),
+        isTrue, reason: 'The locator must reveal the actual hardware.');
     expect(controller.state.acceptedEvidenceIds, isEmpty);
     await tester.ensureVisible(find.byKey(ValueKey('inspect-target-$last')));
     await tester.tap(find.byKey(ValueKey('inspect-target-$last')));

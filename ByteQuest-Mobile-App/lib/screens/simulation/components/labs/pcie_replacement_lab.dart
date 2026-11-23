@@ -6,6 +6,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../data/mission_content_data.dart';
 import '../../runtime/mission_equipment_simulator.dart';
 import '../../runtime/mission_runtime_models.dart';
+import '../physical/physical_surface.dart';
 import '../tool_tray.dart' show MissionActionCallback;
 
 /// COC4 M4 phases 1, 2 and 4 on a workstation service bench.
@@ -26,18 +27,27 @@ class PcieReplacementLab extends StatefulWidget {
     required this.state,
     required this.onAction,
     required this.enabled,
+    this.onDraftChanged,
   });
 
   final MissionPhaseDefinition phase;
   final MissionRuntimeState state;
   final MissionActionCallback onAction;
   final bool enabled;
+  final ValueChanged<Map<String, dynamic>>? onDraftChanged;
 
   @override
   State<PcieReplacementLab> createState() => _PcieReplacementLabState();
 }
 
 enum _Stage { removal, install, closeOut }
+
+enum _ServicePart { adapter }
+
+const _edgeX = 386 / 558;
+const _edgeY = 284 / 447;
+Offset _cardEdge(double width, bool aligned) =>
+    Offset(width * (aligned ? _edgeX : 1 - _edgeX), width * 447 / 558 * _edgeY);
 
 const _motherboardAsset = 'assets/COC1/Mission 2/motherboard.png';
 const _adapterAsset = 'assets/COC2/Mission 1/NIC.png';
@@ -62,6 +72,7 @@ class _PcieReplacementLabState extends State<PcieReplacementLab> {
   // Phase 2.
   bool _aligned = false;
   bool _adapterSelected = false;
+  Offset? _looseEdge;
   // Phase 4.
   bool _latched = false;
   bool _fastened = false;
@@ -120,7 +131,12 @@ class _PcieReplacementLabState extends State<PcieReplacementLab> {
   @override
   void didUpdateWidget(covariant PcieReplacementLab oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.phase.id != widget.phase.id) _restore();
+    if (oldWidget.phase.id != widget.phase.id ||
+        oldWidget.state.mode != widget.state.mode ||
+        oldWidget.state.assessmentAttemptId !=
+            widget.state.assessmentAttemptId) {
+      _restore();
+    }
   }
 
   /// A confirmed procedure survives pause and resume. Every recorded step is
@@ -132,8 +148,9 @@ class _PcieReplacementLabState extends State<PcieReplacementLab> {
     _tool = null;
     _toolMessage = null;
     _adapterSelected = false;
-    final order = MissionEquipmentSimulator.strings(_recorded['order']);
-    final performed = order.length == _items.length;
+    _looseEdge = null;
+    final order = _recordedOrder;
+    final performed = _stage != _Stage.install && order.length == _items.length;
     if (performed) {
       _steps.addAll(order);
       _submitted = true;
@@ -147,6 +164,121 @@ class _PcieReplacementLabState extends State<PcieReplacementLab> {
       case _Stage.closeOut:
         _latched = _fastened = _configured = _panelOn = _powerBack = performed;
     }
+    _restoreDraft(order, performed);
+  }
+
+  List<String> get _recordedOrder =>
+      MissionEquipmentSimulator.strings(_recorded['order']);
+
+  // A backup operation may still be recorded after a procedure was restarted.
+  int get _baselineCount =>
+      widget.state.acceptedEvidenceIds.length +
+      widget.state.pendingEvidence.length -
+      (_stage == _Stage.removal && _contingencyReady ? 1 : 0);
+
+  void _restoreDraft(List<String> order, bool performed) {
+    final d = widget.state.workbenchDraft;
+    if (d['phase'] != widget.phase.id ||
+        d['base'] != order.join(',') ||
+        (performed && d['baseCount'] != _baselineCount)) {
+      return;
+    }
+    if (_stage == _Stage.install) {
+      if (_adapterInstalled ||
+          d['aligned'] is! bool ||
+          d['selected'] is! bool) {
+        return;
+      }
+      final position = d['edge'];
+      if (position != null) {
+        if (position is! List ||
+            position.length != 2 ||
+            !position
+                .every((v) => v is num && v.isFinite && v >= 0 && v <= 1)) {
+          return;
+        }
+        _looseEdge = Offset(
+            (position[0] as num).toDouble(), (position[1] as num).toDouble());
+      }
+      _aligned = d['aligned'] as bool;
+      _adapterSelected = d['selected'] as bool;
+      return;
+    }
+    final tool = d['tool'];
+    final steps = d['steps'];
+    final ids = _items.map((item) => item['id']).toSet();
+    if (tool != null &&
+        (_stage == _Stage.removal
+            ? !_toolAssets.containsKey(tool)
+            : tool != 'esd_driver')) {
+      return;
+    }
+    if (steps is! List ||
+        steps.length >= ids.length ||
+        steps.toSet().length != steps.length ||
+        !ids.containsAll(steps)) {
+      return;
+    }
+    if (_stage == _Stage.removal) {
+      final plugged = d['plugged'];
+      final strap = d['strap'];
+      if (plugged is! bool ||
+          strap is! bool ||
+          steps.contains('isolate') != (!plugged && strap) ||
+          (steps.contains('remove') && !_screwOut)) {
+        return;
+      }
+      _powerConnected = plugged;
+      _strapOn = strap;
+      _cardOut = steps.contains('remove');
+      _inspected = steps.contains('inspect');
+    } else {
+      final panel = d['panel'];
+      final power = d['power'];
+      if (panel is! bool ||
+          power is! bool ||
+          steps.contains('restore') != (panel && power) ||
+          (steps.contains('fasten') &&
+              (!steps.contains('seat') ||
+                  steps.indexOf('seat') > steps.indexOf('fasten')))) {
+        return;
+      }
+      _panelOn = panel;
+      _powerBack = power;
+      _latched = steps.contains('seat');
+      _fastened = steps.contains('fasten');
+      _configured = steps.contains('configure');
+    }
+    _steps
+      ..clear()
+      ..addAll(steps.cast<String>());
+    _submitted = false;
+    _tool = tool as String?;
+  }
+
+  void _edit(VoidCallback change) {
+    setState(change);
+    if (_submitted) return; // The confirmed order is restored from evidence.
+    widget.onDraftChanged?.call({
+      'phase': widget.phase.id,
+      'base': _recordedOrder.join(','),
+      'baseCount': _baselineCount,
+      if (_stage == _Stage.install) ...{
+        'aligned': _aligned,
+        'selected': _adapterSelected,
+        if (_looseEdge case final p?) 'edge': [p.dx, p.dy],
+      } else ...{
+        'steps': List<String>.of(_steps),
+        'tool': _tool,
+        if (_stage == _Stage.removal) ...{
+          'plugged': _powerConnected,
+          'strap': _strapOn
+        } else ...{
+          'panel': _panelOn,
+          'power': _powerBack
+        },
+      },
+    });
   }
 
   bool get _interactive => widget.enabled && !_submitted;
@@ -168,7 +300,7 @@ class _PcieReplacementLabState extends State<PcieReplacementLab> {
 
   void _restart() {
     if (!widget.enabled) return;
-    setState(() {
+    _edit(() {
       _steps.clear();
       _submitted = false;
       _toolMessage = null;
@@ -187,7 +319,7 @@ class _PcieReplacementLabState extends State<PcieReplacementLab> {
 
   void _unplug() {
     if (!_interactive || !_powerConnected) return;
-    setState(() {
+    _edit(() {
       _powerConnected = false;
       if (_strapOn) _done('isolate');
     });
@@ -195,7 +327,7 @@ class _PcieReplacementLabState extends State<PcieReplacementLab> {
 
   void _wearStrap() {
     if (!_interactive || _strapOn) return;
-    setState(() {
+    _edit(() {
       _strapOn = true;
       if (!_powerConnected) _done('isolate');
     });
@@ -217,7 +349,7 @@ class _PcieReplacementLabState extends State<PcieReplacementLab> {
       }));
     } else if (_stage == _Stage.closeOut && _latched && !_fastened) {
       // Phase 4 records only its step order; the tool is part of the step.
-      setState(() {
+      _edit(() {
         if (tool == 'esd_driver') {
           _fastened = true;
           _toolMessage = null;
@@ -231,7 +363,7 @@ class _PcieReplacementLabState extends State<PcieReplacementLab> {
 
   void _liftCard() {
     if (!_interactive || _cardOut || !_screwOut) return;
-    setState(() {
+    _edit(() {
       _cardOut = true;
       _done('remove');
     });
@@ -239,7 +371,7 @@ class _PcieReplacementLabState extends State<PcieReplacementLab> {
 
   void _inspect() {
     if (!_interactive || _inspected) return;
-    setState(() {
+    _edit(() {
       _inspected = true;
       _done('inspect');
     });
@@ -256,8 +388,20 @@ class _PcieReplacementLabState extends State<PcieReplacementLab> {
 
   // Phase 2 ------------------------------------------------------------------
 
-  void _placeAdapter(String method) {
-    if (!widget.enabled || _adapterInstalled) return;
+  void _release(Offset edge, PhysicalMount? mount) {
+    if (!_interactive || _adapterInstalled) return;
+    if (mount != null) {
+      _placeAdapter('drag', edge: edge);
+    } else {
+      _edit(() {
+        _looseEdge = edge;
+        _adapterSelected = false;
+      });
+    }
+  }
+
+  void _placeAdapter(String method, {Offset? edge}) {
+    if (!_interactive || _adapterInstalled) return;
     final item = _adapter;
     final destination = _slotDestination;
     if (item['id'] == null || destination['id'] == null) return;
@@ -272,7 +416,10 @@ class _PcieReplacementLabState extends State<PcieReplacementLab> {
         .toSet();
     final compatible =
         accepted.isEmpty || accepted.contains(item['category'] as String?);
-    setState(() => _adapterSelected = false);
+    _edit(() {
+      _adapterSelected = false;
+      _looseEdge = edge ?? _looseEdge;
+    });
     unawaited(
         widget.onAction('placement_attempted', destination['id'] as String, {
       'item_id': item['id'],
@@ -288,7 +435,7 @@ class _PcieReplacementLabState extends State<PcieReplacementLab> {
 
   void _latch() {
     if (!_interactive || _latched) return;
-    setState(() {
+    _edit(() {
       _latched = true;
       _done('seat');
     });
@@ -296,7 +443,7 @@ class _PcieReplacementLabState extends State<PcieReplacementLab> {
 
   void _configure() {
     if (!_interactive || _configured) return;
-    setState(() {
+    _edit(() {
       _configured = true;
       _done('configure');
     });
@@ -304,7 +451,7 @@ class _PcieReplacementLabState extends State<PcieReplacementLab> {
 
   void _refitPanel() {
     if (!_interactive || _panelOn) return;
-    setState(() {
+    _edit(() {
       _panelOn = true;
       if (_powerBack) _done('restore');
     });
@@ -312,7 +459,7 @@ class _PcieReplacementLabState extends State<PcieReplacementLab> {
 
   void _reconnectPower() {
     if (!_interactive || _powerBack) return;
-    setState(() {
+    _edit(() {
       _powerBack = true;
       if (_panelOn) _done('restore');
     });
@@ -353,8 +500,15 @@ class _PcieReplacementLabState extends State<PcieReplacementLab> {
           _Stage.closeOut => !_powerBack,
         },
         onScrew: _useToolOnScrew,
-        onSlotTap: _adapterSelected ? () => _placeAdapter('tap') : null,
-        onAdapterDropped: () => _placeAdapter('drag'),
+        onSlotTap: _adapterSelected && _interactive && !_adapterInstalled
+            ? () => _placeAdapter('tap')
+            : null,
+        onRelease: _release,
+        looseEdge:
+            _stage == _Stage.install && !_adapterInstalled ? _looseEdge : null,
+        aligned: _aligned,
+        assessment: _assessment,
+        onSelect: () => _edit(() => _adapterSelected = !_adapterSelected),
       );
       final controls = _controls();
       final content = wide
@@ -472,8 +626,20 @@ class _PcieReplacementLabState extends State<PcieReplacementLab> {
           selected: _adapterSelected,
           enabled: widget.enabled && !_adapterInstalled,
           label: (_adapter['label'] as String?) ?? '',
-          onRotate: () => setState(() => _aligned = !_aligned),
-          onSelect: () => setState(() => _adapterSelected = !_adapterSelected),
+          loose: _looseEdge != null,
+          orientation: _assessment
+              ? (_aligned
+                  ? MissionContentData.labPcieBracketLeft
+                  : MissionContentData.labPcieBracketRight)
+              : (_aligned
+                  ? MissionContentData.labPcieCardAligned
+                  : MissionContentData.labPcieCardReversed),
+          onRotate: () => _edit(() => _aligned = !_aligned),
+          onSelect: () => _edit(() => _adapterSelected = !_adapterSelected),
+          onReturn: () => _edit(() {
+            _looseEdge = null;
+            _adapterSelected = false;
+          }),
         ));
       case _Stage.closeOut:
         children.addAll(_inListedOrder({
@@ -590,7 +756,7 @@ class _PcieReplacementLabState extends State<PcieReplacementLab> {
             label: tool['label'] as String,
             selected: _tool == tool['id'],
             enabled: widget.enabled,
-            onTap: () => setState(() {
+            onTap: () => _edit(() {
               _tool = _tool == tool['id'] ? null : tool['id'] as String;
               _toolMessage = null;
             }),
@@ -613,7 +779,11 @@ class _Interior extends StatelessWidget {
     required this.strapOn,
     required this.onScrew,
     required this.onSlotTap,
-    required this.onAdapterDropped,
+    required this.onRelease,
+    required this.looseEdge,
+    required this.aligned,
+    required this.assessment,
+    required this.onSelect,
   });
 
   final _Stage stage;
@@ -627,7 +797,11 @@ class _Interior extends StatelessWidget {
   final bool strapOn;
   final VoidCallback onScrew;
   final VoidCallback? onSlotTap;
-  final VoidCallback onAdapterDropped;
+  final void Function(Offset, PhysicalMount?) onRelease;
+  final Offset? looseEdge;
+  final bool aligned;
+  final bool assessment;
+  final VoidCallback onSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -645,178 +819,217 @@ class _Interior extends StatelessWidget {
               _slot.left * s, _slot.top * s, _slot.width * s, _slot.height * s);
           final cardWidth = 0.42 * s;
           final cardHeight = cardWidth * 447 / 558;
-          final cardLeft = 0.065 * s;
-          final cardTop = slot.center.dy - cardHeight * 0.97;
-          final screw =
-              Offset(cardLeft + 0.075 * cardWidth, cardTop + 0.1 * cardHeight);
+          // The short adapter's fingers occupy the keyed rear section of the long slot.
+          final keyed = Rect.fromLTWH(_slot.left, _slot.top, .11, _slot.height);
+          final mount =
+              PhysicalMount('workstation', keyed, capture: keyed.inflate(.012));
+          final seat = mount.snapPoint * s - _cardEdge(cardWidth, true);
+          final cardLeft = seat.dx;
+          final cardTop = seat.dy;
+          final screw = seat + Offset(cardWidth * .30, cardHeight * .025);
+          final loose = looseEdge == null
+              ? null
+              : looseEdge! * s - _cardEdge(cardWidth, aligned);
+          final board = Stack(children: [
+            const Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF1A2335), Color(0xFF0E1522)],
+                  ),
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: ExcludeSemantics(
+                child: Image.asset(_motherboardAsset,
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+              ),
+            ),
+            if (loose != null)
+              Positioned(
+                left: loose.dx,
+                top: loose.dy,
+                width: cardWidth,
+                height: cardHeight,
+                child: Semantics(
+                  button: true,
+                  enabled: slotDroppable,
+                  label: MissionContentData.labPcieLooseAdapter,
+                  onTap: slotDroppable ? onSelect : null,
+                  child: _AdapterInHand(
+                    key: const ValueKey('lab-pcie-loose'),
+                    width: cardWidth,
+                    aligned: aligned,
+                    enabled: slotDroppable,
+                    child: GestureDetector(
+                        onTap: slotDroppable ? onSelect : null,
+                        child: _AdapterPhoto(aligned: aligned)),
+                  ),
+                ),
+              ),
+            if (!assessment && slotDroppable)
+              Positioned.fromRect(
+                  rect: slot,
+                  child: IgnorePointer(
+                      child: DecoratedBox(
+                    decoration: BoxDecoration(
+                        border: Border.all(color: AppTheme.primaryBlue),
+                        borderRadius: BorderRadius.circular(2)),
+                  ))),
+            Positioned.fromRect(
+              // A tap can reach the small port without widening its magnetic capture.
+              rect: Rect.fromCenter(
+                  center: mount.snapPoint * s,
+                  width: (keyed.width * s).clamp(48.0, double.infinity),
+                  height: 48),
+              child: Semantics(
+                button: onSlotTap != null,
+                onTap: onSlotTap,
+                label: switch (stage) {
+                  _Stage.removal => cardPresent
+                      ? MissionContentData.labPcieSlotHoldsFailed
+                      : MissionContentData.labPcieSlotVacant,
+                  _Stage.install => cardPresent
+                      ? MissionContentData.labPcieSlotInstalled
+                      : assessment
+                          ? MissionContentData.labPcieSlotVacant
+                          : MissionContentData.labPcieSlotEmpty,
+                  _Stage.closeOut => MissionContentData.labPcieSlotInstalled,
+                },
+                child: GestureDetector(
+                  key: const ValueKey('lab-pcie-slot'),
+                  behavior: HitTestBehavior.translucent,
+                  excludeFromSemantics: true,
+                  onTap: onSlotTap,
+                ),
+              ),
+            ),
+            if (cardPresent)
+              Positioned(
+                left: cardLeft,
+                top: cardTop,
+                width: cardWidth,
+                height: cardHeight,
+                child: ExcludeSemantics(
+                  child: ColorFiltered(
+                    colorFilter: cardFailed
+                        ? const ColorFilter.mode(
+                            Color(0x33FF5A5A), BlendMode.srcATop)
+                        : const ColorFilter.mode(
+                            Colors.transparent, BlendMode.dst),
+                    child: const _AdapterPhoto(aligned: true),
+                  ),
+                ),
+              ),
+            if (cardPresent && cardFailed)
+              Positioned(
+                left: cardLeft + cardWidth * 0.55,
+                top: cardTop + cardHeight * 0.18,
+                child: const _Badge(
+                    color: AppTheme.errorRed,
+                    text: MissionContentData.labPcieFailedCard),
+              ),
+            if (cardPresent && stage != _Stage.install)
+              Positioned(
+                left: screw.dx - 24,
+                top: screw.dy - 24,
+                width: 48,
+                height: 48,
+                child: Semantics(
+                  button: screwActive,
+                  label: screwIn
+                      ? MissionContentData.labPcieScrewLabel
+                      : stage == _Stage.removal
+                          ? MissionContentData.labPcieScrewRemoved
+                          : MissionContentData.labPcieScrewLabel,
+                  child: InkWell(
+                    key: const ValueKey('lab-pcie-screw'),
+                    customBorder: const CircleBorder(),
+                    onTap: screwActive ? onScrew : null,
+                    child: Center(
+                      child: Container(
+                        width: 18,
+                        height: 18,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: screwIn
+                              ? const Color(0xFFC9CED6)
+                              : Colors.transparent,
+                          border: Border.all(
+                            color: screwActive
+                                ? AppTheme.primaryBlue
+                                : const Color(0xFF8A93A3),
+                            width: screwActive ? 3 : 1.5,
+                          ),
+                        ),
+                        child: screwIn
+                            ? const Icon(Icons.add,
+                                size: 12, color: Color(0xFF4B5563))
+                            : null,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            if (panelOn)
+              Positioned.fill(
+                child: Container(
+                  color: const Color(0xEE2A3242),
+                  alignment: Alignment.center,
+                  child: Text(MissionContentData.labPcieClosed,
+                      style: AppTheme.labelLarge.copyWith(color: Colors.white)),
+                ),
+              ),
+            Positioned(
+              right: 8,
+              top: 8,
+              child:
+                  Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                _Badge(
+                  color: powerConnected
+                      ? AppTheme.warningYellow
+                      : AppTheme.successGreen,
+                  text: powerConnected
+                      ? MissionContentData.labPciePowerConnected
+                      : MissionContentData.labPciePowerIsolated,
+                ),
+                const SizedBox(height: 4),
+                _Badge(
+                  color:
+                      strapOn ? AppTheme.successGreen : AppTheme.warningYellow,
+                  text: strapOn
+                      ? MissionContentData.labPcieStrapOn
+                      : MissionContentData.labPcieStrapOff,
+                ),
+              ]),
+            ),
+          ]);
           return ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: Stack(children: [
-              const Positioned.fill(
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [Color(0xFF1A2335), Color(0xFF0E1522)],
-                    ),
-                  ),
-                ),
-              ),
-              Positioned.fill(
-                child: ExcludeSemantics(
-                  child: Image.asset(_motherboardAsset,
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, __, ___) => const SizedBox.shrink()),
-                ),
-              ),
-              Positioned.fromRect(
-                // At least a 48 dp target around the thin slot.
-                rect: Rect.fromCenter(
-                    center: slot.center,
-                    width: slot.width + 20,
-                    height: slot.height + 20 < 48 ? 48 : slot.height + 20),
-                child: DragTarget<String>(
-                  onWillAcceptWithDetails: (_) => slotDroppable,
-                  onAcceptWithDetails: (_) => onAdapterDropped(),
-                  builder: (context, candidates, _) => Semantics(
-                    button: onSlotTap != null,
-                    label: switch (stage) {
-                      _Stage.removal => cardPresent
-                          ? MissionContentData.labPcieSlotHoldsFailed
-                          : MissionContentData.labPcieSlotVacant,
-                      _Stage.install => cardPresent
-                          ? MissionContentData.labPcieSlotInstalled
-                          : MissionContentData.labPcieSlotEmpty,
-                      _Stage.closeOut =>
-                        MissionContentData.labPcieSlotInstalled,
-                    },
-                    child: GestureDetector(
-                      key: const ValueKey('lab-pcie-slot'),
-                      onTap: onSlotTap,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: candidates.isNotEmpty
-                                ? AppTheme.successGreen
-                                : slotDroppable
-                                    ? AppTheme.primaryBlue
-                                        .withValues(alpha: 0.9)
-                                    : Colors.transparent,
-                            width: 2,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              if (cardPresent)
-                Positioned(
-                  left: cardLeft,
-                  top: cardTop,
-                  width: cardWidth,
-                  height: cardHeight,
-                  child: ExcludeSemantics(
-                    child: ColorFiltered(
-                      colorFilter: cardFailed
-                          ? const ColorFilter.mode(
-                              Color(0x33FF5A5A), BlendMode.srcATop)
-                          : const ColorFilter.mode(
-                              Colors.transparent, BlendMode.dst),
-                      child: Image.asset(_adapterAsset,
-                          errorBuilder: (_, __, ___) =>
-                              const SizedBox.shrink()),
-                    ),
-                  ),
-                ),
-              if (cardPresent && cardFailed)
-                Positioned(
-                  left: cardLeft + cardWidth * 0.55,
-                  top: cardTop + cardHeight * 0.18,
-                  child: const _Badge(
-                      color: AppTheme.errorRed,
-                      text: MissionContentData.labPcieFailedCard),
-                ),
-              if (cardPresent && stage != _Stage.install)
-                Positioned(
-                  left: screw.dx - 24,
-                  top: screw.dy - 24,
-                  width: 48,
-                  height: 48,
-                  child: Semantics(
-                    button: screwActive,
-                    label: screwIn
-                        ? MissionContentData.labPcieScrewLabel
-                        : stage == _Stage.removal
-                            ? MissionContentData.labPcieScrewRemoved
-                            : MissionContentData.labPcieScrewLabel,
-                    child: InkWell(
-                      key: const ValueKey('lab-pcie-screw'),
-                      customBorder: const CircleBorder(),
-                      onTap: screwActive ? onScrew : null,
-                      child: Center(
-                        child: Container(
-                          width: 18,
-                          height: 18,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: screwIn
-                                ? const Color(0xFFC9CED6)
-                                : Colors.transparent,
-                            border: Border.all(
-                              color: screwActive
-                                  ? AppTheme.primaryBlue
-                                  : const Color(0xFF8A93A3),
-                              width: screwActive ? 3 : 1.5,
-                            ),
-                          ),
-                          child: screwIn
-                              ? const Icon(Icons.add,
-                                  size: 12, color: Color(0xFF4B5563))
-                              : null,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              if (panelOn)
-                Positioned.fill(
-                  child: Container(
-                    color: const Color(0xEE2A3242),
-                    alignment: Alignment.center,
-                    child: Text(MissionContentData.labPcieClosed,
-                        style:
-                            AppTheme.labelLarge.copyWith(color: Colors.white)),
-                  ),
-                ),
-              Positioned(
-                right: 8,
-                top: 8,
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      _Badge(
-                        color: powerConnected
-                            ? AppTheme.warningYellow
-                            : AppTheme.successGreen,
-                        text: powerConnected
-                            ? MissionContentData.labPciePowerConnected
-                            : MissionContentData.labPciePowerIsolated,
-                      ),
-                      const SizedBox(height: 4),
-                      _Badge(
-                        color: strapOn
-                            ? AppTheme.successGreen
-                            : AppTheme.warningYellow,
-                        text: strapOn
-                            ? MissionContentData.labPcieStrapOn
-                            : MissionContentData.labPcieStrapOff,
-                      ),
-                    ]),
-              ),
-            ]),
+            child: PhysicalDropSurface<_ServicePart>(
+              key: const ValueKey('lab-pcie-board'),
+              worldSize: const Size(1, 1),
+              enabled: slotDroppable,
+              mounts: (_) => [mount],
+              onRelease: (_, point, target) => onRelease(point, target),
+              preview: !assessment
+                  ? (_, __, ___, hovered) => hovered == null
+                      ? const SizedBox.shrink()
+                      : Positioned.fromRect(
+                          rect: Rect.fromLTWH(keyed.left * s, keyed.top * s,
+                              keyed.width * s, keyed.height * s),
+                          child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                  color:
+                                      AppTheme.skyBlue.withValues(alpha: .36),
+                                  border: Border.all(color: AppTheme.skyBlue))))
+                  : null,
+              child: board,
+            ),
           );
         }),
       ),
@@ -976,6 +1189,49 @@ class _ToolChip extends StatelessWidget {
   }
 }
 
+class _AdapterPhoto extends StatelessWidget {
+  const _AdapterPhoto({required this.aligned});
+  final bool aligned;
+
+  @override
+  Widget build(BuildContext context) => Transform.flip(
+        flipX: !aligned,
+        child: Transform.rotate(
+          angle: .235,
+          alignment: const Alignment(2 * _edgeX - 1, 2 * _edgeY - 1),
+          child: Image.asset(_adapterAsset,
+              fit: BoxFit.fill, excludeFromSemantics: true),
+        ),
+      );
+}
+
+class _AdapterInHand extends StatelessWidget {
+  const _AdapterInHand(
+      {super.key,
+      required this.width,
+      required this.aligned,
+      required this.enabled,
+      required this.child});
+  final double width;
+  final bool aligned;
+  final bool enabled;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => PhysicalDraggable<_ServicePart>(
+        data: _ServicePart.adapter,
+        maxSimultaneousDrags: enabled ? 1 : 0,
+        feedbackAnchor: Offset(aligned ? _edgeX : 1 - _edgeX, _edgeY),
+        feedback: SizedBox(
+            key: const ValueKey('lab-pcie-in-hand'),
+            width: width,
+            height: width * 447 / 558,
+            child: _AdapterPhoto(aligned: aligned)),
+        childWhenDragging: Opacity(opacity: .22, child: child),
+        child: child,
+      );
+}
+
 class _AdapterTile extends StatelessWidget {
   const _AdapterTile({
     required this.aligned,
@@ -983,27 +1239,39 @@ class _AdapterTile extends StatelessWidget {
     required this.selected,
     required this.enabled,
     required this.label,
+    required this.orientation,
+    required this.loose,
     required this.onRotate,
     required this.onSelect,
+    required this.onReturn,
   });
 
   final bool aligned;
   final bool installed;
   final bool selected;
   final bool enabled;
+  final bool loose;
   final String label;
+  final String orientation;
   final VoidCallback onRotate;
   final VoidCallback onSelect;
+  final VoidCallback onReturn;
 
   @override
   Widget build(BuildContext context) {
-    final card = Transform(
-      alignment: Alignment.center,
-      // Reversed: the bracket points into the case instead of the rear.
-      transform: Matrix4.diagonal3Values(aligned ? 1 : -1, 1, 1),
-      child: Image.asset(_adapterAsset,
-          height: 96,
-          errorBuilder: (_, __, ___) => const Icon(Icons.memory, size: 64)),
+    const width = 112.0;
+    final tile = InkWell(
+      key: const ValueKey('lab-pcie-adapter'),
+      onTap: enabled ? onSelect : null,
+      child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Center(
+              child: loose
+                  ? const Text(MissionContentData.labPcieLooseAdapter)
+                  : SizedBox(
+                      width: width,
+                      height: width * 447 / 558,
+                      child: _AdapterPhoto(aligned: aligned)))),
     );
     if (installed) {
       return const _ActionButton(
@@ -1027,29 +1295,26 @@ class _AdapterTile extends StatelessWidget {
         Semantics(
           button: true,
           selected: selected,
-          label:
-              '$label. ${aligned ? MissionContentData.labPcieCardAligned : MissionContentData.labPcieCardReversed}',
-          child: Draggable<String>(
-            data: 'adapter',
-            maxSimultaneousDrags: enabled ? 1 : 0,
-            feedback: Material(color: Colors.transparent, child: card),
-            childWhenDragging: Opacity(opacity: 0.3, child: card),
-            child: InkWell(
-              key: const ValueKey('lab-pcie-adapter'),
-              onTap: enabled ? onSelect : null,
-              child: Center(child: card),
-            ),
-          ),
+          label: '$label. $orientation',
+          child: loose
+              ? tile
+              : _AdapterInHand(
+                  width: width,
+                  aligned: aligned,
+                  enabled: enabled,
+                  child: tile),
         ),
         const SizedBox(height: 6),
         Text(label, style: AppTheme.labelLarge, textAlign: TextAlign.center),
-        Text(
-          aligned
-              ? MissionContentData.labPcieCardAligned
-              : MissionContentData.labPcieCardReversed,
-          style: AppTheme.bodySmall,
-          textAlign: TextAlign.center,
-        ),
+        Text(orientation,
+            style: AppTheme.bodySmall, textAlign: TextAlign.center),
+        if (loose)
+          TextButton.icon(
+              key: const ValueKey('lab-pcie-return'),
+              style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+              onPressed: enabled ? onReturn : null,
+              icon: const Icon(Icons.undo_rounded),
+              label: const Text(MissionContentData.labPcieReturnToTray)),
         const SizedBox(height: 8),
         OutlinedButton.icon(
           key: const ValueKey('lab-pcie-rotate'),

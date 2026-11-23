@@ -708,6 +708,13 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
             setState(() => _technicalFeedback =
                 MissionContentData.saveProgressFailedMessage);
         }));
+    void onDraftChanged(Map<String, dynamic> draft) => unawaited(_controller
+        .updateWorkbenchDraft(phase.id, draft)
+        .catchError((Object error) {
+      if (mounted) {
+        setState(() => _technicalFeedback = MissionContentData.saveProgressFailedMessage);
+      }
+    }));
     void onModeChanged(String mode) {
       if (_workspaceModePhaseId == phase.id && _workspaceMode == mode) return;
       setState(() {
@@ -728,6 +735,7 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
     final Widget scene = MissionLabs.ownsPhase(widget.definition, phase)
         ? MissionLabs.build(
             key: _workspaceLayoutKey,
+            onDraftChanged: onDraftChanged,
             definition: widget.definition,
             phase: phase,
             state: _state,
@@ -738,6 +746,7 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
         : MissionEquipmentSimulator.isAssemblyBench(widget.definition)
         ? AssemblyBench(
             key: _workspaceLayoutKey,
+            onDraftChanged: onDraftChanged,
             definition: widget.definition,
             phase: phase,
             state: _state,
@@ -754,6 +763,7 @@ class _MissionSimulationScreenState extends State<MissionSimulationScreen>
           )
         : EquipmentWorkspace(
             key: _workspaceLayoutKey,
+            onDraftChanged: onDraftChanged,
             definition: widget.definition,
             phase: phase,
             state: _state,
