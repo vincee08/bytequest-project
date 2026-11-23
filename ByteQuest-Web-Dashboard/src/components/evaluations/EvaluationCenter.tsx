@@ -177,6 +177,7 @@ export function EvaluationCenter({
                 </div>
                 <div className="min-w-0 text-sm">
                   <p className="truncate font-medium">{item.learner.name ?? "Learner"}</p>
+                  <p className="truncate text-xs text-muted-foreground">{item.learner.email || "No email on record"}</p>
                   <p className="truncate text-xs text-muted-foreground">{item.class.title ?? "Class"} · {when(item.submitted_at)}</p>
                 </div>
                 <div className="text-sm">

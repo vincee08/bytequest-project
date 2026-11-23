@@ -37,7 +37,7 @@ export const KIND_LABEL: Record<EvaluationKind, string> = { technical: 'Technica
 
 export type QueueItem = {
   kind: EvaluationKind; id: string; title: string;
-  learner: { id: string | null; name: string | null };
+  learner: { id: string | null; name: string | null; email?: string | null };
   class: { id: string | null; title: string | null };
   submitted_at: string | null; status: string; score: number | null; max_score: number | null; link: string;
   coc_code?: string | null; module_id?: string | null; mission_code?: string | null; late?: boolean; outcome?: string | null;

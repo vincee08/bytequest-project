@@ -120,8 +120,8 @@ export default async function SubmissionsPage({ searchParams }: { searchParams: 
                   return (
                     <li key={s.id}>
                       <Link href={`/classes/${h.class_id}/assignments/${h.id}?submission=${s.id}`} className="grid gap-3 px-4 py-4 transition-colors hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_auto] md:items-center">
-                        <div className="min-w-0"><p className="truncate text-sm font-medium">{people.get(s.learner_id)?.name ?? "Learner"}</p><p className="truncate text-xs text-muted-foreground">{classById.get(h.class_id)?.title ?? "Class"}</p></div>
-                        <div className="min-w-0"><p className="break-words text-sm">{h.title}</p><div className="mt-1 flex flex-wrap gap-1.5">{competency(h).map((label) => <Badge key={label} variant="outline">{label}</Badge>)}</div></div>
+                        <div className="min-w-0"><p className="truncate text-sm font-medium">{people.get(s.learner_id)?.name ?? "Learner"}</p><p className="truncate text-xs text-muted-foreground">{people.get(s.learner_id)?.email || "No email on record"}</p></div>
+                        <div className="min-w-0"><p className="break-words text-sm">{h.title}</p><p className="truncate text-xs text-muted-foreground">{classById.get(h.class_id)?.title ?? "Class"}</p><div className="mt-1 flex flex-wrap gap-1.5">{competency(h).map((label) => <Badge key={label} variant="outline">{label}</Badge>)}</div></div>
                         <div className="text-xs"><p>{manilaDate(s.submitted_at)}</p><p className={Number(s.lateness_seconds) > 0 ? "font-medium text-amber-800" : "text-muted-foreground"}>{Number(s.lateness_seconds) > 0 ? `Late by ${latenessDuration(Number(s.lateness_seconds))}` : "On time"}</p></div>
                         <div className="flex flex-wrap items-center gap-2"><Badge variant={s.status === "released" ? "secondary" : s.status === "submitted" ? "outline" : "default"}>{homeworkStatusLabel(s.status)}</Badge><span className="text-sm tabular-nums">{s.score === null ? "—" : `${Number(s.score)} / ${Number(h.max_score)}`}</span></div>
                       </Link>
@@ -140,8 +140,8 @@ export default async function SubmissionsPage({ searchParams }: { searchParams: 
               <ul className="divide-y divide-border">
                 {missing.slice(0, ROW_LIMIT).map(({ assignment: h, learnerId, pastDue }) => (
                   <li key={`${h.id}:${learnerId}`} className="grid gap-3 px-4 py-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,0.8fr)_auto] md:items-center">
-                    <div className="min-w-0"><p className="truncate text-sm font-medium">{people.get(learnerId)?.name ?? "Learner"}</p><p className="truncate text-xs text-muted-foreground">{classById.get(h.class_id)?.title ?? "Class"}</p></div>
-                    <div className="min-w-0"><p className="break-words text-sm">{h.title}</p><div className="mt-1 flex flex-wrap gap-1.5">{competency(h).map((label) => <Badge key={label} variant="outline">{label}</Badge>)}</div></div>
+                    <div className="min-w-0"><p className="truncate text-sm font-medium">{people.get(learnerId)?.name ?? "Learner"}</p><p className="truncate text-xs text-muted-foreground">{people.get(learnerId)?.email || "No email on record"}</p></div>
+                    <div className="min-w-0"><p className="break-words text-sm">{h.title}</p><p className="truncate text-xs text-muted-foreground">{classById.get(h.class_id)?.title ?? "Class"}</p><div className="mt-1 flex flex-wrap gap-1.5">{competency(h).map((label) => <Badge key={label} variant="outline">{label}</Badge>)}</div></div>
                     <p className="text-xs text-muted-foreground">Deadline: {manilaDate(h.deadline_at)}</p>
                     <div className="flex items-center gap-2"><Badge variant="outline" className={pastDue ? "border-amber-300 text-amber-900" : undefined}>{!h.deadline_at ? "No deadline" : pastDue ? "Past deadline" : "Upcoming"}</Badge><Button asChild variant="ghost" className="min-h-11"><Link href={`/classes/${h.class_id}/assignments/${h.id}`}>Open</Link></Button></div>
                   </li>
