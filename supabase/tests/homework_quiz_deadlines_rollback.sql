@@ -23,8 +23,13 @@ update public.profiles set role='instructor' where user_id in(select teacher fro
 insert into public.classes(id,title,class_code,instructor_id,created_by)
 select class_a,'Activity rollback A',left(class_a::text,12),teacher,teacher from activity_test union all
 select class_b,'Activity rollback B',left(class_b::text,12),teacher,teacher from activity_test;
+-- Legacy multi-class fixture: one learner in two active classes, as data created
+-- before the one-active-class rule (20261123090000). Built with that rule's
+-- trigger disabled inside this rolled-back transaction only.
+alter table public.class_memberships disable trigger trg_class_memberships_one_active_class;
 insert into public.class_memberships(class_id,learner_id,enrolled_by)
 select cls,id,teacher from activity_test cross join lateral(values(class_a),(class_b)) c(cls) cross join lateral(values(learner_a),(learner_b),(learner_c)) l(id);
+alter table public.class_memberships enable trigger trg_class_memberships_one_active_class;
 create function pg_temp.assert(ok boolean,message text) returns void language plpgsql as $$ begin if ok is distinct from true then raise exception 'ASSERT: %',message; end if; end $$;
 create function pg_temp.denied(command text,expected text) returns void language plpgsql as $$ begin
   begin execute command; exception when others then if sqlerrm like '%'||expected||'%' then return; end if; raise; end;

@@ -18,6 +18,7 @@ import {
   type FilterOptions,
   type LearnerProfile,
 } from "@/lib/analytics/performance-types";
+import type { LearnerStatusState } from "@/lib/analytics/learner-status";
 import type { AnalyticsTabData, AnalyticsViewResult } from "@/lib/analytics/performance-csv";
 import { toRpcFilters, type AnalyticsQuery, type AnalyticsTab } from "@/lib/analytics/query";
 
@@ -97,11 +98,26 @@ export async function loadLearnerProfile(learnerId: string, query: AnalyticsQuer
   return invoke(client, "get_learner_profile_analytics", { p_learner: learnerId, p_filters: filters as Json }, learnerProfileSchema);
 }
 
+/** Learner status by the documented rules, for a summary that must never fail its page. */
+export async function loadLearnerStatus(query: AnalyticsQuery): Promise<LearnerStatusState> {
+  try {
+    const client = await analyticsClient();
+    const data = await invoke(client, "get_learner_performance", { p_filters: toRpcFilters(query) as Json }, learnerPerformanceSchema);
+    return { state: "ready", data };
+  } catch {
+    return { state: "unavailable" };
+  }
+}
+
 /** Options + active tab in parallel; known scope/filter errors become an inline state. */
 export async function loadAnalyticsView(query: AnalyticsQuery): Promise<AnalyticsViewResult> {
+  // The overview names who is falling behind or on track, not only the totals.
+  const learnerStatus = query.tab === "overview" ? loadLearnerStatus(query) : undefined;
   const [options, view] = await Promise.allSettled([loadAnalyticsFilterOptions(), loadAnalyticsTab(query)]);
   const resolvedOptions = options.status === "fulfilled" ? options.value : null;
-  if (view.status === "fulfilled" && resolvedOptions) return { ok: true, options: resolvedOptions, view: view.value };
+  if (view.status === "fulfilled" && resolvedOptions) {
+    return { ok: true, options: resolvedOptions, view: view.value, ...(learnerStatus ? { learnerStatus: await learnerStatus } : {}) };
+  }
   const failure = view.status === "rejected" ? view.reason : options.status === "rejected" ? options.reason : null;
   if (failure instanceof AnalyticsRequestError) return { ok: false, code: failure.code, options: resolvedOptions };
   throw failure instanceof Error ? failure : new Error("Analytics are unavailable.");

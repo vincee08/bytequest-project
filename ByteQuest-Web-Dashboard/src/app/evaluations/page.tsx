@@ -26,8 +26,12 @@ export default async function EvaluationsPage({ searchParams }: { searchParams: 
   ]);
   const queue = queueResult.error ? null : (queueResult.data as unknown as QueueResult);
   if (queue) {
-    const names = await namesFor(queue.items.filter((item) => !item.learner.name).map((item) => item.learner.id)).catch(() => null);
-    for (const item of queue.items) if (!item.learner.name) item.learner.name = (item.learner.id && names?.get(item.learner.id)?.name) || "Learner";
+    const people = await namesFor(queue.items.map((item) => item.learner.id)).catch(() => null);
+    for (const item of queue.items) {
+      const person = item.learner.id ? people?.get(item.learner.id) : undefined;
+      if (!item.learner.name) item.learner.name = person?.name || "Learner";
+      item.learner.email = person?.email || null;
+    }
   }
   const current = (name: string) => {
     const value = params[name];

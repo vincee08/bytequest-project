@@ -14,6 +14,7 @@ import 'package:bytequest/screens/simulation/runtime/mission_runtime_controller.
 import 'package:bytequest/screens/simulation/runtime/mission_runtime_models.dart';
 import 'package:bytequest/services/practice_coc_session_service.dart';
 import 'package:bytequest/services/progress_resume_service.dart';
+import 'package:bytequest/screens/simulation/components/labs/mission_labs.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -79,9 +80,14 @@ void main() {
         } else {
           expect(exception, isNull, reason: definition.id);
         }
-        final scene = tester.getRect(find.byType(SimulationScene));
-        final canvas = tester
-            .getRect(find.byKey(const ValueKey('simulation-workspace-scroll')));
+        // A realistic lab replaces the scene and its canvas for its phases.
+        final lab = MissionLabs.ownsPhase(definition, definition.phases.first);
+        final scene = tester.getRect(lab
+            ? find.byKey(const ValueKey('mission-lab'))
+            : find.byType(SimulationScene));
+        final canvas = tester.getRect(lab
+            ? find.byKey(const ValueKey('mission-lab'))
+            : find.byKey(const ValueKey('simulation-workspace-scroll')));
         final next = tester.getRect(find.byKey(const ValueKey('mission-next')));
         expect(next.bottom, lessThanOrEqualTo(size.height - 24));
         expect(

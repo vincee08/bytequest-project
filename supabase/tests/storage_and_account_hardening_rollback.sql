@@ -265,9 +265,14 @@ set status = 'active'::public.membership_status,
     deactivated_by = null
 where id = (select membership_id from bytequest_storage_test_context);
 
+-- Legacy multi-class fixture: one learner in two active classes, as data created
+-- before the one-active-class rule (20261123090000). Built with that rule's
+-- trigger disabled inside this rolled-back transaction only.
+alter table public.class_memberships disable trigger trg_class_memberships_one_active_class;
 insert into public.class_memberships (class_id, learner_id, status, enrolled_by)
 select secondary_class_id, learner_id, 'active'::public.membership_status, secondary_instructor_id
 from bytequest_storage_test_context;
+alter table public.class_memberships enable trigger trg_class_memberships_one_active_class;
 
 select set_config(
   'request.jwt.claim.sub',

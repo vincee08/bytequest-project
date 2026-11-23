@@ -40,3 +40,14 @@ test("enrollment errors distinguish duplicate, eligibility and class scope witho
   assert.equal(enrollmentFailure("sensitive-database-error").status, 503);
   assert(!enrollmentFailure("sensitive-database-error").message.includes("sensitive-database-error"));
 });
+
+test("a learner active in another class gets the one-class message, never the other class", () => {
+  const mapped = enrollmentFailure("23505", "LEARNER_ALREADY_IN_ANOTHER_CLASS");
+  assert.deepEqual(mapped, {
+    status: 409,
+    code: "ENROLLED_IN_ANOTHER_CLASS",
+    message: "This learner is already enrolled in another class. A learner can belong to only one class at a time.",
+  });
+  assert.equal(enrollmentFailure("23505", "LEARNER_ALREADY_ENROLLED").code, "ALREADY_ENROLLED");
+  assert.equal(enrollmentFailure("23505").message, "This learner is already enrolled in this class.");
+});

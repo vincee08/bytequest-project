@@ -66,7 +66,12 @@ class TapInspectInteraction extends StatelessWidget {
               child: Card(
                 child: Padding(
                   padding: const EdgeInsets.all(12),
-                  child: Text(object.data['inspection'] as String),
+                  child: Text(state.mode == MissionRuntimeMode.assessment &&
+                          phase.id == 'coc1_m1_p1' &&
+                          state.definitionVersion == 'css-sag-20261109-v3'
+                      ? MissionContentData.hardwareObservations[object.id] ??
+                          object.data['inspection'] as String
+                      : object.data['inspection'] as String),
                 ),
               ),
             ),

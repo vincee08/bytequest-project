@@ -10,6 +10,7 @@ import '../../core/config/supabase_config.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/widgets/learner_ui.dart';
 import '../../data/homework_content_data.dart';
+import '../../data/homework_requirements_content_data.dart';
 import '../../data/mission_content_data.dart';
 import '../../models/homework_model.dart';
 import '../../services/homework_service.dart';
@@ -111,10 +112,20 @@ class _HomeworkDetailsScreenState extends State<HomeworkDetailsScreen>
     super.dispose();
   }
 
+  List<HomeworkFile> get _chosenFiles => _assignment.answerFiles
+      .where((f) => _selectedFiles.contains(f.id))
+      .toList();
+
+  /// What still stops this submission, or null when it meets the rule.
+  String? get _missing =>
+      _assignment.rule.missing(_answer.text, _chosenFiles);
+
   @override
   Widget build(BuildContext context) {
     final h = _assignment;
     final submission = h.submission;
+    final rule = h.rule;
+    final missing = submission == null ? _missing : null;
     return Scaffold(
         backgroundColor: AppTheme.backgroundOffWhite,
         appBar: AppBar(title: Text(h.title), actions: [
@@ -335,20 +346,52 @@ class _HomeworkDetailsScreenState extends State<HomeworkDetailsScreen>
                       ],
                     ],
                   ] else ...[
+                    const LearnerSectionHeader(
+                        title: HomeworkRequirementsContent.title),
+                    const SizedBox(height: 10),
+                    LearnerSurface(
+                        key: const ValueKey('homework-submission-rule'),
+                        color: AppTheme.softBlueAccent,
+                        child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Padding(
+                                  padding: EdgeInsets.only(top: 2),
+                                  child: Icon(Icons.assignment_turned_in_outlined,
+                                      size: 20, color: AppTheme.primaryBlue)),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                  child: Text(rule.description,
+                                      style: AppTheme.labelLarge
+                                          .copyWith(color: AppTheme.navy))),
+                            ])),
+                    const SizedBox(height: 16),
                     const Text(MissionContentData.homeworkOutside),
                     const SizedBox(height: 16),
-                    TextField(
-                        controller: _answer,
-                        enabled: !_busy,
-                        maxLength: 20000,
-                        minLines: 4,
-                        maxLines: 10,
-                        decoration: const InputDecoration(
-                            labelText: MissionContentData.homeworkAnswer,
-                            hintText: MissionContentData.homeworkAnswerHint,
-                            border: OutlineInputBorder()),
-                        onChanged: (_) => unawaited(_saveDraft())),
-                    const SizedBox(height: 16),
+                    if (rule.takesAnswer) ...[
+                      TextField(
+                          key: const ValueKey('homework-answer-field'),
+                          controller: _answer,
+                          enabled: !_busy,
+                          maxLength: 20000,
+                          minLines: 4,
+                          maxLines: 10,
+                          decoration: InputDecoration(
+                              labelText: MissionContentData.homeworkAnswer,
+                              hintText: rule.format == 'answer'
+                                  ? HomeworkRequirementsContent.answerOnlyHint
+                                  : rule.format == 'answer_and_file'
+                                      ? HomeworkRequirementsContent
+                                          .answerWithFilesHint
+                                      : MissionContentData.homeworkAnswerHint,
+                              border: const OutlineInputBorder()),
+                          onChanged: (_) {
+                            setState(() {});
+                            unawaited(_saveDraft());
+                          }),
+                      const SizedBox(height: 16),
+                    ],
+                    if (rule.takesFiles) ...[
                     const LearnerSectionHeader(
                         title: MissionContentData.homeworkAnswerFiles),
                     ...h.answerFiles
@@ -369,13 +412,20 @@ class _HomeworkDetailsScreenState extends State<HomeworkDetailsScreen>
                             ])),
                     const SizedBox(height: 8),
                     OutlinedButton.icon(
+                        key: const ValueKey('homework-attach'),
                         onPressed: _busy ? null : _attach,
-                        icon: const Icon(Icons.attach_file),
+                        icon: Icon(rule.imagesOnly
+                            ? Icons.add_photo_alternate_outlined
+                            : Icons.attach_file),
                         label: Text(_busy
                             ? MissionContentData.homeworkUploading
-                            : MissionContentData.homeworkAddFile)),
+                            : rule.imagesOnly
+                                ? HomeworkRequirementsContent.addImage
+                                : MissionContentData.homeworkAddFile)),
                     const SizedBox(height: 8),
-                    const Text(MissionContentData.homeworkFileHelp),
+                    Text(rule.imagesOnly
+                        ? HomeworkRequirementsContent.imagesHelp
+                        : MissionContentData.homeworkFileHelp),
                     if (_uploadingFile) ...[
                       const SizedBox(height: 8),
                       Semantics(
@@ -384,9 +434,27 @@ class _HomeworkDetailsScreenState extends State<HomeworkDetailsScreen>
                           child:
                               LinearProgressIndicator(value: _uploadProgress)),
                     ],
+                    ],
                     const SizedBox(height: 20),
+                    if (missing != null) ...[
+                      Semantics(
+                          liveRegion: true,
+                          child: Row(
+                              key: const ValueKey('homework-missing'),
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.info_outline,
+                                    size: 18, color: AppTheme.primaryBlue),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                    child: Text(missing,
+                                        style: AppTheme.labelMedium)),
+                              ])),
+                      const SizedBox(height: 10),
+                    ],
                     FilledButton(
-                        onPressed: _busy ? null : _review,
+                        key: const ValueKey('homework-review'),
+                        onPressed: _busy || missing != null ? null : _review,
                         child: Text(_busy
                             ? MissionContentData.loadingLabel
                             : MissionContentData.homeworkReview)),
@@ -418,7 +486,7 @@ class _HomeworkDetailsScreenState extends State<HomeworkDetailsScreen>
       label: Text(file.filename));
 
   Future<void> _attach() async {
-    if (_busy) return;
+    if (_busy || !_assignment.rule.takesFiles) return;
     if (_assignment.answerFiles.length >= 5) {
       setState(() => _error = MissionContentData.homeworkFileLimit);
       return;
@@ -430,15 +498,16 @@ class _HomeworkDetailsScreenState extends State<HomeworkDetailsScreen>
     try {
       final file = await FilePicker.pickFile(
           type: FileType.custom,
-          allowedExtensions: const [
-            'pdf',
-            'jpg',
-            'jpeg',
-            'png',
-            'webp',
-            'txt'
-          ]);
+          allowedExtensions: _assignment.rule.allowedExtensions);
       if (file == null) return;
+      if (_assignment.rule.imagesOnly &&
+          !HomeworkSubmissionRule.imageExtensions
+              .contains(file.name.split('.').last.toLowerCase())) {
+        if (mounted) {
+          setState(() => _error = HomeworkRequirementsContent.notImage);
+        }
+        return;
+      }
       final length = await file.length();
       if (length == null || length < 1 || length > 10485760) {
         if (mounted) {
@@ -462,6 +531,8 @@ class _HomeworkDetailsScreenState extends State<HomeworkDetailsScreen>
       await _saveDraft();
       final rows = await _service.getAssignments(id: _assignment.id);
       if (mounted) setState(() => _assignment = rows.single);
+    } on HomeworkRuleException catch (refusal) {
+      if (mounted) setState(() => _error = refusal.message);
     } catch (_) {
       if (mounted) {
         setState(() => _error = MissionContentData.homeworkFileFailed);
@@ -477,8 +548,10 @@ class _HomeworkDetailsScreenState extends State<HomeworkDetailsScreen>
   }
 
   Future<void> _review() async {
-    if (_answer.text.trim().isEmpty && _selectedFiles.isEmpty) {
-      setState(() => _error = MissionContentData.homeworkRequired);
+    final rule = _assignment.rule;
+    final missing = _missing;
+    if (missing != null) {
+      setState(() => _error = missing);
       return;
     }
     final confirm = await showDialog<bool>(
@@ -497,10 +570,9 @@ class _HomeworkDetailsScreenState extends State<HomeworkDetailsScreen>
                       if (_assignment.deadlinePassed)
                         const Text(MissionContentData.homeworkLateAllowed),
                       const SizedBox(height: 12),
-                      Text(_answer.text.trim()),
-                      ..._assignment.answerFiles
-                          .where((f) => _selectedFiles.contains(f.id))
-                          .map((f) => Text(f.filename)),
+                      if (rule.takesAnswer) Text(_answer.text.trim()),
+                      if (rule.takesFiles)
+                        ..._chosenFiles.map((f) => Text(f.filename)),
                     ])),
                 actions: [
                   TextButton(
@@ -516,14 +588,19 @@ class _HomeworkDetailsScreenState extends State<HomeworkDetailsScreen>
       _error = null;
     });
     try {
+      // Only the parts this homework accepts are sent.
       await _service.submit(
           assignmentId: _assignment.id,
-          answer: _answer.text.trim(),
-          fileIds: _selectedFiles.toList());
+          answer: rule.takesAnswer ? _answer.text.trim() : '',
+          fileIds: rule.takesFiles
+              ? _chosenFiles.map((f) => f.id).toList()
+              : const []);
       final rows = await _service.getAssignments(id: _assignment.id);
       if (mounted) setState(() => _assignment = rows.single);
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_draftKey);
+    } on HomeworkRuleException catch (refusal) {
+      if (mounted) setState(() => _error = refusal.message);
     } catch (_) {
       if (mounted) setState(() => _error = MissionContentData.homeworkFailed);
     } finally {

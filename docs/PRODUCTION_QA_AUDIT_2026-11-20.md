@@ -271,3 +271,9 @@ The owner approved this step; the owner signed in to the Supabase dashboard them
 - a full-disk search found only two Expo template debug keys (`FA:C6:17:45…`).
 
 An APK signed with any of these keys would not install over the learners' app without an uninstall, so none was built.
+
+**GitHub and Vercel.**
+- `vince-branch` was pushed as a fast-forward (`a7bb6e9..0212ebb`). Its Vercel Preview build succeeded.
+- It was merged into `main` through PR #6 (merge commit `9c566de`, 09:44 UTC).
+- The merge **auto-deployed `main` to Vercel production** at 09:45:47 UTC (success). Earlier in the day a merge had produced only a Preview, so the project setting has changed.
+- A live smoke test returned 200 with no error screens on 17/17 admin and instructor pages. The D1 redirects work, and pages carry the D9 title.

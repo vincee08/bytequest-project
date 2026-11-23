@@ -49,3 +49,12 @@ test("Release lists mixed kinds with selection and one bulk Release action", () 
   assert.match(html, /Release selected \(0\)<\/button>/);
   assert.match(html, /aria-label="Select all 3 items on this page"/);
 });
+
+test("each queued submission names the learner by email, not only the class", () => {
+  const html = render("evaluate", [{ ...quiz("pending", null), learner: { ...base.learner, email: "queue.learner@example.test" } }]);
+  assert.match(html, /Queue Learner One/);
+  assert.match(html, /queue\.learner@example\.test/);
+  assert.match(html, /Queue class one/);
+  const missing = render("evaluate", [quiz("pending", null)]);
+  assert.match(missing, /No email on record/);
+});

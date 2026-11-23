@@ -34,9 +34,16 @@ export function learnerEnrollmentState(statuses: readonly string[]): EnrollmentS
   return statuses.includes("active") ? "active" : statuses.length ? "previously_enrolled" : "not_enrolled";
 }
 
-export function enrollmentFailure(code?: string) {
-  if (code === "23505") return { status: 409, message: "This learner is already enrolled in this class." };
-  if (code === "22023") return { status: 422, message: "This learner is no longer eligible. Search again to select an active learner." };
-  if (code === "42501") return { status: 403, message: "You can enroll learners only in your own active class." };
-  return { status: 503, message: "Enrollment could not be confirmed. Refresh the class before trying again." };
+export const ONE_ACTIVE_CLASS_MESSAGE =
+  "This learner is already enrolled in another class. A learner can belong to only one class at a time.";
+
+export type EnrollmentFailureCode = "ENROLLED_IN_ANOTHER_CLASS" | "ALREADY_ENROLLED" | "NOT_ELIGIBLE" | "CLASS_SCOPE" | "UNAVAILABLE";
+
+// The database names the one-class rule by a stable code; it never names the other class.
+export function enrollmentFailure(code?: string, message?: string): { status: number; code: EnrollmentFailureCode; message: string } {
+  if (message?.includes("LEARNER_ALREADY_IN_ANOTHER_CLASS")) return { status: 409, code: "ENROLLED_IN_ANOTHER_CLASS", message: ONE_ACTIVE_CLASS_MESSAGE };
+  if (code === "23505") return { status: 409, code: "ALREADY_ENROLLED", message: "This learner is already enrolled in this class." };
+  if (code === "22023") return { status: 422, code: "NOT_ELIGIBLE", message: "This learner is no longer eligible. Search again to select an active learner." };
+  if (code === "42501") return { status: 403, code: "CLASS_SCOPE", message: "You can enroll learners only in your own active class." };
+  return { status: 503, code: "UNAVAILABLE", message: "Enrollment could not be confirmed. Refresh the class before trying again." };
 }

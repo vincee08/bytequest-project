@@ -9,6 +9,14 @@ import '../core/config/app_release.dart';
 import '../core/config/supabase_config.dart';
 import '../models/homework_model.dart';
 
+/// The server refused a homework action for a stated reason the learner can fix.
+class HomeworkRuleException implements Exception {
+  const HomeworkRuleException(this.message);
+  final String message;
+  @override
+  String toString() => message;
+}
+
 class HomeworkService {
   static const _configuredUrl = String.fromEnvironment('BQ_PRACTICE_API_URL');
 
@@ -59,6 +67,19 @@ class HomeworkService {
   Map<String, dynamic> _decode(http.Response response) {
     if (response.statusCode == 403 || response.statusCode == 404) {
       throw StateError('HOMEWORK_ACCESS_DENIED');
+    }
+    // A refused submission or file names what is missing (the server's
+    // curated message, e.g. "This homework accepts images only").
+    if (response.statusCode == 422) {
+      try {
+        final body = jsonDecode(response.body);
+        final message = body is Map ? body['error'] : null;
+        if (message is String && message.trim().isNotEmpty) {
+          throw HomeworkRuleException(message.trim());
+        }
+      } on FormatException {
+        // Not JSON: fall through to the generic failure.
+      }
     }
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError('HOMEWORK_REQUEST_FAILED');

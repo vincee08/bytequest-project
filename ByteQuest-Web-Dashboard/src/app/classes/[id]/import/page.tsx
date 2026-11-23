@@ -32,6 +32,7 @@ export default async function ClassRosterImportPage({ params }: { params: Promis
   if (batches.error || entries.error) throw new Error("The roster import history could not be loaded.");
   const pending = (entries.data ?? []).filter((row) => row.status === "pending").length;
   const joined = (entries.data ?? []).filter((row) => row.status === "enrolled").length;
+  const joinedElsewhere = (entries.data ?? []).filter((row) => row.status === "enrolled_elsewhere").length;
 
   return (
     <DashboardLayout>
@@ -42,7 +43,7 @@ export default async function ClassRosterImportPage({ params }: { params: Promis
           </Button>
           <PageHeader
             title="Import class roster"
-            description="Upload an Excel roster. Registered learners are enrolled when you confirm; new emails wait as pending entries and enroll automatically when that learner signs up with the same email. Instructors never create accounts."
+            description="Upload an Excel roster. Registered learners are enrolled when you confirm; new emails wait as pending entries and enroll automatically when that learner signs up with the same email. A learner can belong to only one class at a time. Instructors never create accounts."
             actions={<Badge variant={classroom.status === "active" ? "secondary" : "outline"}>{classroom.status}</Badge>}
           />
         </div>
@@ -58,7 +59,10 @@ export default async function ClassRosterImportPage({ params }: { params: Promis
         <section className="overflow-hidden rounded-xl border border-border bg-card" aria-labelledby="roster-history">
           <div className="flex flex-col gap-1 border-b border-border px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <h2 id="roster-history" className="flex items-center gap-2 font-semibold"><History className="h-4 w-4" aria-hidden="true" />Recent imports</h2>
-            <p className="text-xs text-muted-foreground">{pending} pending sign-up · {joined} joined via roster</p>
+            <p className="text-xs text-muted-foreground">
+              {pending} pending sign-up · {joined} joined via roster
+              {joinedElsewhere ? ` · ${joinedElsewhere} signed up but joined another class (one class per learner)` : ""}
+            </p>
           </div>
           {batches.data?.length ? (
             <div className="overflow-x-auto">

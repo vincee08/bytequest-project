@@ -11,6 +11,14 @@ import 'hotspot_widget.dart';
 import 'mission_simulation_profile.dart';
 import 'scene_connection_painter.dart';
 
+/// Fixed features use the photo's 1200 × 720 coordinate space, not the accessibility grid's reflow.
+class PhysicalSceneLayout {
+  const PhysicalSceneLayout({required this.bounds, this.wrap});
+
+  final Map<String, Rect> bounds;
+  final Widget Function(Widget layers)? wrap;
+}
+
 /// Responsive, presentation-only 2D scene engine.
 ///
 /// New runtime callers provide [scene]. Existing assessment screens may keep
@@ -28,6 +36,7 @@ class SimulationScene extends StatefulWidget {
   final bool scrollEnabled;
   final ValueChanged<String> onObjectSelected;
   final Widget? backgroundRenderer;
+  final PhysicalSceneLayout? physicalLayout;
   final List<Widget> statusOverlays;
   final double initialCameraScale;
   final Offset initialCameraOffset;
@@ -55,6 +64,7 @@ class SimulationScene extends StatefulWidget {
     this.scrollEnabled = true,
     required this.onObjectSelected,
     this.backgroundRenderer,
+    this.physicalLayout,
     this.statusOverlays = const [],
     this.initialCameraScale = 1,
     this.initialCameraOffset = Offset.zero,
@@ -204,6 +214,7 @@ class _SimulationSceneState extends State<SimulationScene> {
               scrollController: _workspaceScrollController,
               onObjectSelected: _selectObject,
               backgroundRenderer: widget.backgroundRenderer,
+              physicalLayout: widget.physicalLayout,
               statusOverlays: widget.statusOverlays,
               objectBuilder: widget.objectBuilder,
               highlightObjectId: widget.highlightObjectId,
@@ -413,6 +424,7 @@ class _SceneViewport extends StatelessWidget {
   final ScrollController scrollController;
   final ValueChanged<String> onObjectSelected;
   final Widget? backgroundRenderer;
+  final PhysicalSceneLayout? physicalLayout;
   final List<Widget> statusOverlays;
   final Widget Function(SceneObjectDefinition object, Widget hotspot)?
       objectBuilder;
@@ -431,6 +443,7 @@ class _SceneViewport extends StatelessWidget {
     required this.scrollController,
     required this.onObjectSelected,
     required this.backgroundRenderer,
+    required this.physicalLayout,
     required this.statusOverlays,
     this.objectBuilder,
     this.highlightObjectId,
@@ -446,13 +459,20 @@ class _SceneViewport extends StatelessWidget {
               .0001,
               viewport.width / baseWorkspace.width,
             );
-            final layout = _layoutObjects(resolved.definition.objects,
-                workspaceScale, MediaQuery.textScalerOf(context),
-                readableInspectionLabels: objectBuilder == null);
+            final physical = physicalLayout;
+            final layout = physical == null
+                ? _layoutObjects(resolved.definition.objects, workspaceScale,
+                    MediaQuery.textScalerOf(context),
+                    readableInspectionLabels: objectBuilder == null)
+                : (workspace: baseWorkspace, objects: physical.bounds);
+            assert(resolved.definition.objects
+                .every((o) => layout.objects.containsKey(o.id)));
             final logicalWorkspace = layout.workspace;
             final mappedObjects = layout.objects;
-            final contentHeight = math.max(
-                viewport.height, logicalWorkspace.height * workspaceScale);
+            final contentHeight = physical != null
+                ? viewport.height
+                : math.max(
+                    viewport.height, logicalWorkspace.height * workspaceScale);
             final connections = _connectionsFor(
               resolved.definition.objects,
               mappedObjects,
@@ -460,6 +480,8 @@ class _SceneViewport extends StatelessWidget {
               hotspotStates,
             );
             final reducedMotion = MediaQuery.disableAnimationsOf(context);
+            Widget wrapLayers(Widget child) =>
+                physical?.wrap?.call(child) ?? child;
             final canvas = InteractiveViewer(
               onInteractionEnd: (_) => onCameraInteractionEnd(),
               transformationController: transformationController,
@@ -476,7 +498,7 @@ class _SceneViewport extends StatelessWidget {
                     key: const Key('simulation-logical-workspace'),
                     width: logicalWorkspace.width,
                     height: logicalWorkspace.height,
-                    child: Stack(
+                    child: wrapLayers(Stack(
                       clipBehavior: Clip.hardEdge,
                       children: [
                         Positioned.fill(
@@ -530,7 +552,7 @@ class _SceneViewport extends StatelessWidget {
                             ),
                           ),
                       ],
-                    ),
+                    )),
                   ),
                 ),
               ),

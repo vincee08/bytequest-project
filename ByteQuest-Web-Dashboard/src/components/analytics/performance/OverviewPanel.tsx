@@ -5,10 +5,12 @@ import type { ComponentType, ReactNode } from "react";
 import { BookOpenCheck, ClipboardCheck, FileCheck2, GraduationCap, Route, Users } from "lucide-react";
 import { DataTable, EmptyState, Panel } from "@/components/analytics/performance/primitives";
 import { CountBarChart, PercentBarChart, TrendLineChart } from "@/components/analytics/performance/charts";
+import { LearnerStatusBoard } from "@/components/analytics/performance/LearnerStatusBoard";
 import type { ChartConfig } from "@/components/ui/chart";
 import { describePeriod, formatDuration, formatPercent, formatShortDay } from "@/lib/analytics/format";
+import type { LearnerStatusState } from "@/lib/analytics/learner-status";
 import type { AnalyticsOverview, EvaluationStage } from "@/lib/analytics/performance-types";
-import { analyticsHref, type AnalyticsQuery } from "@/lib/analytics/query";
+import { analyticsHref, analyticsSearchParams, type AnalyticsQuery } from "@/lib/analytics/query";
 import { cn } from "@/lib/utils";
 
 const SOURCE_CONFIG = {
@@ -34,11 +36,14 @@ export const STAGE_LABELS: Record<EvaluationStage, string> = {
 
 export function OverviewPanel({
   data,
+  learnerStatus,
   query,
   pathname,
   scopeLabel = "your classes",
 }: {
   data: AnalyticsOverview;
+  /** Named falling-behind / struggling / on-track learners; omitted in the admin view. */
+  learnerStatus?: LearnerStatusState;
   query: AnalyticsQuery;
   /** Base path for tab links; null renders the overview without drill-down links (admin view). */
   pathname: string | null;
@@ -71,6 +76,11 @@ export function OverviewPanel({
         <span className="font-semibold text-foreground">Population:</span> {data.population.description} ({population}, {data.population.active_in_period} active in the period) ·{" "}
         <span className="font-semibold text-foreground">Period:</span> {period}. Pending evaluations are counted separately and never included in averages.
       </p>
+
+      {learnerStatus ? (
+        <LearnerStatusBoard status={learnerStatus} scopeLabel={scopeLabel} limit={8}
+          profileQuery={analyticsSearchParams(query, { learnerId: null }).toString()} allHref={link("learners")} />
+      ) : null}
 
       <div className="grid gap-3.5 sm:grid-cols-2 xl:grid-cols-3">
         <SummaryCard icon={Users} label="Learners" value={String(data.population.enrolled)}

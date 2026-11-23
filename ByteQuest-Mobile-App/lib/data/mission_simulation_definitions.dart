@@ -325,9 +325,56 @@ String? _backgroundAssetForMission(String missionId) {
   };
 }
 
+/// Photos of physical parts shared by missions in every COC. Software
+/// consoles, documents, placement positions, ports and procedure-step chips
+/// keep their icons. New photos are open-licence (docs/IMAGE_CREDITS.md).
+const _sharedPartImages = {
+  'workstation': 'assets/COC1/Mission 3/System Unit.png',
+  'client': 'assets/COC1/Mission 3/System Unit.png',
+  'client_node': 'assets/COC1/Mission 3/System Unit.png',
+  'display': 'assets/COC1/Mission 1/monitor.png',
+  'boot_monitor': 'assets/COC1/Mission 1/monitor.png',
+  'network_adapter': 'assets/COC2/Mission 1/NIC.png',
+  'network_interface': 'assets/COC2/Mission 1/NIC.png',
+  'replacement_component': 'assets/COC2/Mission 1/NIC.png',
+  'memory_module': 'assets/COC1/Mission 1/ram.png',
+  'storage_drive': 'assets/COC1/Mission 1/hdd.png',
+  'system_disk': 'assets/COC1/Mission 1/ssd.png',
+  'power_supply': 'assets/COC1/Mission 1/psu.png',
+  'service_tool': 'assets/COC1/Mission 1/screwdriver.png',
+  'boot_usb': 'assets/parts/usb_flash_drive.png',
+  'installation_media': 'assets/parts/usb_flash_drive.png',
+  'driver_media': 'assets/parts/optical_disc.png',
+  'cpu_socket': 'assets/parts/cpu_socket.png',
+  'dimm_slot': 'assets/parts/dimm_slots.png',
+  'atx_power_port': 'assets/parts/atx_24pin_header.png',
+  'network_drop': 'assets/parts/ethernet_jack.png',
+  'repeater': 'assets/parts/wifi_repeater.png',
+  'server': 'assets/parts/server.png',
+  'server_node': 'assets/parts/server.png',
+  'server_chassis': 'assets/parts/server.png',
+  'power_conditioner': 'assets/parts/ups.png',
+  'network_printer': 'assets/parts/laser_printer.png',
+  'diagnostic_tool': 'assets/parts/digital_multimeter.png',
+  'maintenance_tool': 'assets/parts/screwdriver_set.png',
+};
+
+/// Mission-specific part photos whose ids mean something else elsewhere
+/// (coc3_m1 uses `network` for a procedure step).
+const _missionPartImages = {
+  'coc1_m5': {'network': 'assets/COC2/Mission 1/NIC.png'},
+};
+
 String? _imageAssetForObject(String missionId, String objectId) {
-  final coc = missionId.substring(0, 4);
+  // The assembly bench (coc1_m2) owns its photographs and layout.
   if (missionId == 'coc1_m2') return _assemblyImageAssets[objectId];
+  return _cocImageAsset(missionId, objectId) ??
+      _missionPartImages[missionId]?[objectId] ??
+      _sharedPartImages[objectId];
+}
+
+String? _cocImageAsset(String missionId, String objectId) {
+  final coc = missionId.substring(0, 4);
   if (coc == 'coc1') {
     if (objectId == 'system_unit') {
       return 'assets/COC1/Mission 3/System Unit.png';

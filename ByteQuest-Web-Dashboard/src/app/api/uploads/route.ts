@@ -14,6 +14,7 @@ import {
   InvalidUploadedFile,
   type UploadIntent,
 } from "@/lib/uploads/server";
+import { homeworkErrorMessage } from "@/lib/evaluations/homework";
 
 export const runtime = "nodejs";
 export const maxDuration = 180;
@@ -176,8 +177,12 @@ export async function POST(request: Request) {
       lease,
     );
     if (committed.error) {
-      await uploadAction(actor.service, actor.id, "retry", lease);
-      const e = activityError(committed.error);
+      // A file the homework does not accept (answer-only, images only) is a
+      // final refusal: reject the intent so cleanup removes the bytes.
+      const message = committed.error.message ?? "";
+      const refused = ["HOMEWORK_FILES_NOT_ACCEPTED", "HOMEWORK_IMAGE_FILES_REQUIRED"].some((code) => message.includes(code));
+      await uploadAction(actor.service, actor.id, refused ? "reject" : "retry", lease);
+      const e = (refused ? homeworkErrorMessage(committed.error) : null) ?? activityError(committed.error);
       return reply({ error: e.error }, e.status);
     }
     return reply(

@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { manilaDate, manilaInputToUtc, utcToManilaInput, latenessDuration } from '@/lib/activities/dates';
 import type { HomeworkFile } from '@/lib/activities/types';
-import { criteriaTotal, curriculumFromHomework, curriculumPayload, homeworkStatusLabel } from '@/lib/evaluations/homework';
+import { criteriaTotal, curriculumFromHomework, curriculumPayload, homeworkStatusLabel, submissionRuleSummary } from '@/lib/evaluations/homework';
 import type { CurriculumOptions, HomeworkRecord, HomeworkSubmissionRecord } from '@/lib/evaluations/types';
 import { homeworkRequest } from './HomeworkManager';
 import { HomeworkCurriculumFields } from './HomeworkCurriculumFields';
@@ -116,7 +116,7 @@ export function HomeworkWorkspace({ homework: h, classTitle, active, files, subm
             : <div className="space-y-4"><p className="whitespace-pre-wrap break-words text-sm">{h.instructions}</p>
               {h.learning_objectives.length ? <div><h3 className="text-sm font-semibold">Learning objectives</h3><ul className="mt-1 list-disc space-y-1 pl-5 text-sm">{h.learning_objectives.map((o, i) => <li key={i}>{o}</li>)}</ul></div> : null}
               {h.criteria.length ? <div><h3 className="text-sm font-semibold">Evaluation criteria · {Number(h.max_score)} points</h3><ul className="mt-1 space-y-1 text-sm">{h.criteria.map(c => <li key={c.id} className="flex justify-between gap-3"><span>{c.criterion}{c.description ? <span className="text-muted-foreground"> — {c.description}</span> : null}</span><span className="font-medium tabular-nums">{Number(c.max_points)} pts</span></li>)}</ul></div> : null}
-              {h.submission_requirements ? <div><h3 className="text-sm font-semibold">Submission requirements</h3><p className="whitespace-pre-wrap break-words text-sm">{h.submission_requirements}</p></div> : null}</div>}
+              <div><h3 className="text-sm font-semibold">Learner submission</h3><p className="text-sm" data-testid="homework-submission-rule">{submissionRuleSummary(h)}</p>{h.submission_requirements ? <p className="mt-1 whitespace-pre-wrap break-words text-sm text-muted-foreground">{h.submission_requirements}</p> : null}</div></div>}
           <div className="max-w-sm space-y-2"><Label htmlFor="edit-homework-deadline">Deadline (optional, Asia/Manila)</Label><Input className="min-h-11" id="edit-homework-deadline" type="datetime-local" value={deadline} onChange={e => setDeadline(e.target.value)} /><p className="text-xs text-muted-foreground">{manilaDate(h.deadline_at)}. At the deadline is on time. Later submissions are accepted and marked late.</p></div>
           {writable ? <Button type="submit" className="min-h-11" disabled={!dirty}>{busy ? 'Saving…' : draft ? 'Save draft' : 'Update deadline'}</Button> : null}
         </fieldset>

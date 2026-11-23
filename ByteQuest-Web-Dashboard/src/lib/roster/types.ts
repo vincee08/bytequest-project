@@ -13,6 +13,8 @@ export type RosterInputRow = { row_number: number } & Record<RosterColumn, strin
 export type RosterRowStatus =
   | "enroll_now"
   | "already_enrolled"
+  | "enrolled_elsewhere"
+  | "pending_elsewhere"
   | "pending"
   | "conflict_student_id"
   | "staff_account"
@@ -63,7 +65,7 @@ export type RosterEntryRow = {
   last_name: string;
   first_name: string;
   course_section: string | null;
-  status: "pending" | "enrolled" | "cancelled";
+  status: "pending" | "enrolled" | "cancelled" | "enrolled_elsewhere";
   import_batch_id: string | null;
   created_by: string;
   created_at: string;
@@ -93,13 +95,15 @@ export type RosterGroupKey = "enroll_now" | "pending" | "skip" | "invalid";
 export const rosterGroups: { key: RosterGroupKey; title: string; description: string; statuses: RosterRowStatus[] }[] = [
   { key: "enroll_now", title: "Enroll now", description: "Registered learner accounts that are enrolled when you confirm.", statuses: ["enroll_now"] },
   { key: "pending", title: "Pending", description: "No account yet. Each enrolls automatically after signing up with the same email.", statuses: ["pending"] },
-  { key: "skip", title: "Skip", description: "Already enrolled, a student ID conflict, or a staff account. Not changed by the import.", statuses: ["already_enrolled", "conflict_student_id", "staff_account"] },
+  { key: "skip", title: "Skip", description: "Already enrolled here, enrolled in or waiting to join another class (one class per learner), a student ID conflict, or a staff account. Not changed by the import.", statuses: ["already_enrolled", "enrolled_elsewhere", "pending_elsewhere", "conflict_student_id", "staff_account"] },
   { key: "invalid", title: "Invalid", description: "Rows with a missing field, an invalid email or a duplicate in the file. Never imported.", statuses: ["invalid"] },
 ];
 
 export const rosterStatusLabels: Record<RosterRowStatus, string> = {
   enroll_now: "Enroll now",
   already_enrolled: "Already enrolled",
+  enrolled_elsewhere: "In another class",
+  pending_elsewhere: "Waiting for another class",
   pending: "Pending sign-up",
   conflict_student_id: "Student ID conflict",
   staff_account: "Staff account",
@@ -117,7 +121,8 @@ export function rosterGroupRows(rows: readonly RosterResultRow[]) {
 }
 
 export function rosterProblemRows(rows: readonly RosterResultRow[]) {
-  return rows.filter((row) => row.status === "invalid" || row.status === "conflict_student_id" || row.status === "staff_account");
+  return rows.filter((row) => row.status === "invalid" || row.status === "conflict_student_id" || row.status === "staff_account"
+    || row.status === "enrolled_elsewhere" || row.status === "pending_elsewhere");
 }
 
 /** CSV of every row that was not imported because of a problem. */

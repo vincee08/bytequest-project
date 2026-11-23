@@ -2,6 +2,81 @@
 
 > Read this file with `AGENTS.md`, `README.md`, and `bytequest.md` before changing the repository.
 
+## Current continuation - 2026-11-23 defense-day panel fixes and production incident
+
+Panel concerns implemented (owner-requested; committed, pushed and merged to `main` on request):
+- **One active class per learner:** migration `20261123090000` (trigger with a per-learner advisory
+  lock, code `LEARNER_ALREADY_IN_ANOTHER_CLASS`; archived/deactivated memberships do not count;
+  existing duplicates are left in place). Roster import marks `enrolled_elsewhere` /
+  `pending_elsewhere` as skipped rows; the sign-up claim enrolls only the oldest pending class.
+- **Homework submission rules:** migration `20261123090100` adds `submission_format`
+  (`answer_or_file` legacy default, `answer`, `file`, `answer_and_file`), `required_file_count`
+  (0–5) and `accepted_file_types` (`any`, `image`); enforced at submit and at answer-file attach.
+  Dashboard form + rule summary; mobile "What to submit" box, hidden inputs, image-only picker and
+  disabled submit until satisfied. Homework queries use `select('*')`, so the dashboard works before
+  the migration is applied (rules then stay legacy).
+- **Analytics:** Learner status board (falling behind / struggling / on track, with reasons, class
+  and profile link) on the analytics Overview and the instructor dashboard home; existing rules.
+- **Learner identity:** Submissions and the Evaluation Center show the learner's email under the
+  name (the class title had been shown there, which read as "ByteQuest ...").
+- **Middleware 504:** the session check now has an 8 s deadline (Vercel ends middleware at 25 s;
+  supabase-js retries a failed refresh for 30 s), skips Supabase for signed-out visitors, and
+  shows a login notice (`?error=session_timeout`).
+
+Gates: SQL 46 files / 1,383 assertions, only the known `foundation_redefense` #25 fixture
+failure (non-TAP suites run individually: clean); dashboard tsc 0, lint 0, tests 240/240, build
+passes. Both migrations are applied to the LOCAL database only.
+
+**Production incident (2026-11-23):** project `rslmteqipxqfifwftugk` (ap-northeast-1) returned
+Cloudflare 522 for Auth and REST (~20 s) while Storage answered; the CLI could not create a login
+role ("Connection terminated due to connection timeout"). Status page and project status claimed
+healthy. This caused the dashboard "Failed to fetch" sign-in error and the middleware 504. Fix:
+restart the project in the Supabase dashboard (Project Settings → General → Restart project).
+**Still pending after it is back:** apply `20261123090000` and `20261123090100` to production
+(needs owner approval), then rebuild/distribute the APK for the mobile homework rules.
+
+## Previous continuation - 2026-11-21 drag-and-drop APK, latest enhancement cancelled
+
+- Owner requested undoing only the interrupted premium-realism enhancement, keeping the earlier
+  drag-and-drop implementation shown on Android. Restored its exact source in 13 affected files;
+  preserved loose-part recovery/rotation/resume, physical ports, hardware inspection and lab drafts.
+  The discarded partial edits are backed up under `.tmp/ngani-apk-rollback/` (ignored).
+- Current gates: Flutter **799 passed, 0 failed**; analyzer **0 errors, 0 warnings** (211 infos);
+  assembly contract matches its published migration (`ea4a136c4360bdc7…`). No definitions, scoring,
+  services, migrations or dashboard changes in this rollback/build.
+- Built the full `lib/main.dart` app in release mode, not the offline emulator demo. Public hosted
+  client settings match the previous Downloads APK; the original project `.env` was not changed.
+  APK v2 signature verified with the same existing certificate (`271cbbf0…`); no key replacement.
+  Includes ARMv7, ARM64 and x86_64; Android minSdk 24, targetSdk 36; private-key scan passed.
+- Owner-requested output: `C:\Users\MIKE ANGELO CASONO\Downloads\bytequest ngani.apk`,
+  78,818,054 bytes, SHA256 `74e6c20b92f137b0746298d18165ab68fbd826fc8f8677be5a8b3ce7e0cd9cad`.
+  Original `updated bytequest.apk` retained. No new full-mission/device completion is claimed by
+  this build; the preceding Android interaction checks remain the device evidence.
+- Nothing committed, pushed, merged, deployed or changed in production during this work.
+
+## Previous continuation - 2026-11-21/22 realistic labs: COC4 M4 PCIe swap, COC2 M2 RJ45 crimp
+
+Owner-selected labs from the redesign audit (`docs/SIMULATION_REDESIGN_AUDIT_2026-11-21.md` §9).
+UI layer only: definitions, practice and assessment contracts, rubrics, scoring and the database
+are unchanged. Local commit only; not pushed, not merged, not deployed.
+
+- Labs own `coc2_m2_p2`, `coc4_m4_p1`, `coc4_m4_p2` and `coc4_m4_p4`
+  (`lib/data/mission_lab_phases.dart`, `lib/screens/simulation/components/labs/`). Each records the
+  same action types, targets and values as the panel it replaces.
+- Guidance (top hint, Show me where, How-to panel) speaks the lab's controls for those phases and
+  never names the expected order, tool, wiring or orientation.
+- Gates: Flutter 764 passed / 1 skipped / 0 failed; analyze 0 errors, 0 warnings; server replay
+  suite 24/24 as committed and with one COC4 M4 contingency row; emulator touch runs (COC4 M4
+  practice verified by the local server with 18 evidence rows; COC2 M2 miswire and T568B crimps).
+  Screenshots: `docs/qa-labs-2026-11-21/`.
+- Local QA data changed (local stack only): `qa.learner1` has COC1–COC3 practice progress rows
+  (with stub quiz attempts), bypass module unlocks for LO2.1 and LO4.4, a verified COC4 M4 practice
+  run and a COC2 M2 run paused at phase 3.
+- Emulator: the debug build against the local stack was replaced by the production APK from
+  Downloads after testing.
+- Not done: assessment mode on a device (no local class or assessment for the QA learner); the
+  other 18 missions keep their standard panels; release APK still needs the original key.
+
 ## Current continuation - 2026-11-20 PRODUCTION QA AUDIT
 
 End-to-end audit of the live system: dashboard `https://bytequest-alpha.vercel.app` at `c842f6f`
@@ -78,8 +153,23 @@ OpenRouter 429), 0 FAIL.
   - ACL and SECURITY INVOKER unchanged.
   - The read-back reports no public table without RLS and 20 published simulation assessments.
 - **Screenshots:** the instructor's display name was redacted in d01–d03 before the push, by rewriting only the unpushed commits.
-- **APK:** release blocked. Neither the learners' signing certificate `a4d01056…` nor the 11-13 production key `dc85ef75…` is on this PC; a full-disk search found only this PC's debug key and two Expo template keys.
-- **Next:** the push to `vince-branch` and a PR into `main` follow this commit. The teammate deploys `main` to Vercel production.
+- **APK (built after owner approval of fresh installs; "we don't have any real users yet"):**
+  - Neither the learners' signing certificate `a4d01056…` nor the 11-13 production key `dc85ef75…` is on this PC. A full-disk search found only this PC's debug key and two Expo template keys.
+  - The owner therefore approved a fresh install, and a **release-mode** APK of `9af8df8` was built.
+  - Signing: this PC's debug certificate `271cbbf0…` (the repo's `BYTEQUEST_ALLOW_DEBUG_SIGNING=true` opt-in), APK Signature Scheme v2, 1.2.0 (3), not debuggable, minSdk 24, targetSdk 36, three ABIs.
+  - Size and hash: 75,113,538 bytes, sha256 `27a85b69d640606f71e137cce56009509b440e272df5785e1e069757529451ae`.
+  - Location: `C:\Users\MIKE ANGELO CASONO\Downloads\updated bytequest.apk`.
+  - Configuration: the bundled `.env` holds only the production public values (URL, publishable key, practice API). The local `.env`, which points at `127.0.0.1`, was swapped out for the build and restored byte-identical.
+  - The secret scan of every APK entry is clean.
+  - Emulator check: the APK installed in place over the debug build. The first launch after install took 49.9 s (one time); later cold starts took 3.4 s and 2.4 s. Home, Progress and the COC1 M2 bench rendered, with no Flutter errors in logcat.
+  - **Every later update must be signed with this PC's `~/.android/debug.keystore`**, or learners must uninstall again.
+- **D4 is only partly fixed:** `LearnerProgressBar` wraps `LinearProgressIndicator` in `Semantics` without excluding the indicator's own node. A second focusable ProgressBar node therefore still says "17" while the screen shows 16 %, on both the Progress and Practice tabs. Fix: `excludeSemantics: true`, plus a test assertion. Not fixed yet.
+- **GitHub and Vercel (done):**
+  - `vince-branch` was pushed as a fast-forward `a7bb6e9..0212ebb`; its Vercel Preview build succeeded.
+  - It was merged into `main` through PR #6 (merge commit `9c566de`, 09:44 UTC).
+  - **The merge auto-deployed `main` to Vercel production** at 09:45:47 UTC (success), so D1, D8, D9 and D10 are live.
+  - Smoke test: 17/17 admin and instructor pages return 200 with no errors, and the D1 redirects work.
+  - The Vercel project now deploys `main` to production on every merge. Treat a merge as a production deploy.
 
 **Post-publish verification (2026-11-20, later; report §8):**
 
@@ -93,23 +183,20 @@ OpenRouter 429), 0 FAIL.
   - SQL: 42/42.
   - Debug APK: builds.
 - **Production state:**
-  - The dashboard is still at `c842f6f`, so D1, D8, D9 and D10 are not live. Merging to `main` auto-deploys production.
+  - At that time the dashboard was still at `c842f6f`. Superseded: production has run `9c566de` since 09:45 UTC (see above).
   - The Vercel CLI token on this PC is invalid.
   - OpenRouter is configured in production (`configured: true`, not simulated); its capacity was last seen as 429.
 - **New minor findings F1–F4** (task panel height in phase 5, post-submit exit copy, class sheet status, hardcoded test-run labels) are not fixed.
-- **Emulator:** it now runs the debug build of `575af68`. To revert, run `adb install -r` with `build/app/outputs/flutter-apk/app-debug.apk`.
+- **Emulator:** it now runs the release APK above (`updated bytequest.apk`).
 
 **Owner actions (need approval):**
 - ~~B1~~ done (see above). Old note: publish the simulation assessment packages to production. Dry-run first, then
   `node scripts/publish-simulation-assessments.mjs --target hosted --confirm` with the service-role
   key. Until then an assigned COC1 M2 assessment opens the legacy form, not the bench.
 - B2: restore OpenRouter capacity (429 on every request).
-- B3: ~~apply `20261120110000` to production~~ done; push and merge follow this commit. Still open: the Vercel production deploy (the teammate) and a new APK (blocked on the signing key).
+- B3: ~~migration~~, ~~push and merge~~, ~~Vercel production~~ and ~~APK~~ are done. The APK is `Downloads\updated bytequest.apk`, release mode, signed with this PC's debug key; anyone on an older build installs it fresh.
 - Change the weak admin and instructor test passwords after the defense.
-- APK signing decision for the 1.2.0 release:
-  - Learners' 1.1.0 is signed with `a4d01056…`, which is not on this PC.
-  - This PC's debug certificate is `271cbbf0…`. A build signed with it cannot update 1.1.0 in place, so learners would uninstall first.
-  - The 11-13 production key `dc85ef75…` is not on this PC either.
+- After the defense, consider a dedicated release key that is backed up off this PC. Moving to it will need one more fresh install.
 - After the defense: remove the TEST ONLY QA class data. This includes the v2 assignment "TEST ONLY QA: COC1 M2 simulation assessment (v2)" and its attempt `e2d4f421-…`.
 
 ## Previous continuation - 2026-11-20 RE-DEFENSE QA AUDIT, PASS 2 (local stack)

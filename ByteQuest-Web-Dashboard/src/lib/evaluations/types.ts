@@ -13,7 +13,11 @@ export type HomeworkRecord = Homework & {
   coc_module_id: string | null; module_id: string | null; mission_code: string | null;
   learning_objectives: string[]; criteria: HomeworkCriterion[]; max_score: number;
   submission_requirements: string | null;
+  submission_format: HomeworkSubmissionFormat; required_file_count: number; accepted_file_types: HomeworkFileTypes;
 };
+/** What a learner submits; the server enforces it (manage_homework). */
+export type HomeworkSubmissionFormat = 'answer_or_file' | 'answer' | 'file' | 'answer_and_file';
+export type HomeworkFileTypes = 'any' | 'image';
 export type HomeworkSubmissionRecord = Omit<HomeworkSubmission, 'status'> & {
   status: HomeworkStatus; criterion_scores: Record<string, number> | null;
   finalized_by: string | null; finalized_at: string | null;

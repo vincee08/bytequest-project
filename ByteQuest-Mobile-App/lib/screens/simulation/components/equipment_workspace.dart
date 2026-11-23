@@ -8,6 +8,9 @@ import '../../../data/mission_phase_guidance.dart';
 import '../runtime/mission_equipment_simulator.dart';
 import '../runtime/mission_runtime_models.dart';
 import 'component_orientation_dialog.dart';
+import 'labs/hardware_inspection_bench.dart';
+import 'physical/port_bench_layout.dart';
+import 'physical/port_connection_bench.dart';
 import 'simulation_scene.dart';
 import 'scrollable_equipment_draggable.dart';
 import 'tool_tray.dart';
@@ -30,6 +33,7 @@ class EquipmentWorkspace extends StatefulWidget {
     required this.hotspotStates,
     required this.enabled,
     this.saving = false,
+    this.onDraftChanged,
     this.feedback,
     this.highlightTarget,
     this.highlightObjectId,
@@ -44,6 +48,7 @@ class EquipmentWorkspace extends StatefulWidget {
   final Map<String, HotspotVisualState> hotspotStates;
   final bool enabled;
   final bool saving;
+  final ValueChanged<Map<String, dynamic>>? onDraftChanged;
   final String? feedback;
   final MissionGuideTarget? highlightTarget;
   final String? highlightObjectId;
@@ -137,6 +142,10 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
     final sources = MissionEquipmentSimulator.maps(
         panel[mode == _WorkspaceMode.place ? 'items' : 'sources']);
     final destinations = MissionEquipmentSimulator.maps(panel['destinations']);
+    final ports = mode == _WorkspaceMode.connect
+        ? PortBenchLayout.resolve(
+            widget.definition.id, widget.phase, sources, destinations)
+        : null;
     final scene = mode == _WorkspaceMode.inspect
         ? widget.definition.scene
         : _workScene(mode, sources, destinations);
@@ -206,8 +215,9 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                     ),
                   ),
                 if (_selectionHint != null &&
-                    constraints.maxHeight >= 420 &&
-                    MediaQuery.textScalerOf(context).scale(1) <= 1.4)
+                    (ports != null ||
+                        (constraints.maxHeight >= 420 &&
+                            MediaQuery.textScalerOf(context).scale(1) <= 1.4)))
                   Padding(
                     padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
                     child: Semantics(
@@ -223,7 +233,9 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                                   MissionContentData.workspaceInspectHint,
                               },
                           style: AppTheme.caption,
-                          maxLines: 3,
+                          maxLines: ports != null && constraints.maxHeight < 300
+                              ? 1
+                              : 3,
                           overflow: TextOverflow.ellipsis,
                         )),
                   ),
@@ -231,194 +243,233 @@ class _EquipmentWorkspaceState extends State<EquipmentWorkspace> {
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
-                      SimulationScene(
-                        key: ValueKey(
-                            'workspace-scene-${mode.name}-${widget.phase.id}'),
-                        highlightObjects: widget.highlightTarget ==
-                            MissionGuideTarget.objects,
-                        highlightObjectId: widget.highlightObjectId,
-                        scene: scene,
-                        compactToolbar: true,
-                        panEnabled:
-                            widget.enabled && mode == _WorkspaceMode.inspect,
-                        scrollEnabled: !widget.saving,
-                        initialCameraScale: widget.state.cameraScale,
-                        initialCameraOffset: Offset(widget.state.cameraOffsetX,
-                            widget.state.cameraOffsetY),
-                        onCameraChanged: widget.onCameraChanged,
-                        interactionHint: switch (mode) {
-                          _WorkspaceMode.place =>
-                            MissionContentData.workspaceBuildHint,
-                          _WorkspaceMode.connect =>
-                            MissionContentData.workspaceConnectHint,
-                          _WorkspaceMode.inspect =>
-                            MissionContentData.workspaceInspectHint,
-                        },
-                        hotspotStates: {
-                          ...widget.hotspotStates,
-                          if (mode == _WorkspaceMode.place)
-                            for (final source in sources)
-                              source['id'] as String: widget.state.placements
-                                      .containsKey(source['id'])
-                                  ? HotspotVisualState.completed
-                                  : HotspotVisualState.neutral,
-                          if (mode == _WorkspaceMode.connect)
-                            for (final source in sources)
-                              if (widget.state.connectedNodePairs.any((pair) =>
-                                  pair.startsWith('${source['id']}>')))
-                                source['id'] as String:
-                                    HotspotVisualState.completed,
-                          if (mode == _WorkspaceMode.connect)
-                            for (final destination in destinations)
-                              if (widget.state.connectedNodePairs.any((pair) =>
-                                  pair.endsWith('>${destination['id']}')))
-                                'destination:${destination['id']}':
-                                    HotspotVisualState.completed,
-                          if (mode != _WorkspaceMode.inspect)
-                            for (final destination in destinations)
-                              if (widget.hotspotStates[destination['id']] !=
-                                  null)
-                                'destination:${destination['id']}':
-                                    widget.hotspotStates[destination['id']]!,
-                          if (_selected != null)
-                            _selected!: HotspotVisualState.selected,
-                          if (_dragging != null)
-                            _dragging!: HotspotVisualState.selected,
-                          if (practice &&
-                              mode != _WorkspaceMode.inspect &&
-                              (_dragging ?? _selected) != null)
-                            for (final destination in destinations)
-                              if (_canUseDestination(mode,
-                                  _dragging ?? _selected, destination, sources))
-                                'destination:${destination['id']}':
-                                    HotspotVisualState.selected,
-                        },
-                        connectedNodePairs: mode == _WorkspaceMode.inspect
-                            ? widget.state.connectedNodePairs
-                            : mode == _WorkspaceMode.connect
-                                ? {
-                                    for (final pair
-                                        in widget.state.connectedNodePairs)
-                                      '${pair.split('>').first}>destination:${pair.split('>').last}',
+                      if (mode == _WorkspaceMode.inspect &&
+                          HardwareInspectionBench.supports(
+                              widget.definition, widget.phase, widget.state))
+                        HardwareInspectionBench(
+                            definition: widget.definition,
+                            phase: widget.phase,
+                            state: widget.state,
+                            enabled: widget.enabled,
+                            saving: widget.saving,
+                            highlightObjects: widget.highlightTarget ==
+                                MissionGuideTarget.objects,
+                            highlightObjectId: widget.highlightObjectId,
+                            onCameraChanged: widget.onCameraChanged,
+                            onAction: widget.onAction)
+                      else if (ports != null)
+                        PortConnectionBench(
+                            key: ValueKey(widget.phase.id),
+                            layout: ports,
+                            phase: widget.phase,
+                            state: widget.state,
+                            sources: sources,
+                            destinations: destinations,
+                            enabled: widget.enabled && !_applying,
+                            saving: widget.saving,
+                            highlightObjectId: widget.highlightObjectId,
+                            onCameraChanged: widget.onCameraChanged,
+                            onDraftChanged: widget.onDraftChanged,
+                            onConnect: (source, destination, method) => _apply(
+                                mode, source, destination, sources, method),
+                            onHint: (text) =>
+                                setState(() => _selectionHint = text))
+                      else
+                        SimulationScene(
+                          key: ValueKey(
+                              'workspace-scene-${mode.name}-${widget.phase.id}'),
+                          highlightObjects: widget.highlightTarget ==
+                              MissionGuideTarget.objects,
+                          highlightObjectId: widget.highlightObjectId,
+                          scene: scene,
+                          compactToolbar: true,
+                          panEnabled:
+                              widget.enabled && mode == _WorkspaceMode.inspect,
+                          scrollEnabled: !widget.saving,
+                          initialCameraScale: widget.state.cameraScale,
+                          initialCameraOffset: Offset(
+                              widget.state.cameraOffsetX,
+                              widget.state.cameraOffsetY),
+                          onCameraChanged: widget.onCameraChanged,
+                          interactionHint: switch (mode) {
+                            _WorkspaceMode.place =>
+                              MissionContentData.workspaceBuildHint,
+                            _WorkspaceMode.connect =>
+                              MissionContentData.workspaceConnectHint,
+                            _WorkspaceMode.inspect =>
+                              MissionContentData.workspaceInspectHint,
+                          },
+                          hotspotStates: {
+                            ...widget.hotspotStates,
+                            if (mode == _WorkspaceMode.place)
+                              for (final source in sources)
+                                source['id'] as String: widget.state.placements
+                                        .containsKey(source['id'])
+                                    ? HotspotVisualState.completed
+                                    : HotspotVisualState.neutral,
+                            if (mode == _WorkspaceMode.connect)
+                              for (final source in sources)
+                                if (widget.state.connectedNodePairs.any(
+                                    (pair) =>
+                                        pair.startsWith('${source['id']}>')))
+                                  source['id'] as String:
+                                      HotspotVisualState.completed,
+                            if (mode == _WorkspaceMode.connect)
+                              for (final destination in destinations)
+                                if (widget.state.connectedNodePairs.any(
+                                    (pair) =>
+                                        pair.endsWith('>${destination['id']}')))
+                                  'destination:${destination['id']}':
+                                      HotspotVisualState.completed,
+                            if (mode != _WorkspaceMode.inspect)
+                              for (final destination in destinations)
+                                if (widget.hotspotStates[destination['id']] !=
+                                    null)
+                                  'destination:${destination['id']}':
+                                      widget.hotspotStates[destination['id']]!,
+                            if (_selected != null)
+                              _selected!: HotspotVisualState.selected,
+                            if (_dragging != null)
+                              _dragging!: HotspotVisualState.selected,
+                            if (practice &&
+                                mode != _WorkspaceMode.inspect &&
+                                (_dragging ?? _selected) != null)
+                              for (final destination in destinations)
+                                if (_canUseDestination(
+                                    mode,
+                                    _dragging ?? _selected,
+                                    destination,
+                                    sources))
+                                  'destination:${destination['id']}':
+                                      HotspotVisualState.selected,
+                          },
+                          connectedNodePairs: mode == _WorkspaceMode.inspect
+                              ? widget.state.connectedNodePairs
+                              : mode == _WorkspaceMode.connect
+                                  ? {
+                                      for (final pair
+                                          in widget.state.connectedNodePairs)
+                                        '${pair.split('>').first}>destination:${pair.split('>').last}',
+                                    }
+                                  : const {},
+                          enabled: widget.enabled && !_choosingOrientation,
+                          onObjectSelected: (id) {
+                            if (mode == _WorkspaceMode.inspect) {
+                              unawaited(widget.onAction('object_inspected', id,
+                                  const {'input_method': 'scene'}));
+                            } else if (id.startsWith('destination:')) {
+                              if (_selected != null) {
+                                unawaited(_apply(
+                                    mode,
+                                    _selected!,
+                                    id.substring('destination:'.length),
+                                    sources,
+                                    'tap'));
+                              } else {
+                                setState(() => _selectionHint =
+                                    MissionContentData
+                                        .workspaceSelectSourceFirst);
+                              }
+                            } else if (sources
+                                .any((source) => source['id'] == id)) {
+                              if (mode == _WorkspaceMode.place &&
+                                  widget.state.placements.containsKey(id)) {
+                                setState(() => _selectionHint =
+                                    MissionContentData.workspaceAlreadyPlaced);
+                                return;
+                              }
+                              setState(() {
+                                _selected = id;
+                                _selectionHint = MissionContentData
+                                    .workspaceSelectDestination;
+                              });
+                            }
+                          },
+                          objectBuilder: mode == _WorkspaceMode.inspect
+                              ? null
+                              : (object, hotspot) {
+                                  final equipmentId =
+                                      object.metadata['equipmentId'] as String;
+                                  if (object.metadata['destination'] != true) {
+                                    return Semantics(
+                                      label:
+                                          MissionContentData.workspaceDragLabel(
+                                              object.label),
+                                      child: ScrollableEquipmentDraggable(
+                                        key: ValueKey(
+                                            'workspace-source-$equipmentId'),
+                                        data: equipmentId,
+                                        enabled: widget.enabled &&
+                                            !_choosingOrientation &&
+                                            !_applying &&
+                                            !(mode == _WorkspaceMode.place &&
+                                                widget.state.placements
+                                                    .containsKey(equipmentId)),
+                                        onDragStarted: () => setState(() {
+                                          _dragging = equipmentId;
+                                          _selected = equipmentId;
+                                        }),
+                                        onDragFinished: () {
+                                          if (mounted) {
+                                            setState(() => _dragging = null);
+                                          }
+                                        },
+                                        feedback: Material(
+                                          elevation: 2,
+                                          borderRadius: AppTheme.radiusSm,
+                                          child: Padding(
+                                            padding: const EdgeInsets.all(12),
+                                            child: Text(object.label,
+                                                style: AppTheme.labelLarge),
+                                          ),
+                                        ),
+                                        childWhenDragging: Opacity(
+                                            opacity: .35, child: hotspot),
+                                        child: hotspot,
+                                      ),
+                                    );
                                   }
-                                : const {},
-                        enabled: widget.enabled && !_choosingOrientation,
-                        onObjectSelected: (id) {
-                          if (mode == _WorkspaceMode.inspect) {
-                            unawaited(widget.onAction('object_inspected', id,
-                                const {'input_method': 'scene'}));
-                          } else if (id.startsWith('destination:')) {
-                            if (_selected != null) {
-                              unawaited(_apply(
-                                  mode,
-                                  _selected!,
-                                  id.substring('destination:'.length),
-                                  sources,
-                                  'tap'));
-                            } else {
-                              setState(() => _selectionHint = MissionContentData
-                                  .workspaceSelectSourceFirst);
-                            }
-                          } else if (sources
-                              .any((source) => source['id'] == id)) {
-                            if (mode == _WorkspaceMode.place &&
-                                widget.state.placements.containsKey(id)) {
-                              setState(() => _selectionHint =
-                                  MissionContentData.workspaceAlreadyPlaced);
-                              return;
-                            }
-                            setState(() {
-                              _selected = id;
-                              _selectionHint =
-                                  MissionContentData.workspaceSelectDestination;
-                            });
-                          }
-                        },
-                        objectBuilder: mode == _WorkspaceMode.inspect
-                            ? null
-                            : (object, hotspot) {
-                                final equipmentId =
-                                    object.metadata['equipmentId'] as String;
-                                if (object.metadata['destination'] != true) {
                                   return Semantics(
                                     label:
-                                        MissionContentData.workspaceDragLabel(
+                                        MissionContentData.workspaceDropLabel(
                                             object.label),
-                                    child: ScrollableEquipmentDraggable(
+                                    child: DragTarget<String>(
                                       key: ValueKey(
-                                          'workspace-source-$equipmentId'),
-                                      data: equipmentId,
-                                      enabled: widget.enabled &&
+                                          'workspace-destination-$equipmentId'),
+                                      onWillAcceptWithDetails: (details) =>
+                                          widget.enabled &&
                                           !_choosingOrientation &&
                                           !_applying &&
-                                          !(mode == _WorkspaceMode.place &&
-                                              widget.state.placements
-                                                  .containsKey(equipmentId)),
-                                      onDragStarted: () => setState(() {
-                                        _dragging = equipmentId;
-                                        _selected = equipmentId;
-                                      }),
-                                      onDragFinished: () {
-                                        if (mounted) {
-                                          setState(() => _dragging = null);
-                                        }
-                                      },
-                                      feedback: Material(
-                                        elevation: 2,
-                                        borderRadius: AppTheme.radiusSm,
-                                        child: Padding(
-                                          padding: const EdgeInsets.all(12),
-                                          child: Text(object.label,
-                                              style: AppTheme.labelLarge),
+                                          sources.any((source) =>
+                                              source['id'] == details.data),
+                                      onAcceptWithDetails: (details) =>
+                                          unawaited(_apply(mode, details.data,
+                                              equipmentId, sources, 'drag')),
+                                      builder: (_, candidates, __) =>
+                                          DecoratedBox(
+                                        decoration: BoxDecoration(
+                                          border: candidates.isEmpty
+                                              ? null
+                                              : Border.all(
+                                                  color: !practice ||
+                                                          _canUseDestination(
+                                                              mode,
+                                                              candidates.first,
+                                                              MissionEquipmentSimulator.item(
+                                                                  destinations,
+                                                                  equipmentId),
+                                                              sources)
+                                                      ? AppTheme.primaryBlue
+                                                      : AppTheme.errorRed,
+                                                  width: 3),
+                                          borderRadius: AppTheme.radiusSm,
                                         ),
+                                        child: hotspot,
                                       ),
-                                      childWhenDragging:
-                                          Opacity(opacity: .35, child: hotspot),
-                                      child: hotspot,
                                     ),
                                   );
-                                }
-                                return Semantics(
-                                  label: MissionContentData.workspaceDropLabel(
-                                      object.label),
-                                  child: DragTarget<String>(
-                                    key: ValueKey(
-                                        'workspace-destination-$equipmentId'),
-                                    onWillAcceptWithDetails: (details) =>
-                                        widget.enabled &&
-                                        !_choosingOrientation &&
-                                        !_applying &&
-                                        sources.any((source) =>
-                                            source['id'] == details.data),
-                                    onAcceptWithDetails: (details) => unawaited(
-                                        _apply(mode, details.data, equipmentId,
-                                            sources, 'drag')),
-                                    builder: (_, candidates, __) =>
-                                        DecoratedBox(
-                                      decoration: BoxDecoration(
-                                        border: candidates.isEmpty
-                                            ? null
-                                            : Border.all(
-                                                color: !practice ||
-                                                        _canUseDestination(
-                                                            mode,
-                                                            candidates.first,
-                                                            MissionEquipmentSimulator
-                                                                .item(
-                                                                    destinations,
-                                                                    equipmentId),
-                                                            sources)
-                                                    ? AppTheme.primaryBlue
-                                                    : AppTheme.errorRed,
-                                                width: 3),
-                                        borderRadius: AppTheme.radiusSm,
-                                      ),
-                                      child: hotspot,
-                                    ),
-                                  ),
-                                );
-                              },
-                      ),
+                                },
+                        ),
                     ],
                   ),
                 ),

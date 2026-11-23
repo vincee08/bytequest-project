@@ -2,6 +2,7 @@ import '../screens/simulation/runtime/mission_equipment_simulator.dart';
 import '../screens/simulation/runtime/mission_phase_completion_policy.dart';
 import '../screens/simulation/runtime/mission_runtime_models.dart';
 import 'mission_content_data.dart';
+import 'mission_lab_phases.dart';
 
 /// Phases played on the COC1 M2 assembly bench, which replaces the card
 /// panels with the bench, its hotspots and its tray.
@@ -191,6 +192,14 @@ final class MissionPhaseGuidance {
             MissionContentData.benchGuidanceOperate,
         ]);
     }
+    // A realistic lab has none of the card panels named above either.
+    final lab = MissionLabPhases.panel(phase.id,
+        practice: state.mode == MissionRuntimeMode.practice);
+    if (lab != null) {
+      steps
+        ..clear()
+        ..addAll(lab.steps);
+    }
 
     final progress = <String>[];
     void addCount(
@@ -286,12 +295,14 @@ final class MissionPhaseGuidance {
     }
     return MissionPhaseGuidance._(
       benchStep: benchStep,
-      interactionLabel:
+      interactionLabel: lab?.label ??
           _label(family, placementTask, isIdentification, canDragPlacement),
       summary: '${phase.title}: '
-          '${_summary(phase, family, placementTask, isIdentification)}',
+          '${lab?.summary ?? _summary(phase, family, placementTask, isIdentification)}',
       steps: List.unmodifiable(steps),
-      hint: _hint(family, isIdentification),
+      hint: lab != null
+          ? MissionContentData.labGuidanceHint
+          : _hint(family, isIdentification),
       progress: List.unmodifiable(progress),
       remaining: family == InteractionFamily.review
           ? (ready
@@ -437,6 +448,8 @@ final class MissionActionGuide {
         : <String, dynamic>{};
     final steps = <MissionGuideStep>[];
     final bench = _isBench(phase);
+    // A realistic lab replaces the standard panels of this phase.
+    final lab = MissionLabPhases.guide(phase.id);
     final primaryDone = state.interactionCompletedPhaseIds.contains(phase.id);
     void add(String text, bool done, MissionGuideTarget target,
             {String? controlKey, String? workspaceMode, String? objectId}) =>
@@ -617,23 +630,39 @@ final class MissionActionGuide {
                     ? 'mission-next'
                     : 'review-return');
     }
+    if (lab != null) {
+      // Same completion as the panels the lab replaces, in the lab's words
+      // and pointing at its controls.
+      final done = steps.isNotEmpty && steps.every((step) => step.completed);
+      steps.clear();
+      add(lab.text, done, MissionGuideTarget.controls,
+          controlKey: lab.controlKey);
+    }
+    final primaryKey = lab?.controlKey ?? _primaryControlKey(phase);
 
     if (family != InteractionFamily.review &&
         !primaryDone &&
         steps.every((step) => step.completed)) {
       add(MissionContentData.guideCheckRequirements, false,
           MissionGuideTarget.controls,
-          controlKey: _primaryControlKey(phase));
+          controlKey: primaryKey);
     }
     for (final condition
         in MissionEquipmentSimulator.maps(equipment['completion'])) {
       final path = condition['path'] as String? ?? '';
       if (_coveredByPrimary(path, family)) continue;
+      final met = MissionEquipmentSimulator.conditionMet(condition, state);
+      if (lab != null) {
+        final step = MissionLabPhases.condition(phase.id, path);
+        add(step.text, met, MissionGuideTarget.controls,
+            controlKey: step.controlKey);
+        continue;
+      }
       add(
           bench
               ? _benchConditionText(path, phase, equipment)
               : _conditionText(path, phase, equipment),
-          MissionEquipmentSimulator.conditionMet(condition, state),
+          met,
           _targetForPath(path),
           controlKey: _conditionControlKey(path, phase, equipment),
           workspaceMode: _conditionWorkspaceMode(path, state),
@@ -642,7 +671,7 @@ final class MissionActionGuide {
     if (steps.isEmpty) {
       add(MissionContentData.guideCheckRequirements, primaryDone,
           MissionGuideTarget.controls,
-          controlKey: _primaryControlKey(phase));
+          controlKey: primaryKey);
     }
     final ready = family == InteractionFamily.review
         ? saved || (reviewReady && state.pendingEvidence.isEmpty)
@@ -650,7 +679,7 @@ final class MissionActionGuide {
     if (!ready && steps.every((step) => step.completed)) {
       add(MissionContentData.guideCheckRequirements, false,
           MissionGuideTarget.controls,
-          controlKey: _primaryControlKey(phase));
+          controlKey: primaryKey);
     }
     return MissionActionGuide._(
         List.unmodifiable(steps), ready, state.pendingEvidence.length,

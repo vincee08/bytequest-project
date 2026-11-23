@@ -28,7 +28,7 @@ const outcome: RosterOutcome = {
   applied: false,
   batch_id: null,
   file_name: null,
-  summary: { total: 6, enroll_now: 1, already_enrolled: 1, pending: 1, conflict_student_id: 1, staff_account: 1, invalid: 1 },
+  summary: { total: 6, enroll_now: 1, already_enrolled: 1, enrolled_elsewhere: 0, pending_elsewhere: 0, pending: 1, conflict_student_id: 1, staff_account: 1, invalid: 1 },
   rows: [
     row({ row_number: 2, status: "enroll_now", message: "Registered learner account found. Enrolls when you confirm.", learner_name: "Juan Dela Cruz" }),
     row({ row_number: 3, status: "already_enrolled", message: "Already enrolled in this class." }),
@@ -103,4 +103,28 @@ test("pending roster entries render with a cancel action only for the owning ins
   assert.match(withRouter(<PendingRosterEntries classId={outcome.class_id} entries={entries} canManage />), /Cancel entry/);
   assert.doesNotMatch(withRouter(<PendingRosterEntries classId={outcome.class_id} entries={entries} canManage={false} />), /Cancel entry/);
   assert.match(withRouter(<PendingRosterEntries classId={outcome.class_id} entries={[]} canManage />), /No pending roster entries/);
+});
+
+test("learners in another class and emails waiting for another class are skipped, labelled and reported", () => {
+  const oneClass = "This learner is already enrolled in another class. A learner can belong to only one class at a time.";
+  const waiting = "This email is already waiting to join another class. A learner can belong to only one class at a time.";
+  const rows = [
+    row({ row_number: 2, status: "enrolled_elsewhere", message: oneClass, learner_name: "Juan Dela Cruz" }),
+    row({ row_number: 3, status: "pending_elsewhere", message: waiting }),
+    row({ row_number: 4, status: "enroll_now", message: "Registered learner account found. Enrolls when you confirm." }),
+  ];
+  const skipped: RosterOutcome = {
+    ...outcome,
+    summary: { total: 3, enroll_now: 1, already_enrolled: 0, enrolled_elsewhere: 1, pending_elsewhere: 1, pending: 0, conflict_student_id: 0, staff_account: 0, invalid: 0 },
+    rows,
+  };
+  assert.deepEqual(rosterGroupRows(rows).map((group) => group.rows.length), [1, 0, 2, 0]);
+  const html = renderToStaticMarkup(<RosterOutcomePanel outcome={skipped} file={file} mode="preview" />);
+  assert.match(html, /data-testid="roster-count-skip">2</);
+  assert.match(html, /In another class/);
+  assert.match(html, /Waiting for another class/);
+  assert.match(html, /A learner can belong to only one class at a time\./);
+  const csv = rosterErrorReportCsv(rows).trim().split("\r\n");
+  assert.equal(csv.length, 3, "both skipped rows are in the error report; the enrollable row is not");
+  assert.ok(csv.some((line) => line.startsWith("2,") && line.includes("In another class")));
 });

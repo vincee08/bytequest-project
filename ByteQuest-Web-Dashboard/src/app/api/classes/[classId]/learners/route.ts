@@ -8,7 +8,7 @@ import { enrollmentFailure, enrollLearnerSchema, learnerSearchFilter, learnerSea
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 const noStore = { "Cache-Control": "private, no-store" };
-function failure(message: string, status: number) { return NextResponse.json({ error: message }, { status, headers: noStore }); }
+function failure(message: string, status: number, code?: string) { return NextResponse.json(code ? { error: message, code } : { error: message }, { status, headers: noStore }); }
 
 async function authorize(classId: string) {
   const actor = await getServerProfile();
@@ -64,10 +64,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ cla
   if (!input.success) return failure("Select a registered learner using the search results.", 400);
   try {
     // The authenticated RPC rechecks learner eligibility and class ownership.
-    // Its existing partial unique index resolves concurrent enrollment races.
+    // Its partial unique index resolves same-class races; the one-active-class
+    // trigger refuses a learner who is active in another class.
     // Removed memberships are retained; re-enrollment inserts a new record.
     const { data, error } = await scope.client!.rpc("enroll_learner", { p_class_id: classId, p_learner_id: input.data.learnerId });
-    if (error) { const mapped = enrollmentFailure(error.code); return failure(mapped.message, mapped.status); }
+    if (error) { const mapped = enrollmentFailure(error.code, error.message); return failure(mapped.message, mapped.status, mapped.code); }
     return NextResponse.json({ membershipId: data.id, learnerId: data.learner_id, status: data.status }, { status: 201, headers: noStore });
   } catch { return failure("Enrollment could not be confirmed. Refresh the class before retrying.", 503); }
 }

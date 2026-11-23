@@ -177,7 +177,7 @@ select is((select string_agg((r->>'row_number') || ':' || (r->>'status'), ',' or
   '2:enroll_now,3:already_enrolled,4:pending,5:conflict_student_id,6:staff_account,7:invalid,8:invalid,9:invalid,10:conflict_student_id,11:invalid,12:invalid,13:pending,14:pending,15:pending,16:enroll_now',
   'preview classifies every row: enroll now, already enrolled, pending, student ID conflict, staff account, invalid');
 select is((select result->'summary' from a5_results where label = 'preview'),
-  '{"total":15,"enroll_now":2,"already_enrolled":1,"pending":4,"conflict_student_id":2,"staff_account":1,"invalid":5}'::jsonb,
+  '{"total":15,"enroll_now":2,"already_enrolled":1,"pending":4,"enrolled_elsewhere":0,"pending_elsewhere":0,"conflict_student_id":2,"staff_account":1,"invalid":5}'::jsonb,
   'preview summary counts every status');
 select is((select r->>'message' from a5_results, jsonb_array_elements(result->'rows') r where label = 'preview' and r->>'row_number' = '9'),
   'Duplicate email: same as row 4.', 'duplicates within the file name the original row (email compared case-insensitively)');
@@ -210,7 +210,7 @@ select throws_ok($$select public.preview_class_roster((select instructor_id from
 insert into a5_results select 'import', public.import_class_roster((select instructor_id from a5_ctx),
   '00000000-0000-4000-8000-0000000a5c01', (select payload from a5_rows), 'BSIT-2A roster.xlsx');
 select is((select jsonb_build_object('applied', result->'applied', 'summary', result->'summary') from a5_results where label = 'import'),
-  '{"applied":true,"summary":{"total":15,"enroll_now":2,"already_enrolled":1,"pending":4,"conflict_student_id":2,"staff_account":1,"invalid":5}}'::jsonb,
+  '{"applied":true,"summary":{"total":15,"enroll_now":2,"already_enrolled":1,"pending":4,"enrolled_elsewhere":0,"pending_elsewhere":0,"conflict_student_id":2,"staff_account":1,"invalid":5}}'::jsonb,
   'import applies the previewed classification');
 reset role;
 select is((select string_agg(p.email, ',' order by p.email) from public.class_memberships m join public.profiles p on p.user_id = m.learner_id
@@ -242,7 +242,7 @@ set local role service_role;
 insert into a5_results select 'reimport', public.import_class_roster((select instructor_id from a5_ctx),
   '00000000-0000-4000-8000-0000000a5c01', (select payload from a5_rows), 'BSIT-2A roster.xlsx');
 select is((select result->'summary' from a5_results where label = 'reimport'),
-  '{"total":15,"enroll_now":0,"already_enrolled":3,"pending":4,"conflict_student_id":2,"staff_account":1,"invalid":5}'::jsonb,
+  '{"total":15,"enroll_now":0,"already_enrolled":3,"pending":4,"enrolled_elsewhere":0,"pending_elsewhere":0,"conflict_student_id":2,"staff_account":1,"invalid":5}'::jsonb,
   'idempotent re-import: enrolled rows become already enrolled and pending rows stay pending');
 reset role;
 select is((select count(*)::integer from public.class_memberships where class_id = '00000000-0000-4000-8000-0000000a5c01')

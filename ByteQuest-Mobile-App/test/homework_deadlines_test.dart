@@ -146,6 +146,8 @@ void main() {
         scrollable: find.byType(Scrollable).first);
     await tester.enterText(find.byType(TextField), 'My network report.');
     tester.testTextInput.hide();
+    // Review submission enables once the submission meets the homework rule.
+    await tester.pump();
     await tester.scrollUntilVisible(
         find.text(MissionContentData.homeworkReview), 200,
         scrollable: find.byType(Scrollable).first);
@@ -180,6 +182,7 @@ void main() {
     await tester.enterText(
         find.byType(TextField), 'Preserve this written report.');
     tester.testTextInput.hide();
+    await tester.pump();
     await tester.scrollUntilVisible(
         find.text(MissionContentData.homeworkReview), 200,
         scrollable: find.byType(Scrollable).first);

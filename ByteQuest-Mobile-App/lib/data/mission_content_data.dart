@@ -12,6 +12,23 @@ class HardwareItem {
 /// Mission Content Data
 /// Contains questions, components, steps, and scenarios for all missions
 class MissionContentData {
+  static const portBenchRear = 'Peripheral wiring bench';
+  static const portBenchRearPlate = 'Rear I/O';
+  static const portBenchTester = 'Cable tester';
+  static const portBenchTesterJack = 'Tester input';
+  static const portBenchNetwork = 'Network patch bench';
+  static const portBenchLan = 'LAN';
+  static const portBenchMiss = 'No jack at that spot. Release the plug over a jack.';
+  static const portBenchOccupied = 'Jack occupied. Move the seated plug first.';
+  static const portBenchChooseJack = 'Plug selected. Choose a jack.';
+  static const portBenchChoosePlug = 'Select a plug first.';
+  static String portJack(String bank, int n) => '$bank · $n';
+  static String portJackStatus(String label, String? device) => device == null
+      ? '$label, empty jack'
+      : '$label, connected to $device. Drag the plug or select it to reconnect.';
+  static String portPlugStatus(String label, String? jack) => jack == null
+      ? '$label, loose cable. Drag the plug or tap to select it.'
+      : '$label, connected to $jack. Drag or select to reconnect.';
   static const notificationsTitle = 'Notifications';
   static const notificationsAll = 'All';
   static const notificationsUnread = 'Unread';
@@ -667,6 +684,21 @@ class MissionContentData {
   static const workspaceOrientationHint =
       'Choose the physical orientation before seating this component.';
   static const workspaceObjectsLabel = 'Objects';
+  static const inspectionLensLabel = 'Inspection lens';
+  static const inspectionLensHint = 'Drag the lens onto hardware, or tap a part.';
+  static const inspectionLensHelp =
+      'Move the lens to look closer. Lift your finger on a part to inspect it. You can also tap the part or choose it from Objects.';
+  static const inspectionLensMiss = 'No hardware under the lens.';
+  static const hardwareObservations = {
+    'motherboard': 'The processor socket, memory slots and power header are visible. No capacitors appear swollen.',
+    'cpu': 'The contacts are intact. One corner of the processor carries a triangular mark.',
+    'ram': 'The memory module has an off-centre notch in its contact edge.',
+    'psu': 'The power supply has a mains inlet, a switch and a fan grille. No mains cable is attached.',
+    'cpu_socket': 'The socket is empty. Its orientation mark is visible and no contacts appear bent.',
+    'dimm_slot': 'The slot has an offset key. One retaining latch is open.',
+    'atx_power_port': 'The two-row, keyed 24-pin header is empty and clear of debris.',
+    'anti_static_strap': 'A coiled lead connects the wrist band to a grounding clip.',
+  };
   static String workspaceDragLabel(String label) =>
       'Drag $label to a work location';
   static String workspaceDropLabel(String label) =>
@@ -760,6 +792,124 @@ class MissionContentData {
   static String benchRemoveSemantics(String part) =>
       'Remove $part from where it is installed';
   static const benchCancelLabel = 'Cancel';
+
+  // Realistic labs (COC2 M2 RJ45 termination, COC4 M4 PCIe replacement).
+  // They perform the same recorded actions as the standard task panels.
+  static const labCableTitle = 'RJ45 termination bench';
+  static const labCableConnectorCaptionSide =
+      'RJ45 plug on its side: pin channels 1 to 8 run from top to bottom, and the conductors enter from the left.';
+  static const labCableConnectorCaption =
+      'RJ45 plug, front view: clip facing down, pin 1 on the left.';
+  static const labCableConductorsTitle = 'Untwisted conductors';
+  static const labCableInstruction =
+      'Drag each conductor into a pin channel, or tap a conductor and then a channel. Tap a filled channel to take its conductor back out.';
+  static const labCableCrimpLabel = 'Insert and crimp';
+  static const labCableClearLabel = 'Clear channels';
+  static const labCableReterminateLabel = 'Cut off and re-terminate';
+  static const labCableCrimped = 'Connector crimped. The conductor order is recorded.';
+  static const labCableCrimpedPractice =
+      'Connector crimped. The conductors follow T568B.';
+  static const labCableMiswiredPractice =
+      'Connector crimped, but the conductor order does not follow T568B. Cut it off and terminate again.';
+  static const labCableFillAll = 'Fill all eight channels before crimping.';
+  static const labCableReferenceTitle = 'T568B reference (practice only)';
+  static String labCablePinSemantics(int pin, String? conductor) =>
+      conductor == null
+          ? 'Pin $pin channel, empty. Double tap to insert the selected conductor.'
+          : 'Pin $pin channel, holds $conductor. Double tap to take it back out.';
+  static String labCableConductorSemantics(String conductor, bool selected) =>
+      selected
+          ? '$conductor conductor, selected. Double tap a pin channel to insert it.'
+          : '$conductor conductor. Drag it to a pin channel, or double tap to select it.';
+
+  static const labPcieTitle = 'Workstation service bench';
+  static const labPcieInteriorCaption =
+      'Side panel removed. The rear brackets are on the left.';
+  static const labPciePowerConnected = 'Power cord connected';
+  static const labPciePowerIsolated = 'Power cord unplugged';
+  static const labPcieUnplugLabel = 'Unplug the power cord';
+  static const labPcieRestorePowerLabel = 'Reconnect the power cord';
+  static const labPcieStrapOff = 'Wrist strap not worn';
+  static const labPcieStrapOn = 'Wrist strap worn and grounded';
+  static const labPcieWearStrapLabel = 'Wear and ground the wrist strap';
+  static const labPcieContingencyLabel =
+      'Verify the backup and record the contingency plan';
+  static const labPcieContingencyDone = 'Backup verified; contingency plan recorded';
+  static const labPcieToolsTitle = 'Tools';
+  static const labPcieScrewdriverLabel = 'ESD-safe screwdriver';
+  static const labPcieToolHint =
+      'Select a tool, then tap the bracket screw to use it.';
+  static const labPcieScrewLabel = 'Adapter bracket screw';
+  static const labPcieScrewRemoved = 'Bracket screw removed';
+  static const labPcieScrewFastened = 'Bracket screw fastened';
+  static const labPcieRemoveCardLabel = 'Lift the failed adapter out of its slot';
+  static const labPcieFailedCard = 'Failed Ethernet adapter';
+  static const labPcieInspectLabel = 'Inspect the PCIe slot and the new adapter keying';
+  static const labPcieInspected = 'Slot and keying inspected';
+  static const labPcieRotateLabel = 'Turn the adapter around';
+  static const labPcieCardAligned = 'Bracket faces the rear opening';
+  static const labPcieCardReversed = 'Bracket faces into the case';
+  static const labPcieBracketLeft = 'Bracket on the left';
+  static const labPcieBracketRight = 'Bracket on the right';
+  static const labPcieLooseAdapter = 'Unseated adapter on the work surface';
+  static const labPcieReturnToTray = 'Return adapter to tray';
+  static const labPcieSeatLabel = 'Press the adapter down and latch it';
+  static const labPcieSeated = 'Adapter seated and latched';
+  static const labPcieConfigureLabel = 'Install the driver and configure addressing';
+  static const labPcieConfigured = 'Driver and addressing configured';
+  static const labPcieCloseLabel = 'Refit the side panel';
+  static const labPcieClosed = 'Side panel refitted';
+  static const labPcieRestartProcedure = 'Start the procedure again';
+  static const labPcieProcedureRecorded = 'Procedure recorded.';
+  static const labPcieProcedureOutOfOrder =
+      'The steps were recorded out of a safe order. Start the procedure again.';
+  static const labPcieSlotEmpty = 'Empty PCIe slot. Drop the adapter here, or select it and tap here.';
+  static const labPcieSlotInstalled = 'PCIe slot holds the replacement adapter';
+  static const labPcieSlotHoldsFailed = 'PCIe slot holds the failed adapter';
+  static const labPcieSlotVacant = 'Empty PCIe slot';
+  static String labPcieStepsDone(int done, int total) => '$done of $total steps done';
+
+  // Guidance for the phases a lab owns. Goal-level in both modes: it names
+  // the lab's controls, never the expected order, tool, wiring or orientation.
+  static const labGuideCable =
+      'In the crimping lab, put a conductor in every pin channel: drag it there, or tap the conductor and then the channel. Then tap $labCableCrimpLabel.';
+  static const labGuidePcieRemoval =
+      'Remove the failed adapter with the bench controls. Each step is recorded in the order you do it.';
+  static const labGuidePcieScrew =
+      'Under Tools, select a tool, then tap the bracket screw on the adapter. Check the feedback.';
+  static const labGuidePcieContingency = 'Tap $labPcieContingencyLabel.';
+  static const labGuidePcieInstall =
+      'Check which way the replacement adapter faces and turn it around if needed, then drag it onto the PCIe slot, or tap the adapter and then the slot.';
+  static const labGuidePcieCloseOut =
+      'Close out the repair with the bench controls. Each step is recorded in the order you do it.';
+  static const labGuideRemaining = 'Finish the remaining step on the bench.';
+  static const labGuidanceCableLabel = 'Terminate the connector';
+  static const labGuidanceBenchLabel = 'Work on the service bench';
+  static const labGuidanceCableSummary =
+      'Insert the eight conductors into the connector, then crimp it.';
+  static const labGuidancePcieRemovalSummary =
+      'Remove the failed adapter from the workstation.';
+  static const labGuidancePcieInstallSummary =
+      'Install the replacement adapter in the PCIe slot.';
+  static const labGuidancePcieCloseOutSummary =
+      'Close out the repair and return the workstation to service.';
+  static const labGuidanceCableSteps = [
+    'Tap a conductor, then tap a pin channel, or drag the conductor onto the channel.',
+    'Tap a filled channel to take its conductor back out, or tap $labCableClearLabel to start over.',
+    'When all eight channels are filled, tap $labCableCrimpLabel.',
+  ];
+  static const labGuidanceCableReference =
+      'Compare your wiring with the T568B reference card below the conductors.';
+  static const labGuidanceBenchSteps = [
+    'Every bench control works at any time. Each step is recorded in the order you do it.',
+    'To use a tool, select it under $labPcieToolsTitle, then tap the screw on the board.',
+  ];
+  static const labGuidanceInstallSteps = [
+    'Check which way the adapter faces. $labPcieRotateLabel changes it.',
+    'Drag the adapter onto the PCIe slot, or tap the adapter and then the slot.',
+  ];
+  static const labGuidanceHint =
+      'Handle the parts and tools as you would on a real bench.';
   static String benchPartSemantics(String part, bool installed) => installed
       ? '$part, installed. Double tap to select it.'
       : '$part. Drag it to the bench, or double tap to select it.';
@@ -780,6 +930,11 @@ class MissionContentData {
   static const benchInspectionTitle = 'Inspection';
   static const benchReadMore = 'Read the full note';
   static const benchDismissInformation = 'Hide this note';
+  static const benchLooseHint =
+      'Part resting on the bench. Pick it up again or return it to the tray.';
+  static const benchReturnToTray = 'Return to tray';
+  static String benchLooseSemantics(String part) =>
+      '$part, loose on the bench. Drag to reposition, or select to work with it.';
   static const benchDropOnTarget =
       'Release the part over a slot, bay or header on the bench.';
   // Neutral in both modes: it names the equipment, never the next step.

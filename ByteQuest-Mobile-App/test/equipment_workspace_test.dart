@@ -5,6 +5,7 @@ import 'package:bytequest/core/theme/app_theme.dart';
 import 'package:bytequest/data/mission_phase_guidance.dart';
 import 'package:bytequest/screens/simulation/components/equipment_workspace.dart';
 import 'package:bytequest/screens/simulation/components/hotspot_widget.dart';
+import 'package:bytequest/screens/simulation/components/physical/port_bench_painter.dart';
 import 'package:bytequest/screens/simulation/components/scene_connection_painter.dart';
 import 'package:bytequest/screens/simulation/runtime/mission_equipment_simulator.dart';
 import 'package:bytequest/screens/simulation/runtime/mission_phase_completion_policy.dart';
@@ -348,9 +349,9 @@ void main() {
     expect(driver.state.connectedNodePairs,
         containsAll(['workstation>switch', 'switch>router']));
     final painter = tester
-        .widget<CustomPaint>(find.byKey(const Key('scene-connections')))
-        .painter as SceneConnectionPainter;
-    expect(painter.connections, hasLength(2));
+        .widget<CustomPaint>(find.byKey(const Key('physical-port-cables')))
+        .painter as PortCablePainter;
+    expect(painter.leads.values.where((lead) => lead.seated), hasLength(2));
     expect(tester.takeException(), isNull);
   });
 
