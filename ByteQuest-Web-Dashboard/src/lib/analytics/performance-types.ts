@@ -96,7 +96,7 @@ export const LEARNER_STATUSES = ["on_track", "struggling", "falling_behind"] as 
 export type LearnerStatus = (typeof LEARNER_STATUSES)[number];
 
 export const statusReasonSchema = z.object({
-  code: z.enum(["inactive", "below_class_median", "quiz_average_low", "not_yet_competent", "repeated_incomplete_runs"]),
+  code: z.enum(["inactive", "below_class_median", "missed_deadlines", "quiz_average_low", "not_yet_competent", "repeated_incomplete_runs"]),
   kind: z.enum(["falling_behind", "struggling"]),
   threshold_days: z.number().optional(),
   days_inactive: z.number().nullable().optional(),
@@ -106,6 +106,10 @@ export const statusReasonSchema = z.object({
   class_title: z.string().nullable().optional(),
   quiz_avg: z.number().nullable().optional(),
   threshold: z.number().optional(),
+  missed_count: count.optional(),
+  homework_missed: count.optional(),
+  quizzes_missed: count.optional(),
+  items: z.array(z.object({ kind: z.enum(["homework", "quiz"]), title: z.string(), deadline_at: timestamp })).optional(),
   missions: z.array(z.union([
     z.string(),
     z.object({ mission_code: z.string(), title: z.string().nullable(), incomplete_runs: z.number() }),
@@ -132,6 +136,7 @@ export const learnerPerformanceSchema = z.object({
   thresholds: z.object({
     inactivity_days: z.number(), progress_ratio_of_class_median: z.number(), quiz_average_below: z.number(),
     incomplete_runs_on_one_mission: z.number(),
+    missed_deadlines_at_least: z.number().optional(),
   }),
   counts: z.object({ on_track: count, struggling: count, falling_behind: count }),
   generated_at: z.string(),

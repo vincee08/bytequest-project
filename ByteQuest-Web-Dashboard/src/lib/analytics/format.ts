@@ -84,7 +84,7 @@ export const STATUS_PRESENTATION: Record<LearnerStatus, StatusPresentation> = {
   },
   falling_behind: {
     label: "Falling behind",
-    description: "No activity for 14 days or learning progress below half of the class median.",
+    description: "No activity for 14 days, learning progress below half of the class median, or homework or a quiz past its deadline without a submission.",
     tone: "critical",
     badgeClassName: "border-red-200 bg-red-50 text-red-800",
   },
@@ -103,6 +103,13 @@ export function reasonText(reason: StatusReason): string {
         : `No recorded activity since enrolment (${reason.days_inactive ?? reason.threshold_days ?? 14} days)`;
     case "below_class_median":
       return `Progress ${formatPercent(reason.progress_percent)} is below half of the ${reason.class_title ?? "class"} median (${formatPercent(reason.class_median)})`;
+    case "missed_deadlines": {
+      const items = reason.items ?? [];
+      const count = reason.missed_count ?? items.length;
+      const named = items.map((item) => `${item.title} (${item.kind}, due ${formatDate(item.deadline_at)})`);
+      const more = count > named.length ? `, and ${count - named.length} more` : "";
+      return `Missed ${count} deadline${count === 1 ? "" : "s"} without submitting${named.length ? `: ${named.join(", ")}${more}` : ""}`;
+    }
     case "quiz_average_low":
       return `Quiz average ${formatPercent(reason.quiz_avg)} is below ${reason.threshold ?? 75}%`;
     case "not_yet_competent": {

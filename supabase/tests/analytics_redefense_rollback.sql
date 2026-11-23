@@ -13,7 +13,7 @@
 -- Every function is called while impersonating the caller (RLS applies), the
 -- JSON result is captured, and assertions run after `reset role`.
 begin;
-select plan(257);
+select plan(261);
 
 -- Isolate the expected progress values from lessons published in the target
 -- database (rolled back with everything else).
@@ -671,21 +671,30 @@ select is((select (v->'summary'->>'avg_score')::numeric from ar where name='clas
 select is((select (v->'summary'->>'quiz_avg')::numeric from ar where name='classes'), 50.0, 'summary quiz average across selected classes');
 
 -- Learner status rules.
-select is((select l->>'status' from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ana Analytics'), 'on_track', 'L1 is on track');
+select is((select l->>'status' from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ana Analytics'), 'falling_behind', 'L1 missed a homework deadline, so is falling behind');
+select ok((select l->'reasons' @> '[{"code":"missed_deadlines","kind":"falling_behind","missed_count":1,"homework_missed":1,"quizzes_missed":0}]'
+  and l->'reasons' @> '[{"items":[{"kind":"homework","title":"Analytics Homework Two"}]}]'
+  and not l->'reasons' @> '[{"code":"inactive"}]'
+  from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ana Analytics'), 'L1 reason names the missed homework, not inactivity');
 select is((select l->>'status' from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ben Analytics'), 'falling_behind', 'L2 is falling behind');
 select ok((select l->'reasons' @> '[{"code":"inactive"}]' and l->'reasons' @> '[{"code":"below_class_median"}]'
   from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ben Analytics'), 'L2 reasons: 14 days inactive and below half of the class median');
+select ok((select l->'reasons' @> '[{"code":"missed_deadlines","homework_missed":1}]' and l->'reasons' @> '[{"items":[{"title":"Analytics Homework One"}]}]'
+  from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ben Analytics'), 'L2 also missed the Homework One deadline');
 select is((select l->>'status' from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Cara Analytics'), 'struggling', 'L3 is struggling');
 select ok((select l->'reasons' @> '[{"code":"quiz_average_low"},{"code":"not_yet_competent"},{"code":"repeated_incomplete_runs"}]'
   from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Cara Analytics'), 'L3 reasons: quiz below 75 %, a not-yet-competent result, 3+ incomplete runs');
+select ok((select not l->'reasons' @> '[{"code":"missed_deadlines"}]'
+  from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Cara Analytics'), 'a late submission is not a missed deadline');
 select is((select jsonb_array_length(l->'classes') from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ana Analytics'), 2, 'L1 lists both active classes');
 select is((select (l->'assessment'->>'released')::int from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ana Analytics'), 2, 'L1 has two released results');
 select is((select (l->'assessment'->>'pending')::int from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Cara Analytics'), 1, 'L3 under-review attempt is pending');
 select is((select (l->>'practice_runs')::int from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ana Analytics'), 3, 'L1 recorded runs in the period');
 select is((select (l->'assignments'->>'missing')::int from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ana Analytics'), 1, 'L1 has one missing homework');
 select is((select (l->'assignments'->>'pending_evaluation')::int from ar, jsonb_array_elements(v->'learners') l where name='learners' and l->>'name'='Ana Analytics'), 2, 'L1 has two homework items pending evaluation');
-select is((select (v->'counts'->>'falling_behind')::int from ar where name='learners'), 1, 'status counts');
+select is((select (v->'counts'->>'falling_behind')::int from ar where name='learners'), 2, 'status counts: L1 (missed deadline) and L2 are falling behind');
 select is((select (v->'thresholds'->>'quiz_average_below')::numeric from ar where name='learners'), 75::numeric, 'documented quiz threshold');
+select is((select (v->'thresholds'->>'missed_deadlines_at_least')::int from ar where name='learners'), 1, 'documented missed-deadline threshold');
 select is((select jsonb_array_length(v->'learners') from ar where name='learner_l2_only'), 1, 'learner filter returns one learner');
 select is((select v->'learners'->0->>'status' from ar where name='learner_l2_only'), 'falling_behind', 'class median ignores the learner filter');
 
@@ -753,7 +762,7 @@ select ok((select a->>'status' = 'released' and (a->>'percent')::numeric = 80.0 
 select is((select a->>'status' from ar, jsonb_array_elements(v->'assignments') a where name='profile_l1' and a->>'title'='Analytics Homework Three'), 'graded', 'profile shows the homework lifecycle status');
 select is((select a->>'status' from ar, jsonb_array_elements(v->'assignments') a where name='profile_l1' and a->>'title'='Analytics Homework Two'), 'missing', 'profile shows missing homework');
 select is((select (v->'status'->'assignments'->>'pending_evaluation')::int from ar where name='profile_l1'), 2, 'profile pending homework');
-select is((select (v->'status'->>'status') from ar where name='profile_l1'), 'on_track', 'profile status');
+select is((select (v->'status'->>'status') from ar where name='profile_l1'), 'falling_behind', 'profile status follows the missed deadline');
 select ok((select jsonb_array_length(v->'classes') = 2 and jsonb_array_length(v->'quizzes') = 3 from ar where name='options'), 'filter options list active owned classes and own published quizzes');
 
 -- Learner-facing performance (released results only; A2 progress methodology).

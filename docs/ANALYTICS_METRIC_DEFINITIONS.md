@@ -99,11 +99,11 @@ Per learner: learning progress, performance score, quiz average, released/compet
 
 | Status | Rule (any reason triggers it) |
 |---|---|
-| **Falling behind** | no recorded learning activity for **14 days** before the period end (counted from enrolment if the learner has none), **or** learning progress below **half of the class median** (the highest median among the learner's scoped classes; medians are computed over the whole class even when a learner filter is set) |
+| **Falling behind** | no recorded learning activity for **14 days** before the period end (counted from enrolment if the learner has none), **or** learning progress below **half of the class median** (the highest median among the learner's scoped classes; medians are computed over the whole class even when a learner filter is set), **or** at least **one deadline missed** in the period: published homework whose current deadline passed with no submission, or a published quiz whose assignment deadline passed with no attempt (only for a learner enrolled in that class before the deadline; a moved deadline or reopened quiz counts at its new date, a quiz still open through any assignment is not missed, an assignment closed before its deadline is withdrawn, and an attempt started before the deadline counts). Late submissions are not missed. |
 | **Struggling** | quiz average below **75 %**, **or** the latest released result on a mission is *not yet competent*, **or** **3 or more incomplete practice runs** on one mission that is still not verified |
 | **On track** | none of the above |
 
-Falling behind takes precedence over struggling; every matching reason is listed with its values (`reasons[].code`: `inactive`, `below_class_median`, `quiz_average_low`, `not_yet_competent`, `repeated_incomplete_runs`). Thresholds are returned in `thresholds`.
+Falling behind takes precedence over struggling; every matching reason is listed with its values (`reasons[].code`: `inactive`, `below_class_median`, `missed_deadlines` with `missed_count`, `homework_missed`, `quizzes_missed` and up to five `items`, `quiz_average_low`, `not_yet_competent`, `repeated_incomplete_runs`). Thresholds are returned in `thresholds` (`missed_deadlines_at_least`: 1 since 2026-11-23). These are ByteQuest operational signals, not TESDA decision rules.
 
 ## 5. Quizzes
 
