@@ -6,7 +6,17 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { criteriaTotal, selectCoc, selectMission, type CurriculumDraft } from "@/lib/evaluations/homework";
+import {
+  SUBMISSION_FORMATS,
+  criteriaTotal,
+  formatRequiresFiles,
+  formatTakesFiles,
+  selectCoc,
+  selectMission,
+  submissionFormatLabels,
+  submissionRuleSummary,
+  type CurriculumDraft,
+} from "@/lib/evaluations/homework";
 import { evaluationsClient, type CurriculumOptions } from "@/lib/evaluations/types";
 import { createClient } from "@/lib/supabase/client";
 
@@ -149,12 +159,50 @@ export function HomeworkCurriculumFields({
         </p>
       </fieldset>
 
-      <div className="space-y-1.5">
-        <Label htmlFor={`${idPrefix}-requirements`}>Submission requirements (optional)</Label>
-        <Textarea id={`${idPrefix}-requirements`} rows={3} maxLength={5000} value={value.submission_requirements}
-          placeholder="For example: one PDF report with photos of each step"
-          onChange={(event) => set({ submission_requirements: event.target.value })} />
-      </div>
+      <fieldset className="space-y-3">
+        <legend className="text-sm font-semibold">Learner submission</legend>
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="space-y-1.5">
+            <Label htmlFor={`${idPrefix}-submission-format`}>Learner submits</Label>
+            <select id={`${idPrefix}-submission-format`} className={selectClass} value={value.submission_format}
+              onChange={(event) => set({ submission_format: event.target.value as CurriculumDraft["submission_format"] })}>
+              {SUBMISSION_FORMATS.map((format) => <option key={format} value={format}>{submissionFormatLabels[format]}</option>)}
+            </select>
+          </div>
+          {formatRequiresFiles(value.submission_format) ? (
+            <div className="space-y-1.5">
+              <Label htmlFor={`${idPrefix}-required-files`}>Required files (at least)</Label>
+              <select id={`${idPrefix}-required-files`} className={selectClass} value={value.required_file_count}
+                onChange={(event) => set({ required_file_count: event.target.value })}>
+                {[1, 2, 3, 4, 5].map((count) => <option key={count} value={String(count)}>{count}</option>)}
+              </select>
+            </div>
+          ) : null}
+          {formatTakesFiles(value.submission_format) ? (
+            <div className="space-y-1.5">
+              <Label htmlFor={`${idPrefix}-file-types`}>Accepted files</Label>
+              <select id={`${idPrefix}-file-types`} className={selectClass} value={value.accepted_file_types}
+                onChange={(event) => set({ accepted_file_types: event.target.value as CurriculumDraft["accepted_file_types"] })}>
+                <option value="any">Any supported file (PDF, image, text)</option>
+                <option value="image">Images only (JPG, PNG, WEBP)</option>
+              </select>
+            </div>
+          ) : null}
+        </div>
+        <p className="text-xs text-muted-foreground" aria-live="polite">
+          Learners see this rule in the app and cannot submit until it is met: {submissionRuleSummary({
+            submission_format: value.submission_format,
+            required_file_count: formatRequiresFiles(value.submission_format) ? Number(value.required_file_count) || 1 : 0,
+            accepted_file_types: value.accepted_file_types,
+          })}
+        </p>
+        <div className="space-y-1.5">
+          <Label htmlFor={`${idPrefix}-requirements`}>Additional instructions for the submission (optional)</Label>
+          <Textarea id={`${idPrefix}-requirements`} rows={3} maxLength={5000} value={value.submission_requirements}
+            placeholder="For example: photograph each crimped end in good light"
+            onChange={(event) => set({ submission_requirements: event.target.value })} />
+        </div>
+      </fieldset>
     </div>
   );
 }

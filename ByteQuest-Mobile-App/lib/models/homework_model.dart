@@ -1,6 +1,7 @@
 import 'package:intl/intl.dart';
 
 import '../data/homework_content_data.dart';
+import '../data/homework_requirements_content_data.dart';
 import '../data/mission_content_data.dart';
 
 String manilaDate(DateTime? value) => value == null
@@ -122,13 +123,78 @@ class HomeworkFile {
   final String kind;
   final String? submissionId;
   final int size;
+  final String? mimeType;
 
   HomeworkFile.fromJson(Map<String, dynamic> json)
       : id = json['id'] as String,
         filename = json['filename'] as String,
         kind = json['kind'] as String,
         submissionId = json['submission_id'] as String?,
-        size = (json['size_bytes'] as num).toInt();
+        size = (json['size_bytes'] as num).toInt(),
+        mimeType = _text(json['mime_type']);
+
+  bool get isImage =>
+      HomeworkSubmissionRule.imageMimeTypes.contains(mimeType) ||
+      HomeworkSubmissionRule.imageExtensions
+          .contains(filename.split('.').last.toLowerCase());
+}
+
+/// The submission rule set by the instructor. The server enforces it; the app
+/// mirrors it so a learner can submit only once the rule is met.
+class HomeworkSubmissionRule {
+  static const imageExtensions = ['jpg', 'jpeg', 'png', 'webp'];
+  static const imageMimeTypes = ['image/jpeg', 'image/png', 'image/webp'];
+  static const allExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'txt'];
+
+  /// answer_or_file (older assignments), answer, file or answer_and_file.
+  final String format;
+  final int requiredFiles;
+  final bool imagesOnly;
+
+  const HomeworkSubmissionRule(
+      {this.format = 'answer_or_file',
+      this.requiredFiles = 0,
+      this.imagesOnly = false});
+
+  factory HomeworkSubmissionRule.fromJson(Map<String, dynamic> json) {
+    final raw = json['submission_format']?.toString();
+    final format = const ['answer', 'file', 'answer_and_file'].contains(raw)
+        ? raw!
+        : 'answer_or_file';
+    final files = (_number(json['required_file_count']) ?? 0).toInt();
+    return HomeworkSubmissionRule(
+        format: format,
+        requiredFiles: format == 'file' || format == 'answer_and_file'
+            ? files.clamp(1, 5)
+            : 0,
+        imagesOnly: format != 'answer' && json['accepted_file_types'] == 'image');
+  }
+
+  bool get takesAnswer => format != 'file';
+  bool get takesFiles => format != 'answer';
+  bool get requiresAnswer => format == 'answer' || format == 'answer_and_file';
+  List<String> get allowedExtensions =>
+      imagesOnly ? imageExtensions : allExtensions;
+  String get description =>
+      HomeworkRequirementsContent.rule(format, requiredFiles, imagesOnly);
+
+  /// The first missing part of a submission, or null when it can be submitted.
+  String? missing(String answer, List<HomeworkFile> files) {
+    final written = answer.trim().isNotEmpty;
+    final attached = takesFiles ? files : const <HomeworkFile>[];
+    if (imagesOnly && attached.any((f) => !f.isImage)) {
+      return HomeworkRequirementsContent.notImage;
+    }
+    if (requiresAnswer && !written) return HomeworkRequirementsContent.missingAnswer;
+    if (attached.length < requiredFiles) {
+      return HomeworkRequirementsContent.missingFiles(
+          requiredFiles - attached.length, imagesOnly);
+    }
+    if (format == 'answer_or_file' && !written && attached.isEmpty) {
+      return HomeworkRequirementsContent.missingAnswerOrFile;
+    }
+    return null;
+  }
 }
 
 class HomeworkAssignment {
@@ -151,6 +217,7 @@ class HomeworkAssignment {
   final List<HomeworkCriterion> criteria;
   final num maxScore;
   final String? submissionRequirements;
+  final HomeworkSubmissionRule rule;
 
   HomeworkAssignment.fromJson(
     Map<String, dynamic> json, {
@@ -179,7 +246,8 @@ class HomeworkAssignment {
               HomeworkCriterion.fromJson(Map<String, dynamic>.from(item))
         ],
         maxScore = _number(json['max_score']) ?? 100,
-        submissionRequirements = _text(json['submission_requirements']);
+        submissionRequirements = _text(json['submission_requirements']),
+        rule = HomeworkSubmissionRule.fromJson(json);
 
   String get statusLabel =>
       submission?.statusLabel ?? MissionContentData.homeworkAssigned;

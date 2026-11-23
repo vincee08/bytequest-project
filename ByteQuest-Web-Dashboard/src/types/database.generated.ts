@@ -1617,13 +1617,16 @@ export type Database = {
           id: string
           instructions: string
           instructor_id: string
+          accepted_file_types: string
           learning_objectives: string[]
           max_score: number
           mission_code: string | null
           module_id: string | null
           published_at: string | null
+          required_file_count: number
           revision: number
           status: string
+          submission_format: string
           submission_requirements: string | null
           title: string
           updated_at: string
@@ -1637,13 +1640,16 @@ export type Database = {
           id?: string
           instructions: string
           instructor_id: string
+          accepted_file_types?: string
           learning_objectives?: string[]
           max_score?: number
           mission_code?: string | null
           module_id?: string | null
           published_at?: string | null
+          required_file_count?: number
           revision?: number
           status?: string
+          submission_format?: string
           submission_requirements?: string | null
           title: string
           updated_at?: string
@@ -1657,13 +1663,16 @@ export type Database = {
           id?: string
           instructions?: string
           instructor_id?: string
+          accepted_file_types?: string
           learning_objectives?: string[]
           max_score?: number
           mission_code?: string | null
           module_id?: string | null
           published_at?: string | null
+          required_file_count?: number
           revision?: number
           status?: string
+          submission_format?: string
           submission_requirements?: string | null
           title?: string
           updated_at?: string

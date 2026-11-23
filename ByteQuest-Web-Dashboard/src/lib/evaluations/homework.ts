@@ -1,5 +1,16 @@
 import { z } from 'zod';
-import type { CurriculumOptions, HomeworkCriterion, HomeworkRecord, HomeworkStatus, HomeworkSubmissionRecord } from './types';
+import type { CurriculumOptions, HomeworkCriterion, HomeworkFileTypes, HomeworkRecord, HomeworkStatus, HomeworkSubmissionFormat, HomeworkSubmissionRecord } from './types';
+
+export const SUBMISSION_FORMATS: readonly HomeworkSubmissionFormat[] = ['answer_or_file', 'answer', 'file', 'answer_and_file'];
+export const submissionFormatLabels: Record<HomeworkSubmissionFormat, string> = {
+  answer_or_file: 'Written answer or file',
+  answer: 'Written answer only',
+  file: 'File only',
+  answer_and_file: 'Written answer and file',
+};
+const fileModes = new Set<HomeworkSubmissionFormat>(['file', 'answer_and_file']);
+export const formatTakesFiles = (format: HomeworkSubmissionFormat) => format !== 'answer';
+export const formatRequiresFiles = (format: HomeworkSubmissionFormat) => fileModes.has(format);
 
 /** Editable form state for COC -> mission -> module, objectives and criteria. */
 export type CurriculumDraft = {
@@ -7,17 +18,39 @@ export type CurriculumDraft = {
   learning_objectives: string[];
   criteria: { id: string; criterion: string; description: string; max_points: string }[];
   max_score: string; submission_requirements: string;
+  submission_format: HomeworkSubmissionFormat; required_file_count: string; accepted_file_types: HomeworkFileTypes;
 };
 export function emptyCurriculum(): CurriculumDraft {
-  return { coc_module_id: '', mission_code: '', module_id: '', learning_objectives: [], criteria: [], max_score: '100', submission_requirements: '' };
+  return {
+    coc_module_id: '', mission_code: '', module_id: '', learning_objectives: [], criteria: [], max_score: '100', submission_requirements: '',
+    submission_format: 'answer_or_file', required_file_count: '1', accepted_file_types: 'any',
+  };
 }
 export function curriculumFromHomework(h: Partial<HomeworkRecord>): CurriculumDraft {
+  const format = h.submission_format ?? 'answer_or_file';
   return {
     coc_module_id: h.coc_module_id ?? '', mission_code: h.mission_code ?? '', module_id: h.module_id ?? '',
     learning_objectives: [...(h.learning_objectives ?? [])],
     criteria: (h.criteria ?? []).map((c) => ({ id: c.id, criterion: c.criterion, description: c.description ?? '', max_points: String(c.max_points) })),
     max_score: String(h.max_score ?? 100), submission_requirements: h.submission_requirements ?? '',
+    submission_format: format,
+    required_file_count: String(formatRequiresFiles(format) ? Math.max(1, Number(h.required_file_count ?? 1)) : 1),
+    accepted_file_types: h.accepted_file_types ?? 'any',
   };
+}
+
+/** Plain-language rule shown to instructors, e.g. "Written answer and at least 1 image (JPG, PNG or WEBP)". */
+export function submissionRuleSummary(h: Pick<HomeworkRecord, 'submission_format' | 'required_file_count' | 'accepted_file_types'>) {
+  const format = h.submission_format ?? 'answer_or_file';
+  const images = h.accepted_file_types === 'image';
+  const count = Number(h.required_file_count ?? 0);
+  const files = (n: number) => images ? `${n} image${n === 1 ? '' : 's'} (JPG, PNG or WEBP)` : `${n} file${n === 1 ? '' : 's'}`;
+  switch (format) {
+    case 'answer': return 'Written answer only — files are not accepted.';
+    case 'file': return `File only — at least ${files(count)}; no written answer.`;
+    case 'answer_and_file': return `Written answer and at least ${files(count)}.`;
+    default: return images ? 'A written answer or images (JPG, PNG or WEBP).' : 'A written answer or a file.';
+  }
 }
 /** Request fields for manage_homework create/edit (server recomputes and validates). */
 export function curriculumPayload(draft: CurriculumDraft) {
@@ -32,6 +65,9 @@ export function curriculumPayload(draft: CurriculumDraft) {
     criteria,
     max_score: criteria.length ? null : Number(draft.max_score || 100),
     submission_requirements: draft.submission_requirements.trim() || null,
+    submission_format: draft.submission_format,
+    required_file_count: formatRequiresFiles(draft.submission_format) ? Math.min(5, Math.max(1, Math.trunc(Number(draft.required_file_count) || 1))) : 0,
+    accepted_file_types: draft.submission_format === 'answer' ? 'any' as const : draft.accepted_file_types,
   };
 }
 /** Choosing a mission selects its COC and, by default, its curriculum module. */
@@ -73,6 +109,9 @@ const curriculum = {
     .optional(),
   max_score: z.number().positive().max(1000).nullable().optional(),
   submission_requirements: z.string().trim().max(5000).nullable().optional(),
+  submission_format: z.enum(['answer_or_file', 'answer', 'file', 'answer_and_file']).optional(),
+  required_file_count: z.number().int().min(0).max(5).optional(),
+  accepted_file_types: z.enum(['any', 'image']).optional(),
 };
 const fields = { title: z.string().trim().min(2).max(300), instructions: z.string().trim().min(1).max(20000), deadline_at: deadline };
 const submissionIds = z.array(uuid).min(1).max(50).refine(distinctIds, 'Choose each submission once.');
@@ -165,6 +204,13 @@ const messages: Record<string, { error: string; status: number }> = {
   HOMEWORK_FINALIZE_REQUIRED: { error: 'Finalize the grade before releasing it.', status: 409 },
   HOMEWORK_SUBMISSION_IDS_INVALID: { error: 'Choose between 1 and 50 different submissions.', status: 422 },
   HOMEWORK_SCOPE_DENIED: { error: 'This submission is not in one of your active classes.', status: 403 },
+  HOMEWORK_SUBMISSION_RULES_INVALID: { error: 'Choose what learners submit: file tasks need 1 to 5 required files, and written-answer-only tasks take no files.', status: 422 },
+  HOMEWORK_ANSWER_REQUIRED: { error: 'This homework requires a written answer.', status: 422 },
+  HOMEWORK_ANSWER_NOT_ACCEPTED: { error: 'This homework accepts files only. Remove the written answer, then submit your file.', status: 422 },
+  HOMEWORK_FILES_REQUIRED: { error: 'Attach the required number of files before submitting.', status: 422 },
+  HOMEWORK_FILES_NOT_ACCEPTED: { error: 'This homework accepts a written answer only. Remove the attached files.', status: 422 },
+  HOMEWORK_IMAGE_FILES_REQUIRED: { error: 'This homework accepts images only (JPG, PNG or WEBP).', status: 422 },
+  ANSWER_OR_FILE_REQUIRED: { error: 'Write an answer or attach a file before submitting.', status: 422 },
 };
 
 /** Specific technical reasons for homework workflow errors, or null. */
