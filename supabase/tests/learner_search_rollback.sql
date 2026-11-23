@@ -36,6 +36,10 @@ select id, title, owner, owner from (values
   ('00000000-0000-4000-8000-0000000b5c03'::uuid, 'A5 Search Archived', (select instructor_id from s5_ctx)),
   ('00000000-0000-4000-8000-0000000b5c04'::uuid, 'A5 Search Delta', (select other_instructor_id from s5_ctx))
 ) c(id, title, owner);
+-- Legacy multi-class fixture: one learner in two active classes, as data created
+-- before the one-active-class rule (20261123090000). Built with that rule's
+-- trigger disabled inside this rolled-back transaction only.
+alter table public.class_memberships disable trigger trg_class_memberships_one_active_class;
 insert into public.class_memberships (class_id, learner_id, status, enrolled_by)
 select class_id, learner_id, 'active', (select instructor_id from s5_ctx) from (values
   ('00000000-0000-4000-8000-0000000b5c01'::uuid, '00000000-0000-4000-8000-0000000b5001'::uuid),
@@ -45,6 +49,7 @@ select class_id, learner_id, 'active', (select instructor_id from s5_ctx) from (
   ('00000000-0000-4000-8000-0000000b5c04'::uuid, '00000000-0000-4000-8000-0000000b5003'::uuid),
   ('00000000-0000-4000-8000-0000000b5c02'::uuid, '00000000-0000-4000-8000-0000000b5004'::uuid)
 ) m(class_id, learner_id);
+alter table public.class_memberships enable trigger trg_class_memberships_one_active_class;
 update public.classes set status = 'archived', archived_at = now(), archived_by = created_by, archive_reason = 'A5 search fixture'
   where id = '00000000-0000-4000-8000-0000000b5c03';
 

@@ -92,7 +92,9 @@ export function EnrollLearnerForm({ classId }: { classId: string }) {
         signal: AbortSignal.timeout(20_000),
       });
       const data = await response.json();
-      if (response.status === 409) {
+      // Only a duplicate in this class means "already enrolled here"; a learner
+      // active in another class stays selectable and the reason is shown.
+      if (response.status === 409 && data.code !== "ENROLLED_IN_ANOTHER_CLASS") {
         setSelected({ ...selected, enrollment: "active" });
         router.refresh();
       }
@@ -167,7 +169,7 @@ export function EnrollLearnerForm({ classId }: { classId: string }) {
               </div> : null}
             </div> : null}
           </div>
-          <p id={`${id}-hint`} className="text-xs text-muted-foreground">Type at least two characters. Only existing active learner accounts are available.</p>
+          <p id={`${id}-hint`} className="text-xs text-muted-foreground">Type at least two characters. Only existing active learner accounts are available. A learner can belong to only one class at a time.</p>
         </div>
         <Button type="submit" disabled={!selected || selected.enrollment === "active" || submitting} className="min-h-11 sm:mt-7">
           {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" /> : <UserPlus className="mr-2 h-4 w-4" aria-hidden="true" />}

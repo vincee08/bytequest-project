@@ -17,8 +17,13 @@ insert into public.classes(id,title,class_code,instructor_id,created_by)
 select class_a,'Quiz QA A','QUIZ-A-'||left(class_a::text,8),instructor_id,instructor_id from quiz_revision_context union all
 select class_b,'Quiz QA B','QUIZ-B-'||left(class_b::text,8),instructor_id,instructor_id from quiz_revision_context union all
 select foreign_class,'Other instructor class','QUIZ-X-'||left(foreign_class::text,8),other_instructor,other_instructor from quiz_revision_context;
+-- Legacy multi-class fixture: one learner in two active classes, as data created
+-- before the one-active-class rule (20261123090000). Built with that rule's
+-- trigger disabled inside this rolled-back transaction only.
+alter table public.class_memberships disable trigger trg_class_memberships_one_active_class;
 insert into public.class_memberships(class_id,learner_id,enrolled_by)
 select class_a,learner_id,instructor_id from quiz_revision_context union all select class_b,learner_id,instructor_id from quiz_revision_context;
+alter table public.class_memberships enable trigger trg_class_memberships_one_active_class;
 grant all on quiz_revision_context to authenticated;
 create function pg_temp.assert(ok boolean,message text) returns void language plpgsql as $$ begin if ok is distinct from true then raise exception 'ASSERT: %',message; end if; end $$;
 create function pg_temp.denied(command text,expected text) returns void language plpgsql as $$

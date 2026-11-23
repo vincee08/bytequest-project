@@ -35,9 +35,14 @@ update public.profiles set role='instructor' where user_id in (select teacher fr
 insert into public.classes(id,title,class_code,instructor_id,created_by)
 select class_id,'HW redefense class','HW-'||left(class_id::text,8),teacher,teacher from hw union all
 select other_class_id,'HW other class','HW-'||left(other_class_id::text,8),other_teacher,other_teacher from hw;
+-- Legacy multi-class fixture: one learner in two active classes, as data created
+-- before the one-active-class rule (20261123090000). Built with that rule's
+-- trigger disabled inside this rolled-back transaction only.
+alter table public.class_memberships disable trigger trg_class_memberships_one_active_class;
 insert into public.class_memberships(class_id,learner_id,enrolled_by)
 select class_id,l,teacher from hw cross join lateral (values (learner_a),(learner_b),(learner_c)) t(l) union all
 select other_class_id,learner_a,other_teacher from hw;
+alter table public.class_memberships enable trigger trg_class_memberships_one_active_class;
 
 -- Contract.
 select ok(not (select prosecdef from pg_proc where oid='public.manage_homework(uuid,text,jsonb)'::regprocedure)

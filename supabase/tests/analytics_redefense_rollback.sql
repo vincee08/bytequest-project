@@ -97,11 +97,16 @@ select c2,'Analytics B','A7-'||left(c2::text,8),t1,t1 from ax union all
 select c3,'Analytics C','A7-'||left(c3::text,8),t2,t2 from ax;
 insert into public.classes(id,title,class_code,instructor_id,created_by,status,archived_at,archived_by,archive_reason)
 select c4,'Analytics Archived','A7-'||left(c4::text,8),t1,t1,'archived'::public.class_status,now()-interval '1 day',t1,'Term ended' from ax;
+-- Legacy multi-class fixture: one learner in two active classes, as data created
+-- before the one-active-class rule (20261123090000). Built with that rule's
+-- trigger disabled inside this rolled-back transaction only.
+alter table public.class_memberships disable trigger trg_class_memberships_one_active_class;
 insert into public.class_memberships(class_id,learner_id,enrolled_by,enrolled_at)
 select c1,l1,t1,now()-interval '60 days' from ax union all select c2,l1,t1,now()-interval '60 days' from ax union all
 select c1,l2,t1,now()-interval '60 days' from ax union all select c2,l3,t1,now()-interval '60 days' from ax union all
 select c3,l4,t2,now()-interval '60 days' from ax union all select c3,l5,t2,now()-interval '1 day' from ax union all
 select c4,l1,t1,now()-interval '60 days' from ax;
+alter table public.class_memberships enable trigger trg_class_memberships_one_active_class;
 
 -- T2's published quiz (assigned to C3, due 3 days ago) and homework (deadline
 -- 2 days ago); nobody submitted. L5 joined C3 after both deadlines.

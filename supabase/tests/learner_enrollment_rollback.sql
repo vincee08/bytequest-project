@@ -4,7 +4,10 @@ create temporary table enrollment_test_context as
 select
   (select user_id from public.profiles where role='instructor' and status='active' order by user_id limit 1) instructor,
   (select user_id from public.profiles where role='instructor' and status='active' order by user_id offset 1 limit 1) other_instructor,
-  (select user_id from public.profiles where role='learner' and status='active' order by user_id limit 1) learner,
+  -- A learner with no active class: a learner belongs to one active class at a time.
+  (select p.user_id from public.profiles p where p.role='learner' and p.status='active'
+     and not exists(select 1 from public.class_memberships cm where cm.learner_id=p.user_id and cm.status='active')
+   order by p.user_id limit 1) learner,
   null::uuid renewed_membership;
 grant select, update on enrollment_test_context to authenticated;
 set local role authenticated;
@@ -24,7 +27,13 @@ begin
   first_class := public.create_class('Rollback enrollment QA');
   other_class := public.create_class('Rollback multi-class QA');
   original := public.enroll_learner(first_class.id,ctx.learner);
-  perform public.enroll_learner(other_class.id,ctx.learner);
+  -- One active class per learner (20261123090000): a second class is refused
+  -- with a stable code that does not name the first class.
+  begin perform public.enroll_learner(other_class.id,ctx.learner);
+  exception when unique_violation then denied:=(sqlerrm='LEARNER_ALREADY_IN_ANOTHER_CLASS'); end;
+  if not denied then raise exception 'SECOND_ACTIVE_CLASS_ALLOWED'; end if;
+  if exists(select 1 from public.class_memberships where class_id=other_class.id and learner_id=ctx.learner) then raise exception 'REFUSED_MEMBERSHIP_WRITTEN'; end if;
+  denied:=false;
   begin perform public.enroll_learner(first_class.id,ctx.learner);
   exception when unique_violation then denied:=true; end;
   if not denied then raise exception 'DUPLICATE_ACTIVE_MEMBERSHIP_ALLOWED'; end if;

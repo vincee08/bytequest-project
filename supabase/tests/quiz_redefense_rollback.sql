@@ -32,8 +32,13 @@ update public.profiles set role = 'instructor' where user_id in (select teacher 
 insert into public.classes(id,title,class_code,instructor_id,created_by)
 select class_a,'Quiz redefense A','QRA-'||left(class_a::text,8),teacher,teacher from qa3 union all
 select class_b,'Quiz redefense B','QRB-'||left(class_b::text,8),teacher,teacher from qa3;
+-- Legacy multi-class fixture: one learner in two active classes, as data created
+-- before the one-active-class rule (20261123090000). Built with that rule's
+-- trigger disabled inside this rolled-back transaction only.
+alter table public.class_memberships disable trigger trg_class_memberships_one_active_class;
 insert into public.class_memberships(class_id,learner_id,enrolled_by)
 select class_a,learner,teacher from qa3 union all select class_b,learner,teacher from qa3;
+alter table public.class_memberships enable trigger trg_class_memberships_one_active_class;
 insert into public.curriculum_topics(id,module_id,sequence_order)
 select topic_published,lo11,1 from qa3 union all select topic_draft,lo11,2 from qa3;
 insert into public.curriculum_topic_revisions(topic_id,revision_number,title,body_markdown,status)

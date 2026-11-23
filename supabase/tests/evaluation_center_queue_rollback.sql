@@ -28,8 +28,13 @@ update public.profiles set role='admin' where user_id=(select admin_user from q)
 insert into public.classes(id,title,class_code,instructor_id,created_by)
 select c1,'Queue class one','QC-'||left(c1::text,8),t1,t1 from q union all
 select c2,'Queue class two','QC-'||left(c2::text,8),t2,t2 from q;
+-- Legacy multi-class fixture: one learner in two active classes, as data created
+-- before the one-active-class rule (20261123090000). Built with that rule's
+-- trigger disabled inside this rolled-back transaction only.
+alter table public.class_memberships disable trigger trg_class_memberships_one_active_class;
 insert into public.class_memberships(class_id,learner_id,enrolled_by)
 select c1,l,t1 from q cross join lateral (values (l1),(l2)) t(l) union all select c2,l1,t2 from q;
+alter table public.class_memberships enable trigger trg_class_memberships_one_active_class;
 
 -- Technical fixtures (COC1 M2 assessment) in every stage.
 with inserted as (
