@@ -2,7 +2,32 @@
 
 > Read this file with `AGENTS.md`, `README.md`, and `bytequest.md` before changing the repository.
 
-## Current continuation - 2026-11-23 defense-day panel fixes and production incident
+## Current continuation - 2026-11-23 comprehensive panel audit (round 2)
+
+- **Quizzes:** quiz answers are typed only, so an item that asks learners to upload/attach a file or
+  image is refused at approval/edit and at publish (migration `20261123130100`,
+  `QUIZ_UPLOAD_RESPONSE_UNSUPPORTED`); authoring steers file work to homework; the mobile quiz
+  screen shows instructions during the attempt; direct quiz assignment refuses a past deadline;
+  quiz results identify learners by name + email.
+- **Analytics:** `falling_behind` also applies to missed deadlines (published homework past its
+  current deadline with no submission, or a quiz assignment whose deadline passed with no attempt,
+  for learners enrolled before the deadline; extensions/reopen respected) — migration
+  `20261123130000`, reason `missed_deadlines` with the missed items.
+- **Learner identity:** one rule everywhere (`src/lib/learners/identity.ts`): profile name → email →
+  "Unnamed learner", email underneath; never a class title or "ByteQuest" in the identity slot.
+- **Homework:** text-only answer to "written answer + image" homework now says an image is missing.
+  Repeatable local workflows: `pnpm test:panel-local` (8 scenarios: one class, roster, sign-up
+  claim, written+image, file-only, answer-only, legacy).
+- Gates: SQL 48 files / 1,434 assertions (only the known `foundation_redefense` #25), non-TAP
+  suites clean; dashboard tsc 0, lint 0, 251/251 tests, build; mobile analyzer 0 errors/warnings,
+  808/808 tests; local workflows 8/8. All four 2026-11-23 migrations are applied LOCALLY only.
+- Production Supabase was restarted from the dashboard (owner signed in; ~5 min). The organization
+  is over the free Storage Size quota (1.66 / 1 GB); requests return 402 from 2026-12-14 unless
+  files are removed or the plan is upgraded.
+- **Pending (needs owner approval):** apply `20261123090000`, `20261123090100`, `20261123130000`
+  and `20261123130100` to production.
+
+## Previous continuation - 2026-11-23 defense-day panel fixes and production incident
 
 Panel concerns implemented (owner-requested; committed, pushed and merged to `main` on request):
 - **One active class per learner:** migration `20261123090000` (trigger with a per-learner advisory
