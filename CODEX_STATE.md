@@ -2,7 +2,59 @@
 
 > Read this file with `AGENTS.md`, `README.md`, and `bytequest.md` before changing the repository.
 
-## Current continuation - 2026-11-21/22 realistic labs: COC4 M4 PCIe swap, COC2 M2 RJ45 crimp
+## Current continuation - 2026-11-23 defense-day panel fixes and production incident
+
+Panel concerns implemented (owner-requested; committed, pushed and merged to `main` on request):
+- **One active class per learner:** migration `20261123090000` (trigger with a per-learner advisory
+  lock, code `LEARNER_ALREADY_IN_ANOTHER_CLASS`; archived/deactivated memberships do not count;
+  existing duplicates are left in place). Roster import marks `enrolled_elsewhere` /
+  `pending_elsewhere` as skipped rows; the sign-up claim enrolls only the oldest pending class.
+- **Homework submission rules:** migration `20261123090100` adds `submission_format`
+  (`answer_or_file` legacy default, `answer`, `file`, `answer_and_file`), `required_file_count`
+  (0–5) and `accepted_file_types` (`any`, `image`); enforced at submit and at answer-file attach.
+  Dashboard form + rule summary; mobile "What to submit" box, hidden inputs, image-only picker and
+  disabled submit until satisfied. Homework queries use `select('*')`, so the dashboard works before
+  the migration is applied (rules then stay legacy).
+- **Analytics:** Learner status board (falling behind / struggling / on track, with reasons, class
+  and profile link) on the analytics Overview and the instructor dashboard home; existing rules.
+- **Learner identity:** Submissions and the Evaluation Center show the learner's email under the
+  name (the class title had been shown there, which read as "ByteQuest ...").
+- **Middleware 504:** the session check now has an 8 s deadline (Vercel ends middleware at 25 s;
+  supabase-js retries a failed refresh for 30 s), skips Supabase for signed-out visitors, and
+  shows a login notice (`?error=session_timeout`).
+
+Gates: SQL 46 files / 1,383 assertions, only the known `foundation_redefense` #25 fixture
+failure (non-TAP suites run individually: clean); dashboard tsc 0, lint 0, tests 240/240, build
+passes. Both migrations are applied to the LOCAL database only.
+
+**Production incident (2026-11-23):** project `rslmteqipxqfifwftugk` (ap-northeast-1) returned
+Cloudflare 522 for Auth and REST (~20 s) while Storage answered; the CLI could not create a login
+role ("Connection terminated due to connection timeout"). Status page and project status claimed
+healthy. This caused the dashboard "Failed to fetch" sign-in error and the middleware 504. Fix:
+restart the project in the Supabase dashboard (Project Settings → General → Restart project).
+**Still pending after it is back:** apply `20261123090000` and `20261123090100` to production
+(needs owner approval), then rebuild/distribute the APK for the mobile homework rules.
+
+## Previous continuation - 2026-11-21 drag-and-drop APK, latest enhancement cancelled
+
+- Owner requested undoing only the interrupted premium-realism enhancement, keeping the earlier
+  drag-and-drop implementation shown on Android. Restored its exact source in 13 affected files;
+  preserved loose-part recovery/rotation/resume, physical ports, hardware inspection and lab drafts.
+  The discarded partial edits are backed up under `.tmp/ngani-apk-rollback/` (ignored).
+- Current gates: Flutter **799 passed, 0 failed**; analyzer **0 errors, 0 warnings** (211 infos);
+  assembly contract matches its published migration (`ea4a136c4360bdc7…`). No definitions, scoring,
+  services, migrations or dashboard changes in this rollback/build.
+- Built the full `lib/main.dart` app in release mode, not the offline emulator demo. Public hosted
+  client settings match the previous Downloads APK; the original project `.env` was not changed.
+  APK v2 signature verified with the same existing certificate (`271cbbf0…`); no key replacement.
+  Includes ARMv7, ARM64 and x86_64; Android minSdk 24, targetSdk 36; private-key scan passed.
+- Owner-requested output: `C:\Users\MIKE ANGELO CASONO\Downloads\bytequest ngani.apk`,
+  78,818,054 bytes, SHA256 `74e6c20b92f137b0746298d18165ab68fbd826fc8f8677be5a8b3ce7e0cd9cad`.
+  Original `updated bytequest.apk` retained. No new full-mission/device completion is claimed by
+  this build; the preceding Android interaction checks remain the device evidence.
+- Nothing committed, pushed, merged, deployed or changed in production during this work.
+
+## Previous continuation - 2026-11-21/22 realistic labs: COC4 M4 PCIe swap, COC2 M2 RJ45 crimp
 
 Owner-selected labs from the redesign audit (`docs/SIMULATION_REDESIGN_AUDIT_2026-11-21.md` §9).
 UI layer only: definitions, practice and assessment contracts, rubrics, scoring and the database
