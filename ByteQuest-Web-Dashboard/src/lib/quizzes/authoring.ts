@@ -5,6 +5,7 @@ import type {
   ResultReleaseMode,
   RubricCriterion,
 } from "./types";
+import { QUIZ_UPLOAD_REQUEST_MESSAGE, quizTextRequestsUpload } from "./upload-requests";
 
 export const itemTypeLabels = {
   multiple_choice: "Multiple choice",
@@ -133,6 +134,16 @@ export const questionSchema = z
     maxWords: z.number().int().min(1).max(5000).nullable().default(null),
   })
   .superRefine((item, ctx) => {
+    // Quiz answers are typed; a request for an image or file can never be met.
+    if (quizTextRequestsUpload(item.prompt)) {
+      ctx.addIssue({ code: "custom", path: ["prompt"], message: QUIZ_UPLOAD_REQUEST_MESSAGE });
+    }
+    if (quizTextRequestsUpload(item.scenario)) {
+      ctx.addIssue({ code: "custom", path: ["scenario"], message: QUIZ_UPLOAD_REQUEST_MESSAGE });
+    }
+    if (item.rubric.some((row) => quizTextRequestsUpload(row.criterion) || quizTextRequestsUpload(row.description))) {
+      ctx.addIssue({ code: "custom", path: ["rubric"], message: QUIZ_UPLOAD_REQUEST_MESSAGE });
+    }
     if (item.itemType === "scenario_essay") {
       if (item.options.length) {
         ctx.addIssue({
@@ -339,6 +350,8 @@ export function quizErrorMessage(message: string) {
       "Use word guidance from 1 to 5,000 with the minimum not above the maximum.",
     QUIZ_ITEM_POINTS_INVALID: "Use points greater than 0 and at most 100.",
     INVALID_QUIZ_ITEM: "Check the question type, options and answer.",
+    QUIZ_UPLOAD_RESPONSE_UNSUPPORTED: QUIZ_UPLOAD_REQUEST_MESSAGE,
+    FUTURE_DEADLINE_REQUIRED: "Choose a deadline that has not passed yet.",
   };
   return (
     Object.entries(known).find(([code]) => message.includes(code))?.[1] ??
