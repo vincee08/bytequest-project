@@ -12,6 +12,7 @@ import { loadLearnerStatus } from "@/lib/analytics/performance-server";
 import { parseAnalyticsQuery } from "@/lib/analytics/query";
 import { requireStaffProfile } from "@/lib/auth/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { learnerDisplayName, learnerSecondaryEmail } from "@/lib/learners/identity";
 
 export const dynamic = "force-dynamic";
 
@@ -105,14 +106,20 @@ export default async function InstructorDashboardPage() {
   const { data: learners, error: learnersError } = learnerIds.length
     ? await supabase
         .from("profiles")
-        .select("user_id,full_name")
+        .select("user_id,full_name,email")
         .in("user_id", learnerIds)
     : { data: [], error: null };
   if (learnersError) {
     throw new Error("Recent learner details could not be loaded.");
   }
   const learnerNames = new Map(
-    (learners ?? []).map((learner) => [learner.user_id, learner.full_name]),
+    (learners ?? []).map((learner) => [learner.user_id, learnerDisplayName(learner)]),
+  );
+  const learnerEmails = new Map(
+    (learners ?? []).flatMap((learner) => {
+      const email = learnerSecondaryEmail(learner);
+      return email ? [[learner.user_id, email] as const] : [];
+    }),
   );
   const upcoming = buildUpcomingTasks({
     now,
@@ -194,6 +201,7 @@ export default async function InstructorDashboardPage() {
           pendingReviewTotal={pendingTotal}
           recentAttempts={attemptRows}
           learnerNames={learnerNames}
+          learnerEmails={learnerEmails}
           revisions={revisions.data ?? []}
           upcoming={upcoming}
         />

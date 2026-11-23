@@ -58,7 +58,7 @@ export function LearnersPanel({ data, query }: { data: LearnerPerformance; query
         </Panel>
       </div>
 
-      <Panel title="Learner progress and status" description={`Thresholds: inactive ${data.thresholds.inactivity_days} days, progress below ${data.thresholds.progress_ratio_of_class_median * 100}% of the class median, quiz average below ${data.thresholds.quiz_average_below}%, ${data.thresholds.incomplete_runs_on_one_mission}+ incomplete runs on one mission.`}
+      <Panel title="Learner progress and status" description={`Thresholds: inactive ${data.thresholds.inactivity_days} days, progress below ${data.thresholds.progress_ratio_of_class_median * 100}% of the class median, quiz average below ${data.thresholds.quiz_average_below}%, ${data.thresholds.incomplete_runs_on_one_mission}+ incomplete runs on one mission, ${data.thresholds.missed_deadlines_at_least ?? 1}+ homework or quiz deadline missed without a submission.`}
         action={
           <label className="relative block">
             <span className="sr-only">Search learners by name or student ID</span>

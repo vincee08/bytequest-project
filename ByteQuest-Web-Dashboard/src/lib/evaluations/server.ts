@@ -1,6 +1,7 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createAdminSupabaseClient } from '@/lib/supabase/admin';
+import { learnerDisplayName } from '@/lib/learners/identity';
 import type { CurriculumOptions, EvaluationsDatabase } from './types';
 
 /** COC -> mission -> module catalog (read through the caller's RLS). */
@@ -24,5 +25,5 @@ export async function namesFor(ids: (string | null | undefined)[]) {
   if (!unique.length) return new Map<string, { name: string; email: string }>();
   const { data, error } = await createAdminSupabaseClient().from('profiles').select('user_id,full_name,email').in('user_id', unique);
   if (error) throw new Error('Names could not be loaded.');
-  return new Map((data ?? []).map((p) => [p.user_id, { name: p.full_name ?? 'Learner', email: p.email ?? '' }]));
+  return new Map((data ?? []).map((p) => [p.user_id, { name: learnerDisplayName(p), email: p.email ?? '' }]));
 }

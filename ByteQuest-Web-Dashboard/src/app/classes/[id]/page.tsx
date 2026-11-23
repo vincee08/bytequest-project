@@ -28,6 +28,7 @@ import { QuizDeadlineControls } from "@/components/quizzes/QuizDeadlineControls"
 import { PendingRosterEntries } from "@/components/roster/PendingRosterEntries";
 import { classQuizDeadlineRows, classTabHref, resolveClassTab } from "@/components/dashboard/class-workspace";
 import { rosterClient } from "@/lib/roster/server";
+import { learnerDisplayName } from "@/lib/learners/identity";
 import { deliveryKindLabel } from "@/lib/activities/assignment-options";
 
 export const dynamic = "force-dynamic";
@@ -125,7 +126,7 @@ export default async function ClassDetailPage({
     .filter((membership) => membership.status === "active")
     .map((membership) => ({
       id: membership.learner_id,
-      name: profileById.get(membership.learner_id)?.full_name ?? "Learner",
+      name: learnerDisplayName(profileById.get(membership.learner_id)),
     }));
   const activityById = new Map(
     (activityResult.data ?? []).map((activity) => [activity.id, activity.title]),
@@ -212,7 +213,7 @@ export default async function ClassDetailPage({
               <div className="border-b border-border px-5 py-4"><h2 className="font-semibold">Membership history</h2></div>
               {memberships.length ? <div className="divide-y divide-border">{memberships.map((membership) => {
                 const learner = profileById.get(membership.learner_id);
-                return <div key={membership.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm font-medium">{learner?.full_name ?? "Learner"}</p><p className="mt-0.5 text-xs text-muted-foreground">{learner?.email ?? "Email unavailable"} · enrolled {new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeZone: "Asia/Manila" }).format(new Date(membership.enrolled_at))}</p>{membership.deactivation_reason ? <p className="mt-1 text-xs text-muted-foreground">Reason: {membership.deactivation_reason}</p> : null}</div><div className="flex flex-col items-end gap-2"><div className="flex flex-wrap justify-end gap-1.5">{joinedViaRoster(membership.learner_id, membership.enrolled_at) ? <Badge variant="default">Joined via roster</Badge> : null}<Badge variant={membership.status === "active" ? "secondary" : "outline"}>{membership.status}</Badge></div>{membership.status === "active" && classroom.status === "active" ? <div className="flex flex-col items-end gap-2"><DeactivateMembershipForm membershipId={membership.id} learnerName={learner?.full_name ?? "Learner"} /><DeactivateLearnerAccountForm learnerId={membership.learner_id} learnerName={learner?.full_name ?? "Learner"} /></div> : null}</div></div>;
+                return <div key={membership.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-sm font-medium">{learnerDisplayName(learner)}</p><p className="mt-0.5 text-xs text-muted-foreground">{learner?.email ?? "Email unavailable"} · enrolled {new Intl.DateTimeFormat("en-PH", { dateStyle: "medium", timeZone: "Asia/Manila" }).format(new Date(membership.enrolled_at))}</p>{membership.deactivation_reason ? <p className="mt-1 text-xs text-muted-foreground">Reason: {membership.deactivation_reason}</p> : null}</div><div className="flex flex-col items-end gap-2"><div className="flex flex-wrap justify-end gap-1.5">{joinedViaRoster(membership.learner_id, membership.enrolled_at) ? <Badge variant="default">Joined via roster</Badge> : null}<Badge variant={membership.status === "active" ? "secondary" : "outline"}>{membership.status}</Badge></div>{membership.status === "active" && classroom.status === "active" ? <div className="flex flex-col items-end gap-2"><DeactivateMembershipForm membershipId={membership.id} learnerName={learnerDisplayName(learner)} /><DeactivateLearnerAccountForm learnerId={membership.learner_id} learnerName={learnerDisplayName(learner)} /></div> : null}</div></div>;
               })}</div> : <p className="px-5 py-10 text-center text-sm text-muted-foreground">No learner has been enrolled.</p>}
             </section>
           </TabsContent>
@@ -309,7 +310,7 @@ export default async function ClassDetailPage({
 
           <TabsContent id="bypasses" value="bypasses" className="space-y-5">
             <section className="rounded-xl border border-border bg-card p-5"><h2 className="font-semibold">Grant access-only bypass</h2><p className="mb-4 mt-1 text-sm leading-relaxed text-muted-foreground">A bypass unlocks access only. It never marks competency, assigns a score, or grants XP.</p><GrantBypassForm classId={id} learners={activeLearners} modules={moduleResult.data ?? []} /></section>
-            <section className="overflow-hidden rounded-xl border border-border bg-card"><div className="border-b border-border px-5 py-4"><h2 className="font-semibold">Bypass audit trail</h2></div>{bypassResult.data?.length ? <div className="divide-y divide-border">{bypassResult.data.map((bypass) => <div key={bypass.id} className="px-5 py-4"><div className="flex items-start justify-between gap-4"><div><p className="text-sm font-medium">{profileById.get(bypass.learner_id)?.full_name ?? "Learner"} · {moduleById.get(bypass.module_version_id) ?? "Module version"}</p><p className="mt-1 text-xs text-muted-foreground">{bypass.reason}</p></div><Badge variant={bypass.revoked_at ? "outline" : "secondary"}>{bypass.revoked_at ? "revoked" : "active"}</Badge></div></div>)}</div> : <p className="px-5 py-10 text-center text-sm text-muted-foreground">No access bypass has been granted.</p>}</section>
+            <section className="overflow-hidden rounded-xl border border-border bg-card"><div className="border-b border-border px-5 py-4"><h2 className="font-semibold">Bypass audit trail</h2></div>{bypassResult.data?.length ? <div className="divide-y divide-border">{bypassResult.data.map((bypass) => <div key={bypass.id} className="px-5 py-4"><div className="flex items-start justify-between gap-4"><div><p className="text-sm font-medium">{learnerDisplayName(profileById.get(bypass.learner_id))} ·{moduleById.get(bypass.module_version_id) ?? "Module version"}</p><p className="mt-1 text-xs text-muted-foreground">{bypass.reason}</p></div><Badge variant={bypass.revoked_at ? "outline" : "secondary"}>{bypass.revoked_at ? "revoked" : "active"}</Badge></div></div>)}</div> : <p className="px-5 py-10 text-center text-sm text-muted-foreground">No access bypass has been granted.</p>}</section>
           </TabsContent>
 
           <TabsContent value="settings">

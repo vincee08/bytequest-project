@@ -55,6 +55,9 @@ class QuizContentData {
   // Scenario essays.
   static const scenarioHeading = 'Scenario';
   static const essayLabel = 'Your essay answer';
+  static const essayTypedOnly =
+      'Quiz answers are typed. Files and images cannot be attached to a quiz.';
+  static const viewInstructions = 'View quiz instructions';
   static const essayHint =
       'Explain your actions and reasons in complete sentences.';
   static String wordCount(int words) => words == 1 ? '1 word' : '$words words';

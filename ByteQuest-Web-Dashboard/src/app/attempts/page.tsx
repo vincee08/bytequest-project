@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { requireStaffProfile } from "@/lib/auth/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { cn } from "@/lib/utils";
+import { learnerDisplayName, learnerSecondaryEmail } from "@/lib/learners/identity";
 
 export const dynamic = "force-dynamic";
 
@@ -115,8 +116,8 @@ export default async function AttemptsPage({ searchParams }: { searchParams: Pro
                 const needsReview = ["evaluated", "under_review", "finalized"].includes(attempt.status);
                 return (
                   <Link key={attempt.id} href={`/attempts/${attempt.id}`} className="grid gap-3 px-5 py-4 transition-colors hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)_auto] md:items-center">
-                    <div className="min-w-0"><p className="truncate text-sm font-medium">{learner?.full_name ?? "Learner"}</p><p className="mt-0.5 truncate text-xs text-muted-foreground">{learner?.email ?? "Email unavailable"} · {classroom?.title ?? "Class"}</p></div>
-                    <div className="min-w-0"><p className="truncate text-sm">{assignment?.title ?? "Versioned assignment"}</p><p className="mt-0.5 text-xs text-muted-foreground">{formatTimestamp(attempt.submitted_at)}</p></div>
+                    <div className="min-w-0"><p className="truncate text-sm font-medium">{learnerDisplayName(learner)}</p>{learnerSecondaryEmail(learner) ? <p className="mt-0.5 truncate text-xs text-muted-foreground">{learnerSecondaryEmail(learner)}</p> : null}</div>
+                    <div className="min-w-0"><p className="truncate text-sm">{assignment?.title ?? "Versioned assignment"}</p><p className="mt-0.5 truncate text-xs text-muted-foreground">{classroom?.title ?? "Class"} · {formatTimestamp(attempt.submitted_at)}</p></div>
                     <Badge variant={needsReview ? "default" : attempt.status === "released" ? "secondary" : "outline"}>{STATUS_LABEL[attempt.status] ?? attempt.status.replaceAll("_", " ")}</Badge>
                   </Link>
                 );

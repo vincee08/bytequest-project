@@ -11,6 +11,7 @@ import { namesFor } from "@/lib/evaluations/server";
 import { evaluationsClient } from "@/lib/evaluations/types";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { ReviewCriterion } from "@/lib/attempts/criterion-adjustment";
+import { learnerDisplayName } from "@/lib/learners/identity";
 
 export const dynamic = "force-dynamic";
 
@@ -177,7 +178,7 @@ export default async function AttemptDetailPage({ params }: { params: Promise<{ 
       <div className="mx-auto max-w-7xl space-y-7">
         <div>
           <Button asChild variant="ghost" size="sm" className="-ml-3 mb-2"><Link href="/attempts"><ArrowLeft className="mr-2 h-4 w-4" aria-hidden="true" />Review queue</Link></Button>
-          <div className="flex flex-wrap items-center gap-3"><h1 className="text-2xl font-bold tracking-[-0.035em]">{learner.data?.full_name ?? "Learner attempt"}</h1><Badge variant={attempt.status === "released" ? "secondary" : "outline"}>{attempt.status.replaceAll("_", " ")}</Badge><Badge variant="outline" className={attempt.status === "released" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : attempt.status === "finalized" ? "border-blue-200 bg-blue-50 text-blue-800" : "border-amber-200 bg-amber-50 text-amber-900"}>{authorityLabel}</Badge></div>
+          <div className="flex flex-wrap items-center gap-3"><h1 className="text-2xl font-bold tracking-[-0.035em]">{learnerDisplayName(learner.data)}</h1><Badge variant={attempt.status === "released" ? "secondary" : "outline"}>{attempt.status.replaceAll("_", " ")}</Badge><Badge variant="outline" className={attempt.status === "released" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : attempt.status === "finalized" ? "border-blue-200 bg-blue-50 text-blue-800" : "border-amber-200 bg-amber-50 text-amber-900"}>{authorityLabel}</Badge></div>
           <p className="mt-1 text-sm text-muted-foreground">{assignment.data?.title ?? "Assignment"} · {classroom.data?.title ?? "Class"}</p>
         </div>
 

@@ -74,6 +74,8 @@ database unchanged. Do not point these commands at the live project.
 
 Authenticated web/database lifecycle checks are exposed as scripts in `scripts/` and package commands in `ByteQuest-Web-Dashboard/package.json`. They require the local dashboard environment and appropriate test credentials.
 
+The panel workflows (one active class per learner, roster skip and sign-up claim, and homework submission rules with uploads, grading and release) run against the local stack only with `pnpm test:panel-local` from `ByteQuest-Web-Dashboard`. They need the local `db`, `auth`, `rest`, `kong` and `storage` services and the accounts from `node scripts/local-qa-fixtures.mjs`; each run creates labelled `E2E panel <run>` records and archives its classes afterwards.
+
 ## Configuration and secrets
 
 Copy `ByteQuest-Web-Dashboard/.env.example` to `ByteQuest-Web-Dashboard/.env.local` and provide the shared Supabase URL and browser-safe publishable/anonymous key. The Supabase service-role and OpenRouter keys are server-only and must never be placed in Flutter assets or variables prefixed with `NEXT_PUBLIC_`. Set `BYTEQUEST_E2E_PASSWORD` locally before running authenticated lifecycle scripts. The mobile app keeps its local `.env` for the Supabase URL and anonymous key; it is gitignored.

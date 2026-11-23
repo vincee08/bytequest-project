@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  curriculumFromHomework, curriculumPayload, emptyCurriculum, homeworkActionSchema, homeworkErrorMessage, submissionRuleSummary,
+  curriculumFromHomework, curriculumPayload, emptyCurriculum, homeworkActionSchema, homeworkErrorMessage, homeworkSubmitErrorMessage, submissionRuleSummary,
 } from '../src/lib/evaluations/homework';
 
 const id = '00000000-0000-4000-8000-000000000001';
@@ -63,4 +63,16 @@ test('server refusals map to specific learner and instructor messages', () => {
     assert.ok(mapped?.error.includes(text), code);
     assert.equal(mapped?.status, 422);
   }
+});
+
+test('a missing image is named as an image for older apps that show the server text', () => {
+  const missing = { message: 'HOMEWORK_FILES_REQUIRED' };
+  assert.deepEqual(homeworkSubmitErrorMessage(missing, { accepted_file_types: 'image', required_file_count: 1 }),
+    { error: 'Attach at least 1 image (JPG, PNG or WEBP) before submitting.', status: 422 });
+  assert.equal(homeworkSubmitErrorMessage(missing, { accepted_file_types: 'image', required_file_count: 2 })?.error,
+    'Attach at least 2 images (JPG, PNG or WEBP) before submitting.');
+  assert.deepEqual(homeworkSubmitErrorMessage(missing, { accepted_file_types: 'any', required_file_count: 1 }), homeworkErrorMessage(missing));
+  assert.deepEqual(homeworkSubmitErrorMessage(missing, null), homeworkErrorMessage(missing));
+  assert.deepEqual(homeworkSubmitErrorMessage({ message: 'HOMEWORK_ANSWER_REQUIRED' }, { accepted_file_types: 'image', required_file_count: 1 }),
+    homeworkErrorMessage({ message: 'HOMEWORK_ANSWER_REQUIRED' }));
 });

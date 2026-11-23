@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { activityActor, activityError, activityHeaders, activityWriteOriginAllowed } from '@/lib/activities/server';
-import { homeworkActionSchema, homeworkErrorMessage, learnerRecordView, learnerSubmissionView, staffSubmissionView } from '@/lib/evaluations/homework';
+import { homeworkActionSchema, homeworkSubmitErrorMessage, learnerRecordView, learnerSubmissionView, staffSubmissionView } from '@/lib/evaluations/homework';
 import { homeworkBulkResults } from '@/lib/evaluations/requests';
 import { evaluationsClient } from '@/lib/evaluations/types';
 import type { Json } from '@/types/database.generated';
@@ -78,7 +78,14 @@ export async function POST(request: Request) {
     if ((parsed.data.action === 'submit') !== (actor.role === 'learner')) return reply({ error: 'This action is not allowed for your role.' }, 403);
     const { action, ...payload } = parsed.data;
     const { data, error } = await actor.service.rpc('manage_homework', { p_actor: actor.id, p_action: action, p_payload: payload as Json });
-    if (error) { const result = homeworkErrorMessage(error) ?? activityError(error); return reply({ error: result.error }, result.status); }
+    if (error) {
+      // Older apps show this text as is, so a missing image is named as an image.
+      const rule = parsed.data.action === 'submit' && error.message?.includes('HOMEWORK_FILES_REQUIRED')
+        ? (await evaluationsClient(actor.service).from('homework_assignments').select('accepted_file_types,required_file_count').eq('id', parsed.data.assignment_id).maybeSingle()).data
+        : null;
+      const result = homeworkSubmitErrorMessage(error, rule) ?? activityError(error);
+      return reply({ error: result.error }, result.status);
+    }
     // Learner replies (submit and its idempotent retries) never carry an
     // unreleased grade, whatever the RPC returns.
     if (actor.role === 'learner') return reply({ record: learnerRecordView(data) });

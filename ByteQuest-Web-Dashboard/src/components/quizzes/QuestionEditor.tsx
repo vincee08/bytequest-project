@@ -196,7 +196,8 @@ export function QuestionEditor({
                 <p className="text-xs text-muted-foreground">
                   Learners write a long answer. You score it with the rubric
                   and release the result; quizzes with essays always use
-                  instructor release.
+                  instructor release. Answers are typed text only: to collect
+                  an image or file, create a homework task that requires it.
                 </p>
               ) : null}
             </div>

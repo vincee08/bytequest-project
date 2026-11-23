@@ -218,3 +218,16 @@ export function homeworkErrorMessage(error: { message?: string }) {
   const code = Object.keys(messages).find((key) => error.message?.includes(key));
   return code ? messages[code] : null;
 }
+
+/** A missing-files refusal names images when the homework accepts images only. */
+export function homeworkSubmitErrorMessage(
+  error: { message?: string },
+  rule?: Pick<HomeworkRecord, 'accepted_file_types' | 'required_file_count'> | null,
+) {
+  const mapped = homeworkErrorMessage(error);
+  if (mapped && rule?.accepted_file_types === 'image' && error.message?.includes('HOMEWORK_FILES_REQUIRED')) {
+    const count = Math.max(1, Number(rule.required_file_count ?? 1));
+    return { error: `Attach at least ${count} image${count === 1 ? '' : 's'} (JPG, PNG or WEBP) before submitting.`, status: mapped.status };
+  }
+  return mapped;
+}

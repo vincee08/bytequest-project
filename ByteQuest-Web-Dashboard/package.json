@@ -16,6 +16,7 @@
     "test:auth-provider": "node --import tsx --test tests/auth-provider-prerender.test.tsx",
     "test:csv": "node --import tsx --test tests/csv.test.ts",
     "test:middleware": "node --import tsx --test tests/middleware.test.ts",
+    "test:panel-local": "node --env-file=.env.local --import tsx --test tests/e2e/local-panel-workflows.e2e.test.ts",
     "test:metric-strip": "node --import tsx --test tests/metric-strip.test.tsx",
     "test:openrouter": "node --import tsx --conditions=react-server --test tests/openrouter-quiz-provider.test.ts",
     "test:openrouter:live": "node --env-file=.env.local ../scripts/authenticated-openrouter-quiz-e2e.mjs",

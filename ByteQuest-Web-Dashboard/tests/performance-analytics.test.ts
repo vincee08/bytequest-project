@@ -284,3 +284,32 @@ test("PostgreSQL error messages map to typed analytics errors", () => {
   assert.equal(analyticsErrorCode("ANALYTICS_FILTER_INVALID"), "ANALYTICS_FILTER_INVALID");
   assert.equal(analyticsErrorCode("connection reset"), "ANALYTICS_UNAVAILABLE");
 });
+
+test("a missed deadline is a documented falling-behind reason that names the work", () => {
+  assert.match(statusPresentation("falling_behind").description, /past its deadline without a submission/);
+  const reason = learnerPerformanceSchema.shape.learners.element.shape.reasons.element.parse({
+    code: "missed_deadlines", kind: "falling_behind", threshold: 1, missed_count: 7, homework_missed: 5, quizzes_missed: 2,
+    items: [
+      { kind: "homework", title: "Cable test report", deadline_at: "2026-11-20T08:00:00Z" },
+      { kind: "quiz", title: "Safety quiz", deadline_at: "2026-11-19T08:00:00Z" },
+    ],
+  });
+  const text = reasonText(reason);
+  assert.match(text, /^Missed 7 deadlines without submitting: /);
+  assert.match(text, /Cable test report \(homework, due Nov 20, 2026\)/);
+  assert.match(text, /Safety quiz \(quiz, due Nov 19, 2026\)/);
+  assert.match(text, /, and 5 more$/, "the reason counts work it does not list");
+  assert.equal(reasonText({ code: "missed_deadlines", kind: "falling_behind", missed_count: 1, items: [] }), "Missed 1 deadline without submitting");
+
+  const learners = learnerPerformanceSchema.parse({
+    period,
+    learners: [{ id: LEARNER, name: "Hugo", student_id: null, email: "hugo@example.invalid", classes: [{ id: CLASS_A, title: "CSS A" }], progress_percent: 40, completed_items: 4, total_items: 10, performance_score: 80, quiz_avg: 80, quizzes_scored: 1, assessment: { released: 0, competent: 0, pending: 0 }, missions_verified: 0, practice_runs: 0, assignments: { submitted: 1, missing: 1, late: 0, pending_evaluation: 0 }, last_activity_at: NOW.toISOString(), status: "falling_behind",
+      reasons: [{ code: "missed_deadlines", kind: "falling_behind", threshold: 1, missed_count: 1, homework_missed: 1, quizzes_missed: 0, items: [{ kind: "homework", title: "Cable test report", deadline_at: "2026-11-20T08:00:00Z" }] }],
+      engagement: { points: 0, points_in_period: 0, level: null, level_title: null, next_level_points: null, level_progress_percent: null } }],
+    thresholds: { inactivity_days: 14, progress_ratio_of_class_median: 0.5, quiz_average_below: 75, incomplete_runs_on_one_mission: 3, missed_deadlines_at_least: 1 },
+    counts: { on_track: 0, struggling: 0, falling_behind: 1 },
+    generated_at: NOW.toISOString(),
+  });
+  assert.equal(learners.thresholds.missed_deadlines_at_least, 1);
+  assert.match(String(learnersTable(learners).rows[0].reasons), /Missed 1 deadline without submitting: Cable test report/);
+});

@@ -454,6 +454,15 @@ class _QuizTakingScreenState extends State<QuizTakingScreen>
                         ],
                       ),
                     ),
+                    if (_instructions != null) ...[
+                      IconButton(
+                        key: const ValueKey('quiz-instructions-button'),
+                        onPressed: _showInstructions,
+                        tooltip: QuizContentData.viewInstructions,
+                        icon: const Icon(Icons.info_outline_rounded),
+                      ),
+                      const SizedBox(width: 4),
+                    ],
                     if (_saving)
                       Semantics(
                         label: QuizContentData.savingAnswer,
@@ -686,6 +695,12 @@ class _QuizTakingScreenState extends State<QuizTakingScreen>
                 ),
               ),
           ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          QuizContentData.essayTypedOnly,
+          key: const ValueKey('quiz-essay-typed-only'),
+          style: AppTheme.labelMedium,
         ),
         if (question.rubric.isNotEmpty) ...[
           const SizedBox(height: 14),
@@ -971,6 +986,34 @@ class _QuizTakingScreenState extends State<QuizTakingScreen>
       if (mounted) setState(() => _submitting = false);
     }
   }
+
+  /// The instructor's instructions stay readable during the attempt.
+  String? get _instructions {
+    final text = widget.attempt.instructions?.trim();
+    return text == null || text.isEmpty ? null : text;
+  }
+
+  Future<void> _showInstructions() => showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (context) => SafeArea(
+          child: SingleChildScrollView(
+            key: const ValueKey('quiz-instructions-sheet'),
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(QuizContentData.instructions,
+                    style: AppTheme.headlineMedium),
+                const SizedBox(height: 10),
+                Text(_instructions ?? '', style: AppTheme.bodyMedium),
+              ],
+            ),
+          ),
+        ),
+      );
 
   Future<void> _confirmLeave() async {
     unawaited(_saveEssayNow());

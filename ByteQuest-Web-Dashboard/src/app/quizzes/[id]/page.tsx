@@ -7,6 +7,7 @@ import {
   type QuizGroundingCatalog,
 } from "@/lib/ai/quiz-grounding";
 import { requireStaffProfile } from "@/lib/auth/server";
+import { learnerDisplayName, learnerSecondaryEmail } from "@/lib/learners/identity";
 import { fromRpcRubric } from "@/lib/quizzes/authoring";
 import {
   loadCurriculumCatalog,
@@ -228,7 +229,7 @@ export default async function QuizDetailPage({
             .in("quiz_item_id", essayItemIds)
         : Promise.resolve({ data: [], error: null }),
       learnerIds.length
-        ? supabase.from("profiles").select("user_id,full_name").in("user_id", learnerIds)
+        ? supabase.from("profiles").select("user_id,full_name,email").in("user_id", learnerIds)
         : Promise.resolve({ data: [], error: null }),
       assignedClassIds.length
         ? supabase
@@ -258,9 +259,7 @@ export default async function QuizDetailPage({
       typeof row.answer === "string" ? row.answer : String(row.answer ?? ""),
     ]),
   );
-  const nameById = new Map(
-    (learners.data ?? []).map((row) => [row.user_id, row.full_name]),
-  );
+  const profileById = new Map((learners.data ?? []).map((row) => [row.user_id, row]));
   const enrolled = new Set((members.data ?? []).map((row) => row.learner_id)).size;
   const classTitle = new Map(
     (assignmentResponse.data ?? []).map((item) => [item.class_id, item.classes?.title ?? "Class"]),
@@ -319,7 +318,8 @@ export default async function QuizDetailPage({
     return {
       id: attempt.id,
       learnerId: attempt.learner_id,
-      learner: nameById.get(attempt.learner_id) || "Learner",
+      learner: learnerDisplayName(profileById.get(attempt.learner_id)),
+      learnerEmail: learnerSecondaryEmail(profileById.get(attempt.learner_id)),
       classTitle: classTitle.get(attempt.class_id) ?? "Class",
       versionNumber: versionNumber.get(attempt.quiz_version_id) ?? 1,
       status: attempt.status,

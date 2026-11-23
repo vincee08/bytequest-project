@@ -114,3 +114,22 @@ test("empty, missing-status and unavailable states stay truthful", () => {
   const admin = renderToStaticMarkup(<OverviewPanel data={overview} query={query} pathname={null} />);
   assert.doesNotMatch(admin, /aria-label="Learner status"/, "the admin overview is unchanged");
 });
+
+test("a learner who missed a deadline is listed under falling behind with the missed work", () => {
+  const missed = learnerPerformanceSchema.parse({
+    ...performance,
+    learners: [
+      learner(BEN, "Hugo", "falling_behind", [{ code: "missed_deadlines", kind: "falling_behind", threshold: 1, missed_count: 1, homework_missed: 0, quizzes_missed: 1,
+        items: [{ kind: "quiz", title: "Safety quiz", deadline_at: "2026-11-18T08:00:00Z" }] }]),
+      learner(ANA, "Ana", "on_track", []),
+    ],
+    thresholds: { ...performance.thresholds, missed_deadlines_at_least: 1 },
+    counts: { on_track: 1, struggling: 0, falling_behind: 1 },
+  });
+  const html = renderToStaticMarkup(<LearnerStatusBoard status={{ state: "ready", data: missed }} scopeLabel="your active classes" />);
+  const falling = html.indexOf(">Falling behind</h3>");
+  const onTrack = html.indexOf(">On track</h3>");
+  const hugo = html.indexOf(">Hugo<");
+  assert.ok(falling >= 0 && hugo > falling && hugo < onTrack, "Hugo is listed in the falling-behind column");
+  assert.match(html, /Missed 1 deadline without submitting: Safety quiz \(quiz, due Nov 18, 2026\)/);
+});

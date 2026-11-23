@@ -4,6 +4,7 @@ import { HomeworkWorkspace } from '@/components/classes/HomeworkWorkspace';
 import { requireStaffProfile } from '@/lib/auth/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { loadCurriculumOptions, namesFor } from '@/lib/evaluations/server';
+import { UNNAMED_LEARNER } from '@/lib/learners/identity';
 import { evaluationsClient } from '@/lib/evaluations/types';
 
 export const dynamic = 'force-dynamic';
@@ -46,7 +47,7 @@ export default async function HomeworkPage({ params, searchParams }: { params: P
     canAct={canAct}
     files={files.data ?? []}
     submissions={rows}
-    learners={learnerIds.map(learnerId => ({ id: learnerId, name: people.get(learnerId)?.name ?? 'Learner', email: people.get(learnerId)?.email ?? '', active: (memberships.data ?? []).some(m => m.learner_id === learnerId && m.status === 'active') }))}
+    learners={learnerIds.map(learnerId => ({ id: learnerId, name: people.get(learnerId)?.name ?? UNNAMED_LEARNER, email: people.get(learnerId)?.email ?? '', active: (memberships.data ?? []).some(m => m.learner_id === learnerId && m.status === 'active') }))}
     names={Object.fromEntries([...people.entries()].map(([personId, person]) => [personId, person.name]))}
     options={options}
     curriculumLabels={{

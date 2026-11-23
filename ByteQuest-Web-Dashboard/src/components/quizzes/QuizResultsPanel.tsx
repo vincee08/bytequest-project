@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { CheckCircle2, ClipboardCheck, Loader2, Send } from "lucide-react";
@@ -58,6 +58,8 @@ export interface ResultAttempt {
   id: string;
   learnerId: string;
   learner: string;
+  /** Shown under the name; null when the name line already is the email. */
+  learnerEmail: string | null;
   classTitle: string;
   versionNumber: number;
   status: "in_progress" | "submitted" | "completed";
@@ -390,6 +392,9 @@ export function QuizResultsPanel({
                 </label>
                 <div className="min-w-0 flex-1">
                   <p className="break-words text-sm font-medium">{attempt.learner}</p>
+                  {attempt.learnerEmail ? (
+                    <p className="break-all text-xs text-muted-foreground">{attempt.learnerEmail}</p>
+                  ) : null}
                   <p className="text-xs text-muted-foreground">
                     {attempt.classTitle} · v{attempt.versionNumber}
                     {attempt.submittedAt ? ` · ${formatDateTime(attempt.submittedAt)}` : ""}
@@ -482,6 +487,7 @@ function EssayScoringDialog({
       <DialogContent className="max-h-[90dvh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Essay evaluation · {attempt.learner}</DialogTitle>
+          {attempt.learnerEmail ? <p className="break-all text-xs text-muted-foreground">{attempt.learnerEmail}</p> : null}
           <DialogDescription>
             Score each criterion and give feedback. Every score is kept in the
             history; the latest score counts. Learners see nothing until you
