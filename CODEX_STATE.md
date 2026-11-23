@@ -24,8 +24,21 @@
 - Production Supabase was restarted from the dashboard (owner signed in; ~5 min). The organization
   is over the free Storage Size quota (1.66 / 1 GB); requests return 402 from 2026-12-14 unless
   files are removed or the plan is upgraded.
-- **Pending (needs owner approval):** apply `20261123090000`, `20261123090100`, `20261123130000`
-  and `20261123130100` to production.
+- **Applied to production (owner-requested, 2026-11-23 ~10:04 UTC / 18:04 Manila):** all four
+  migrations, as one transaction from `scripts/release-migration-batches.mjs --from 20261123090000`
+  (`.tmp/release-20261123/batch-b.sql`, sha256 `f7a79b0c…`), run by the owner's signed-in
+  Supabase dashboard SQL Editor via `playwright-cli` (editor content hash-checked before Run;
+  the "destructive operations" prompt comes from `drop trigger/constraint if exists`).
+  - Backup first: `%LOCALAPPDATA%\ByteQuest\Recovery\rslmteqipxqfifwftugk-20261123-panel`
+    (148 relations, 9,860 rows, restore hashes all match).
+  - Rehearsal on the restored copy: passed, 0 pre-existing rows changed (9,657 checked), read-back OK.
+  - Production before = restored copy; production after = rehearsed copy (fingerprint
+    `.tmp/release-20261123/fingerprint.sql`): 106 versions, 13 functions, 3 new triggers, 3 homework
+    columns, 0 public tables without RLS, row counts unchanged.
+  - Read-only smoke test: `get_learner_performance` as an instructor on production data runs.
+  - **Data note:** 4 production learners were already in more than one active class before the
+    migration; they are left in place (the trigger only blocks new ones). Instructors should
+    remove the extra memberships.
 
 ## Previous continuation - 2026-11-23 defense-day panel fixes and production incident
 
