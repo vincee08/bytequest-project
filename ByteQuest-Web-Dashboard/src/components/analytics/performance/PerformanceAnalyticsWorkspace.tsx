@@ -14,6 +14,7 @@ import { OverviewPanel } from "@/components/analytics/performance/OverviewPanel"
 import { QuizzesPanel } from "@/components/analytics/performance/QuizzesPanel";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { Button } from "@/components/ui/button";
+import type { LearnerStatusState } from "@/lib/analytics/learner-status";
 import type { AnalyticsTabData, AnalyticsViewResult } from "@/lib/analytics/performance-csv";
 import type { AnalyticsErrorCode } from "@/lib/analytics/performance-types";
 import {
@@ -113,7 +114,7 @@ export function PerformanceAnalyticsWorkspace({
 
       <div aria-busy={pending} className={cn("transition-opacity duration-200 motion-reduce:transition-none", pending && "pointer-events-none opacity-60")}>
         {result.ok ? (
-          <TabContent view={result.view} query={query} pathname={pathname} scopeLabel={scopeLabel} />
+          <TabContent view={result.view} learnerStatus={result.learnerStatus} query={query} pathname={pathname} scopeLabel={scopeLabel} />
         ) : (
           <AnalyticsErrorPanel code={result.code} resetHref={`${pathname}?tab=${query.tab}&range=30`} onRetry={() => startTransition(() => router.refresh())} />
         )}
@@ -122,9 +123,9 @@ export function PerformanceAnalyticsWorkspace({
   );
 }
 
-function TabContent({ view, query, pathname, scopeLabel }: { view: AnalyticsTabData; query: AnalyticsQuery; pathname: string; scopeLabel: string }) {
+function TabContent({ view, learnerStatus, query, pathname, scopeLabel }: { view: AnalyticsTabData; learnerStatus?: LearnerStatusState; query: AnalyticsQuery; pathname: string; scopeLabel: string }) {
   switch (view.tab) {
-    case "overview": return <OverviewPanel data={view.data} query={query} pathname={pathname} scopeLabel={scopeLabel} />;
+    case "overview": return <OverviewPanel data={view.data} learnerStatus={learnerStatus} query={query} pathname={pathname} scopeLabel={scopeLabel} />;
     case "classes": return <ClassesPanel data={view.data} query={query} pathname={pathname} />;
     case "learners": return <LearnersPanel data={view.data} query={query} />;
     case "quizzes": return <QuizzesPanel data={view.data} query={query} pathname={pathname} />;

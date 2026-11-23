@@ -5,8 +5,11 @@ import { MetricStrip, type Metric } from "@/components/dashboard/MetricStrip";
 import { PageHeader } from "@/components/dashboard/PageHeader";
 import { InstructorOverviewPanels } from "@/components/dashboard/InstructorOverviewPanels";
 import { buildUpcomingTasks } from "@/components/dashboard/upcoming-tasks";
+import { LearnerStatusBoard } from "@/components/analytics/performance/LearnerStatusBoard";
 import { Button } from "@/components/ui/button";
 import { activitiesClient } from "@/lib/activities/types";
+import { loadLearnerStatus } from "@/lib/analytics/performance-server";
+import { parseAnalyticsQuery } from "@/lib/analytics/query";
 import { requireStaffProfile } from "@/lib/auth/server";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
@@ -19,6 +22,8 @@ export default async function InstructorDashboardPage() {
   const supabase = await createServerSupabaseClient();
   const now = new Date();
   const nowIso = now.toISOString();
+  // Same rules and default 30-day period as the analytics Learners tab; loads in parallel.
+  const learnerStatus = loadLearnerStatus(parseAnalyticsQuery({}, now, { tab: "learners" }));
 
   const [classes, memberships, attempts, pendingReviews, pendingAttemptCount, releasedAttemptCount, assignments, revisions, quizDeadlines, homeworkDeadlines] = await Promise.all([
     supabase
@@ -178,6 +183,9 @@ export default async function InstructorDashboardPage() {
             </Button>
           </section>
         ) : null}
+
+        <LearnerStatusBoard status={await learnerStatus} scopeLabel="your active classes" limit={4}
+          allHref="/analytics?tab=learners" className="rounded-2xl border-border/75 shadow-card" />
 
         <InstructorOverviewPanels
           classes={classRows}

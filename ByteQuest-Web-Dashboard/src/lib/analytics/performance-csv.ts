@@ -11,6 +11,7 @@ import type {
   MissionAnalytics,
   QuizAnalytics,
 } from "@/lib/analytics/performance-types";
+import type { LearnerStatusState } from "@/lib/analytics/learner-status";
 import type { AnalyticsTab } from "@/lib/analytics/query";
 
 export type CsvCell = string | number | null;
@@ -30,7 +31,7 @@ export type AnalyticsTabData =
 
 /** Result of loading one analytics page: data, or an inline (non-crashing) error state. */
 export type AnalyticsViewResult =
-  | { ok: true; options: FilterOptions; view: AnalyticsTabData }
+  | { ok: true; options: FilterOptions; view: AnalyticsTabData; learnerStatus?: LearnerStatusState }
   | { ok: false; code: AnalyticsErrorCode; options: FilterOptions | null };
 
 const columns = (...pairs: Array<[string, string]>) => pairs.map(([key, label]) => ({ key, label }));
