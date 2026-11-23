@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowDown, ArrowUp, ArrowUpDown, Lock, Search, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SearchPagination } from "@/components/learners/SearchPagination";
+import { learnerDisplayName, learnerSecondaryEmail } from "@/lib/learners/identity";
 import {
   learnerSearchHref,
   learnerSortHref,
@@ -87,8 +88,8 @@ export function LearnerDirectoryTable({
               {result.rows.map((row) => (
                 <tr key={row.user_id} className="align-top transition-colors hover:bg-muted/25">
                   <td className="px-5 py-3">
-                    <Link href={rowHref(row)} className="font-semibold text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{row.full_name || "Learner"}</Link>
-                    <p className="mt-0.5 break-all text-xs text-muted-foreground">{row.email}</p>
+                    <Link href={rowHref(row)} className="font-semibold text-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">{learnerDisplayName(row)}</Link>
+                    {learnerSecondaryEmail(row) ? <p className="mt-0.5 break-all text-xs text-muted-foreground">{learnerSecondaryEmail(row)}</p> : null}
                   </td>
                   <td className="px-3 py-3">
                     {row.learner_id ? (

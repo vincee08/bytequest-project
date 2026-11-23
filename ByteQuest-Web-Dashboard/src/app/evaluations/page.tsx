@@ -7,6 +7,7 @@ import { requireStaffProfile } from "@/lib/auth/server";
 import { KIND_LABEL, EVALUATION_KINDS, parseQueueQuery, queueFilters, type QueueResult } from "@/lib/evaluations/requests";
 import { loadCurriculumOptions, namesFor } from "@/lib/evaluations/server";
 import { evaluationsClient } from "@/lib/evaluations/types";
+import { learnerDisplayName, UNNAMED_LEARNER } from "@/lib/learners/identity";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { Json } from "@/types/database.generated";
 
@@ -21,7 +22,7 @@ export default async function EvaluationsPage({ searchParams }: { searchParams: 
   const [queueResult, classes, learners, catalog] = await Promise.all([
     supabase.rpc("get_evaluation_queue", { p_stage: query.stage, p_filters: queueFilters(query) as Json }),
     supabase.from("classes").select("id,title,status").order("title"),
-    supabase.from("profiles").select("user_id,full_name").eq("role", "learner").order("full_name").limit(500),
+    supabase.from("profiles").select("user_id,full_name,email").eq("role", "learner").order("full_name").limit(500),
     loadCurriculumOptions(supabase).catch(() => null),
   ]);
   const queue = queueResult.error ? null : (queueResult.data as unknown as QueueResult);
@@ -29,7 +30,7 @@ export default async function EvaluationsPage({ searchParams }: { searchParams: 
     const people = await namesFor(queue.items.map((item) => item.learner.id)).catch(() => null);
     for (const item of queue.items) {
       const person = item.learner.id ? people?.get(item.learner.id) : undefined;
-      if (!item.learner.name) item.learner.name = person?.name || "Learner";
+      if (!item.learner.name) item.learner.name = person?.name || UNNAMED_LEARNER;
       item.learner.email = person?.email || null;
     }
   }
@@ -61,7 +62,7 @@ export default async function EvaluationsPage({ searchParams }: { searchParams: 
             { name: "module", label: "Module", allLabel: "All modules", value: current("module"), parentName: "coc",
               options: (catalog?.modules ?? []).map((m) => ({ value: m.id, label: `${m.code} ${m.title}`, parent: m.coc_code })) },
             { name: "learner", label: "Learner", allLabel: "All learners", value: current("learner"),
-              options: (learners.data ?? []).map((l) => ({ value: l.user_id, label: l.full_name ?? "Learner" })) },
+              options: (learners.data ?? []).map((l) => ({ value: l.user_id, label: learnerDisplayName(l) })) },
           ]}
         />
         {queue ? (

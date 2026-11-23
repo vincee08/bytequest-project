@@ -6,6 +6,7 @@ import {
   queueFilters, summarizeBulk, type BulkItemResult, type QueueResult,
 } from '@/lib/evaluations/requests';
 import { evaluationsClient } from '@/lib/evaluations/types';
+import { learnerDisplayName } from '@/lib/learners/identity';
 import type { Json } from '@/types/database.generated';
 
 export const runtime = 'nodejs';
@@ -31,12 +32,14 @@ export async function GET(request: Request) {
     const queue = data as unknown as QueueResult;
     // RLS may hide the profile of a learner who has left the class; the items
     // are already authorized, so names are resolved for exactly these IDs.
-    const missing = [...new Set(queue.items.filter((item) => !item.learner.name && item.learner.id).map((item) => item.learner.id as string))];
-    if (missing.length) {
-      const { data: profiles } = await actor.service.from('profiles').select('user_id,full_name').in('user_id', missing);
-      const names = new Map((profiles ?? []).map((p) => [p.user_id, p.full_name]));
+    const ids = [...new Set(queue.items.map((item) => item.learner.id).filter((id): id is string => Boolean(id)))];
+    if (ids.length) {
+      const { data: profiles } = await actor.service.from('profiles').select('user_id,full_name,email').in('user_id', ids);
+      const byId = new Map((profiles ?? []).map((p) => [p.user_id, p]));
       for (const item of queue.items) {
-        if (!item.learner.name) item.learner.name = (item.learner.id && names.get(item.learner.id)) || 'Learner';
+        const profile = item.learner.id ? byId.get(item.learner.id) : undefined;
+        if (!item.learner.name) item.learner.name = learnerDisplayName(profile);
+        item.learner.email = profile?.email ?? null;
       }
     }
     return reply(queue);

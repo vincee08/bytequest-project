@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SectionHeading } from "@/components/dashboard/SectionHeading";
 import type { UpcomingKind, UpcomingTask } from "@/components/dashboard/upcoming-tasks";
+import { UNNAMED_LEARNER } from "@/lib/learners/identity";
 
 type ClassRow = { id: string; title: string; class_code: string | null; status: string };
 type AssignmentRow = { id: string; class_id: string; title: string; assignment_type: string; status: string; due_at: string | null };
@@ -47,6 +48,7 @@ export function InstructorOverviewPanels({
   pendingReviewTotal,
   recentAttempts,
   learnerNames,
+  learnerEmails = new Map(),
   revisions,
   upcoming,
 }: {
@@ -58,6 +60,8 @@ export function InstructorOverviewPanels({
   pendingReviewTotal: number;
   recentAttempts: AttemptRow[];
   learnerNames: Map<string, string>;
+  /** The email under each learner's name (absent when the name already is the email). */
+  learnerEmails?: Map<string, string>;
   revisions: RevisionRow[];
   upcoming: UpcomingTask[];
 }) {
@@ -74,7 +78,7 @@ export function InstructorOverviewPanels({
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)_minmax(0,1.35fr)]">
       <section className="overflow-hidden rounded-2xl border border-border/75 bg-card shadow-card">
         <SectionHeading title="Pending review queue" description="Evaluated attempts waiting for your review, oldest first." action={<Button asChild variant="ghost" size="sm"><Link href="/evaluations">View all <ArrowUpRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" /></Link></Button>} />
-        {shownReviews.length ? <div className="divide-y divide-border/70">{shownReviews.map((row) => <Link key={row.id} href={`/attempts/${row.id}`} className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-800 ring-1 ring-amber-100"><ClipboardCheck className="h-4 w-4" aria-hidden="true" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{assignmentNames.get(row.assignment_id) ?? "Versioned assignment"}</span><span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{learnerNames.get(row.learner_id) ?? "Learner"} · {classNames.get(row.class_id) ?? "Class"} · {formatRelative(row.submitted_at)}</span></span><Badge variant={statusVariant(row.status)}>{row.status.replaceAll("_", " ")}</Badge></Link>)}</div> : <Empty title="Review queue is clear" text="No evaluated or under-review attempt is waiting for your decision." icon={CheckCircle2} />}
+        {shownReviews.length ? <div className="divide-y divide-border/70">{shownReviews.map((row) => <Link key={row.id} href={`/attempts/${row.id}`} className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-800 ring-1 ring-amber-100"><ClipboardCheck className="h-4 w-4" aria-hidden="true" /></span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{assignmentNames.get(row.assignment_id) ?? "Versioned assignment"}</span><span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{[learnerNames.get(row.learner_id) ?? UNNAMED_LEARNER, learnerEmails.get(row.learner_id), classNames.get(row.class_id) ?? "Class", formatRelative(row.submitted_at)].filter(Boolean).join(" · ")}</span></span><Badge variant={statusVariant(row.status)}>{row.status.replaceAll("_", " ")}</Badge></Link>)}</div> : <Empty title="Review queue is clear" text="No evaluated or under-review attempt is waiting for your decision." icon={CheckCircle2} />}
         <div className="border-t border-border/70 px-5 py-3 text-xs text-muted-foreground">
           {pendingReviewTotal > shownReviews.length
             ? <>Showing the {shownReviews.length} oldest of {pendingReviewTotal} items awaiting review. <Link href="/evaluations" className="font-semibold text-primary hover:underline">Open the Evaluation Center</Link></>
@@ -91,7 +95,7 @@ export function InstructorOverviewPanels({
       <div className="grid gap-5">
         <section className="overflow-hidden rounded-2xl border border-border/75 bg-card shadow-card">
           <SectionHeading title="Recent learner attempts" description="Latest scoped activity from your classes." action={<Button asChild variant="ghost" size="sm"><Link href="/evaluations">Review queue <ArrowUpRight className="ml-1 h-3.5 w-3.5" aria-hidden="true" /></Link></Button>} />
-          {recentAttempts.length ? <div className="divide-y divide-border/70">{recentAttempts.slice(0, 5).map((attempt) => { const revision = revisionByAttempt.get(attempt.id); return <Link key={attempt.id} href={`/attempts/${attempt.id}`} className="grid gap-2 px-5 py-3 text-xs transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:items-center"><span className="min-w-0"><span className="block truncate text-sm font-semibold">{learnerNames.get(attempt.learner_id) ?? "Learner"}</span><span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{classNames.get(attempt.class_id) ?? "Class"}</span></span><span className="min-w-0 truncate text-muted-foreground">{assignmentNames.get(attempt.assignment_id) ?? "Assignment"}</span><span className="whitespace-nowrap text-muted-foreground">{formatRelative(attempt.submitted_at ?? attempt.created_at)}</span><span className="text-right"><span className="block font-semibold tabular-nums">{attempt.status === "released" && revision?.percentage !== null && revision?.percentage !== undefined ? `${revision.percentage}%` : "—"}</span><Badge variant={statusVariant(attempt.status)}>{attempt.status.replaceAll("_", " ")}</Badge></span></Link>; })}</div> : <Empty title="No learner attempts yet" text="Attempts appear after assigned assessment content is used from the learner app." icon={Users} />}
+          {recentAttempts.length ? <div className="divide-y divide-border/70">{recentAttempts.slice(0, 5).map((attempt) => { const revision = revisionByAttempt.get(attempt.id); return <Link key={attempt.id} href={`/attempts/${attempt.id}`} className="grid gap-2 px-5 py-3 text-xs transition-colors hover:bg-muted/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] sm:items-center"><span className="min-w-0"><span className="block truncate text-sm font-semibold">{learnerNames.get(attempt.learner_id) ?? UNNAMED_LEARNER}</span>{learnerEmails.get(attempt.learner_id) ? <span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{learnerEmails.get(attempt.learner_id)}</span> : null}</span><span className="min-w-0"><span className="block truncate text-muted-foreground">{assignmentNames.get(attempt.assignment_id) ?? "Assignment"}</span><span className="mt-0.5 block truncate text-[11px] text-muted-foreground">{classNames.get(attempt.class_id) ?? "Class"}</span></span><span className="whitespace-nowrap text-muted-foreground">{formatRelative(attempt.submitted_at ?? attempt.created_at)}</span><span className="text-right"><span className="block font-semibold tabular-nums">{attempt.status === "released" && revision?.percentage !== null && revision?.percentage !== undefined ? `${revision.percentage}%` : "—"}</span><Badge variant={statusVariant(attempt.status)}>{attempt.status.replaceAll("_", " ")}</Badge></span></Link>; })}</div> : <Empty title="No learner attempts yet" text="Attempts appear after assigned assessment content is used from the learner app." icon={Users} />}
         </section>
 
         <div className="grid gap-5 sm:grid-cols-2">

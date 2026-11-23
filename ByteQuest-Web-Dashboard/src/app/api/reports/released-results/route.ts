@@ -1,5 +1,6 @@
 import { getServerProfile } from "@/lib/auth/server";
 import { escapeCsvCell } from "@/lib/csv";
+import { learnerDisplayName } from "@/lib/learners/identity";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export async function GET() {
@@ -36,7 +37,7 @@ export async function GET() {
   const classById = new Map((classes.data ?? []).map((row) => [row.id, row.title]));
   const assignmentById = new Map((assignments.data ?? []).map((row) => [row.id, row.title]));
   const header = ["Attempt ID", "Learner", "Email", "Class", "Assignment", "Final Percentage", "Competency Outcome", "Elapsed Seconds", "Released At", "Release Reason", "Instructor Remarks"];
-  const rows = (releases ?? []).map((release) => { const attempt = attemptById.get(release.attempt_id); const revision = revisionById.get(release.score_revision_id); const learner = attempt ? profileById.get(attempt.learner_id) : null; return [release.attempt_id, learner?.full_name, learner?.email, attempt ? classById.get(attempt.class_id) : null, attempt ? assignmentById.get(attempt.assignment_id) : null, revision?.percentage, revision?.outcome, attempt?.elapsed_time_seconds, release.released_at, release.release_reason, revision?.remarks].map(escapeCsvCell).join(","); });
+  const rows = (releases ?? []).map((release) => { const attempt = attemptById.get(release.attempt_id); const revision = revisionById.get(release.score_revision_id); const learner = attempt ? profileById.get(attempt.learner_id) : null; return [release.attempt_id, learnerDisplayName(learner), learner?.email, attempt ? classById.get(attempt.class_id) : null, attempt ? assignmentById.get(attempt.assignment_id) : null, revision?.percentage, revision?.outcome, attempt?.elapsed_time_seconds, release.released_at, release.release_reason, revision?.remarks].map(escapeCsvCell).join(","); });
   const csv = `\uFEFF${[header.map(escapeCsvCell).join(","), ...rows].join("\r\n")}`;
   return new Response(csv, { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename="bytequest-released-results-${new Date().toISOString().slice(0, 10)}.csv"`, "Cache-Control": "no-store" } });
 }
