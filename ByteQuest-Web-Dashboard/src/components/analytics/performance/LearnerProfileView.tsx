@@ -82,7 +82,7 @@ export function LearnerProfileView({ profile, query }: { profile: LearnerProfile
             {status ? <StatusBadge status={status.status} /> : null}
             <Badge variant={profile.learner.account_status === "active" ? "secondary" : "outline"}>{profile.learner.account_status}</Badge>
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">
+          <p className="mt-1 text-sm text-muted-foreground [overflow-wrap:anywhere]">
             {profile.learner.student_id ?? "No student ID"} · {profile.learner.email} · {profile.classes.map((item) => item.title).join(", ") || "No class in scope"}
           </p>
         </div>

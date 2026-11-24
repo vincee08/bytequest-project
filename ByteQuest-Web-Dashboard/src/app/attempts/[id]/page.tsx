@@ -40,6 +40,12 @@ function formatSourceTrace(value: unknown) {
   return "Versioned source metadata";
 }
 
+/** A long email wraps after "@" first; copying it still gives the plain address. */
+function wrappableEmail(email: string) {
+  const at = email.indexOf("@");
+  return at < 0 ? email : <>{email.slice(0, at + 1)}<wbr />{email.slice(at + 1)}</>;
+}
+
 function humanize(value: string) {
   return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
@@ -182,8 +188,8 @@ export default async function AttemptDetailPage({ params }: { params: Promise<{ 
           <p className="mt-1 text-sm text-muted-foreground">{assignment.data?.title ?? "Assignment"} · {classroom.data?.title ?? "Class"}</p>
         </div>
 
-        <section className="grid gap-4 rounded-xl border border-border bg-card p-5 shadow-xs sm:grid-cols-2 xl:grid-cols-5">
-          <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Learner</p><p className="mt-1 text-sm font-medium">{learner.data?.email ?? "Email unavailable"}</p></div>
+        <section className="grid gap-4 rounded-xl border border-border bg-card p-5 shadow-xs [overflow-wrap:anywhere] sm:grid-cols-2 xl:grid-cols-5 [&>div]:min-w-0">
+          <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Learner</p><p className="mt-1 text-sm font-medium">{learner.data?.email ? wrappableEmail(learner.data.email) : "Email unavailable"}</p></div>
           <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Mission</p><p className="mt-1 text-sm font-medium">{mission.data ? `${cocModule?.coc_code.toUpperCase() ?? "COC"} · ${mission.data.title}` : activity?.title ?? "Versioned activity"}</p><p className="mt-1 text-xs text-muted-foreground">{mission.data?.mission_code.toUpperCase().replaceAll("_", "-")} · Activity v{activity?.version_number ?? "—"} · Module v{moduleVersion.data?.version_number ?? "—"}</p></div>
           <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">TESDA source</p><p className="mt-1 text-sm font-medium">{source.data ? `${source.data.qualification_code} · ${source.data.edition || "edition not recorded"}` : "Practice / no approved source"}</p></div>
           <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Rubric</p><p className="mt-1 text-sm font-medium">{rubric.data ? `${rubric.data.title} v${rubric.data.version_number}` : "No assessment rubric"}</p></div>
